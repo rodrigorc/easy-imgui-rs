@@ -358,11 +358,8 @@ impl Renderer {
                              ].as_ptr()
                             );
 
-        let cmd_lists = std::slice::from_raw_parts(draw_data.CmdLists.Data, draw_data.CmdLists.Size as usize);
-        for cmd_list in cmd_lists {
+        for cmd_list in &draw_data.CmdLists {
             let cmd_list = &**cmd_list;
-
-            let cmd_buffer = std::slice::from_raw_parts(cmd_list.CmdBuffer.Data, cmd_list.CmdBuffer.Size as usize);
 
             gl::BufferData(
                 gl::ARRAY_BUFFER,
@@ -402,7 +399,7 @@ impl Renderer {
                 16 as *const _
                 );
 
-            for cmd in cmd_buffer {
+            for cmd in &cmd_list.CmdBuffer {
                 let clip_x = cmd.ClipRect.x - left;
                 let clip_y = cmd.ClipRect.y - top;
                 let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
@@ -414,15 +411,23 @@ impl Renderer {
                     (clip_h * draw_data.FramebufferScale.y) as i32
                     );
 
-                gl::BindTexture(gl::TEXTURE_2D, Self::unmap_tex(cmd.TextureId));
 
-                gl::DrawElementsBaseVertex(
-                    gl::TRIANGLES,
-                    cmd.ElemCount as i32,
-                    if size_of::<ImDrawIdx>() == 2 { gl::UNSIGNED_SHORT } else { gl::UNSIGNED_INT },
-                    (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as *const _,
-                    cmd.VtxOffset as i32,
-                    );
+                match cmd.UserCallback {
+                    Some(cb) => {
+                        cb(cmd_list, cmd);
+                    }
+                    None => {
+                        gl::BindTexture(gl::TEXTURE_2D, Self::unmap_tex(cmd.TextureId));
+
+                        gl::DrawElementsBaseVertex(
+                            gl::TRIANGLES,
+                            cmd.ElemCount as i32,
+                            if size_of::<ImDrawIdx>() == 2 { gl::UNSIGNED_SHORT } else { gl::UNSIGNED_INT },
+                            (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as *const _,
+                            cmd.VtxOffset as i32,
+                            );
+                    }
+                }
             }
 
         }

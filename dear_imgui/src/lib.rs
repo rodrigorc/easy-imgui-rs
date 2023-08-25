@@ -1,7 +1,6 @@
 use std::ffi::{CString, c_char, CStr, c_void};
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
-use std::marker::PhantomData;
 use dear_imgui_sys::*;
 use std::borrow::Cow;
 
@@ -101,12 +100,12 @@ impl Context {
         };
 
         let io = &mut *ImGui_GetIO();
-        ImGui_NewFrame();
         io.BackendLanguageUserData = &mut ui as *mut Ui as *mut c_void;
+        ImGui_NewFrame();
         do_ui(&mut ui);
-        io.BackendLanguageUserData = null_mut();
         ImGui_Render();
         do_render();
+        io.BackendLanguageUserData = null_mut();
     }
 
 }
@@ -191,7 +190,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
         let ui = &mut *(io.BackendLanguageUserData as *mut Self);
 
         // The lifetimes of ui have been erased, but it shouldn't matter
-        let cb = &mut (*ui).callbacks[id];
+        let cb = &mut ui.callbacks[id];
         let mut a = MaybeUninit::new(a);
         cb(a.as_mut_ptr() as *mut c_void);
     }
@@ -208,7 +207,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
             ImGui_End();
         }
     }
-    pub fn set_next_window_size_constraints_cb(&mut self,
+    pub fn set_next_window_size_constraints_callback(&mut self,
         size_min: impl Into<ImVec2>,
         size_max: impl Into<ImVec2>,
         cb: impl FnMut(SizeCallbackData<'_>) + 'cb,
@@ -323,48 +322,71 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
             ImGui_TextUnformatted(start as *const c_char, end as *const c_char);
         }
     }
+    pub fn get_window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx> {
+        unsafe {
+            let ptr = ImGui_GetWindowDrawList();
+            WindowDrawList {
+                ui: self,
+                ptr: &mut *ptr,
+            }
+        }
+    }
 }
 
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
 
+#[derive(Debug)]
 pub struct SizeCallbackData<'a> {
-    ptr: *mut ImGuiSizeCallbackData,
-    _pd: PhantomData<*mut &'a()>,
+    ptr: &'a mut ImGuiSizeCallbackData,
 }
 
 impl SizeCallbackData<'_> {
     pub fn pos(&self) -> ImVec2 {
-        unsafe { (*self.ptr).Pos }
+        self.ptr.Pos
     }
     pub fn current_size(&self) -> ImVec2 {
-        unsafe { (*self.ptr).CurrentSize }
+        self.ptr.CurrentSize
     }
     pub fn desired_size(&self) -> ImVec2 {
-        unsafe { (*self.ptr).DesiredSize }
+        self.ptr.DesiredSize
     }
     pub fn set_desired_size(&mut self, sz: impl Into<ImVec2>) {
-        unsafe { (*self.ptr).DesiredSize = sz.into(); }
+        self.ptr.DesiredSize = sz.into();
     }
 }
 
-impl std::fmt::Debug for SizeCallbackData<'_> {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("SizeCallbackData")
-            .field("pos", &self.pos())
-            .field("curent_size", &self.current_size())
-            .field("desired_size", &self.desired_size())
-            .finish()
-    }
-}
-
-unsafe extern "C" fn call_size_callback(data: *mut ImGuiSizeCallbackData) {
-    let id = (*data).UserData as usize;
+unsafe extern "C" fn call_size_callback(ptr: *mut ImGuiSizeCallbackData) {
+    let ptr = &mut *ptr;
+    let id = ptr.UserData as usize;
     let data = SizeCallbackData {
-        ptr: data,
-        _pd: PhantomData,
+        ptr,
     };
     Ui::run_callback(id, data);
 }
 
+pub struct WindowDrawList<'a, 'cb, 'ctx> {
+    ui: &'a mut Ui<'cb, 'ctx>,
+    ptr: &'a mut ImDrawList,
+}
+
+impl<'a, 'cb, 'ctx> WindowDrawList<'a, 'cb, 'ctx> {
+    pub fn add_callback(&mut self, cb: impl FnOnce() + 'cb) {
+        // Callbacks are only called once, convert the FnOnce into an FnMut to register
+        let mut cb = Some(cb);
+        unsafe {
+            let id = self.ui.push_callback(move |_: ()| {
+                if let Some(cb) = cb.take() {
+                    cb();
+                }
+            });
+            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback), id as *mut c_void);
+        }
+    }
+}
+
+unsafe extern "C" fn call_drawlist_callback(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
+    let id = (*cmd).UserCallbackData as usize;
+    Ui::run_callback(id, ());
+}

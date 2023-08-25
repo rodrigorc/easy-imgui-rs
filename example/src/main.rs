@@ -299,16 +299,18 @@ fn main() {
 }
 
 static mut X: i32 = 0;
+
 fn my_frame<'cb, 'd: 'cb>(ui: &mut imgui::Ui<'cb, '_>, f2: imgui::FontId, x: &'d mut i32) {
     let mut y = 0;
     {
-        ui.set_next_window_size_constraints_cb([20.0, 20.0], [520.0, 520.0], |mut d| {
+        ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |mut d| {
             let mut sz = d.desired_size();
             sz.x = (sz.x / 100.0).round() * 100.0;
             sz.y = (sz.y / 100.0).round() * 100.0;
             d.set_desired_size(sz);
-            *x += 1;
+            //*x += 1;
             //y += 1;
+            let _ = *x;
             unsafe { X += 1 };
         });
         //println!("<<<<<<<<< {X}");
@@ -321,6 +323,12 @@ fn my_frame<'cb, 'd: 'cb>(ui: &mut imgui::Ui<'cb, '_>, f2: imgui::FontId, x: &'d
             ui.with_font(f2, |ui| {
                 ui.text_unformatted("Test #2");
             });
+        });
+        let mut dl = ui.get_window_draw_list();
+        dl.add_callback(|| {
+            //println!("callback!");
+            let _ = *x;
+            //y += 1;
         });
     });
 

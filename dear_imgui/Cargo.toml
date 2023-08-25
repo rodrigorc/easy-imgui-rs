@@ -1,0 +1,12 @@
+[package]
+name = "dear_imgui"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dear_imgui-sys = { path = "../dear_imgui-sys" }
+
+[features]
+freetype = ["dear_imgui-sys/freetype"]

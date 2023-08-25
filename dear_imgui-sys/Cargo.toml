@@ -1,0 +1,14 @@
+[package]
+name = "dear_imgui-sys"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "*"
+cc = "*"
+pkg-config = "*"
+
+[features]
+freetype = []

@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "dear_imgui-sys",
+    "dear_imgui",
+    "example",
+]

@@ -276,12 +276,12 @@ impl Renderer {
             imgui.set_size(size, scale);
         }
     }
-    pub fn do_frame<'cb>(&mut self, imgui: &mut imgui::Context, do_ui: impl FnOnce(imgui::Ui<'cb, '_, '_>)) {
+    pub fn do_frame<'cb>(&mut self, imgui: &mut imgui::Context, do_ui: impl FnOnce(&mut imgui::Ui<'cb, '_>)) {
         self.update_atlas(imgui);
         unsafe {
             imgui.do_frame(
                 do_ui,
-                || {
+                /*render*/ || {
                     let io = &*ImGui_GetIO();
 
                     gl::Viewport(
@@ -468,7 +468,6 @@ pub fn gl_program_from_source(shaders: &str) -> Result<glr::Program> {
     Ok(prg)
 }
 
-
 unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) {
     let clip = &mut *(user as *mut MyClipboard);
     if text.is_null() {
@@ -480,6 +479,7 @@ unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) 
     }
 }
 
+// The returned pointer should be valid for a while...
 unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
     let clip = &mut *(user as *mut MyClipboard);
     let Ok(text) = clip.ctx.get_contents() else {
@@ -491,7 +491,6 @@ unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
     clip.text = text;
     clip.text.as_ptr()
 }
-
 
 struct MyClipboard {
     ctx: ClipboardContext,

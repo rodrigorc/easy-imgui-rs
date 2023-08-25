@@ -299,10 +299,10 @@ fn main() {
 }
 
 static mut X: i32 = 0;
-fn my_frame<'cb, 'd: 'cb>(ui: imgui::Ui<'cb, '_, '_>, f2: imgui::FontId, x: &'d mut i32) {
+fn my_frame<'cb, 'd: 'cb>(ui: &mut imgui::Ui<'cb, '_>, f2: imgui::FontId, x: &'d mut i32) {
     let mut y = 0;
     {
-        imgui::set_next_window_size_constraints_cb(ui, [20.0, 20.0], [520.0, 520.0], |mut d| {
+        ui.set_next_window_size_constraints_cb([20.0, 20.0], [520.0, 520.0], |mut d| {
             let mut sz = d.desired_size();
             sz.x = (sz.x / 100.0).round() * 100.0;
             sz.y = (sz.y / 100.0).round() * 100.0;
@@ -313,16 +313,16 @@ fn my_frame<'cb, 'd: 'cb>(ui: imgui::Ui<'cb, '_, '_>, f2: imgui::FontId, x: &'d 
         });
         //println!("<<<<<<<<< {X}");
     }
-    imgui::set_next_window_size(ui, [100.0, 100.0], ImGuiCond_::ImGuiCond_Once);
-    imgui::set_next_window_pos(ui, [0.0, 0.0], ImGuiCond_::ImGuiCond_Once, [0.0, 0.0]);
-    imgui::with_window(ui, cstr!("Yo"), Some(&mut true), 0, |ui| {
-        imgui::with_child(ui, "T", [0.0, 0.0], true, 0, |ui| {
-            imgui::text_unformatted(ui, "Test #1");
-            imgui::with_font(ui, f2, |ui| {
-                imgui::text_unformatted(ui, "Test #2");
+    ui.set_next_window_size([100.0, 100.0], imgui::Cond::ImGuiCond_Once);
+    ui.set_next_window_pos([0.0, 0.0], imgui::Cond::ImGuiCond_Once, [0.0, 0.0]);
+    ui.with_window(cstr!("Yo"), Some(&mut true), 0, |ui| {
+        ui.with_child("T", [0.0, 0.0], true, 0, |ui| {
+            ui.text_unformatted("Test #1");
+            ui.with_font(f2, |ui| {
+                ui.text_unformatted("Test #2");
             });
         });
     });
 
-    imgui::show_demo_window(ui, &mut true);
+    ui.show_demo_window(&mut true);
 }

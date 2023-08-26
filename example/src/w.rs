@@ -226,7 +226,7 @@ impl Renderer {
                     ctx,
                     text: CString::default(),
                 };
-                io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut MyClipboard as *mut c_void;
+                io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
                 io.SetClipboardTextFn = Some(set_clipboard_text);
                 io.GetClipboardTextFn = Some(get_clipboard_text);
             }
@@ -276,12 +276,13 @@ impl Renderer {
             imgui.set_size(size, scale);
         }
     }
-    pub fn do_frame<'cb>(&mut self, imgui: &mut imgui::Context, do_ui: impl FnOnce(&mut imgui::Ui<'cb, '_>)) {
+    pub fn do_frame<'cb, U>(&mut self, imgui: &mut imgui::Context, user_data: &mut U, do_ui: impl FnOnce(&mut imgui::Ui<'cb, '_, U>)) {
         self.update_atlas(imgui);
         unsafe {
             imgui.do_frame(
+                user_data,
                 do_ui,
-                /*render*/ || {
+                /* do_render */ || {
                     let io = &*ImGui_GetIO();
 
                     gl::Viewport(

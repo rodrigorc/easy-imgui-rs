@@ -88,19 +88,21 @@ impl Context {
         }
         true
     }
-    pub unsafe fn do_frame<'ctx, 'cb>(
+    pub unsafe fn do_frame<'ctx, 'cb, U>(
         &'ctx mut self,
-        do_ui: impl FnOnce(&mut Ui<'cb, 'ctx>),
+        user_data: &'ctx mut U,
+        do_ui: impl FnOnce(&mut Ui<'cb, 'ctx, U>),
         do_render: impl FnOnce(),
     )
     {
         let mut ui = Ui {
             _ctx: self,
+            user_data,
             callbacks: Vec::new(),
         };
 
         let io = &mut *ImGui_GetIO();
-        io.BackendLanguageUserData = &mut ui as *mut Ui as *mut c_void;
+        io.BackendLanguageUserData = &mut ui as *mut Ui<U> as *mut c_void;
         ImGui_NewFrame();
         do_ui(&mut ui);
         ImGui_Render();
@@ -168,17 +170,20 @@ impl IntoCStr for CString {
     }
 }
 
-pub struct Ui<'cb, 'ctx> {
+pub struct Ui<'cb, 'ctx, U> {
     _ctx: &'ctx mut Context,
-    callbacks: Vec<Box<dyn FnMut(*mut c_void) + 'cb>>,
+    user_data: &'ctx mut U,
+    callbacks: Vec<Box<dyn FnMut(&'ctx mut U, *mut c_void) + 'cb>>,
 }
 
-impl<'cb, 'ctx> Ui<'cb, 'ctx> {
+//type Ui<'cb, 'ctx> = UiT<'cb, 'ctx, ()>;
+
+impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
     // The callback will be callable until the next call to do_frame()
-    unsafe fn push_callback<A>(&mut self, mut cb: impl FnMut(A) + 'cb) -> usize {
-        let cb = Box::new(move |ptr: *mut c_void| {
+    unsafe fn push_callback<A>(&mut self, mut cb: impl FnMut(&'ctx mut U, A) + 'cb) -> usize {
+        let cb = Box::new(move |user_data: &'ctx mut U, ptr: *mut c_void| {
             let a = ptr as *mut A;
-            cb(unsafe { std::ptr::read(a) });
+            cb(user_data, unsafe { std::ptr::read(a) });
         });
         let id = self.callbacks.len();
 
@@ -192,7 +197,10 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
         // The lifetimes of ui have been erased, but it shouldn't matter
         let cb = &mut ui.callbacks[id];
         let mut a = MaybeUninit::new(a);
-        cb(a.as_mut_ptr() as *mut c_void);
+        cb(ui.user_data, a.as_mut_ptr() as *mut c_void);
+    }
+    pub fn user_data(&mut self) -> &mut U {
+        self.user_data
     }
     pub fn with_window(&mut self, name: impl IntoCStr, open: Option<&mut bool>, flags: i32, f: impl FnOnce(&mut Self))
     {
@@ -210,7 +218,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
     pub fn set_next_window_size_constraints_callback(&mut self,
         size_min: impl Into<ImVec2>,
         size_max: impl Into<ImVec2>,
-        cb: impl FnMut(SizeCallbackData<'_>) + 'cb,
+        cb: impl FnMut(&'ctx mut U, SizeCallbackData<'_>) + 'cb,
     )
     {
         unsafe {
@@ -218,7 +226,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
             ImGui_SetNextWindowSizeConstraints(
                 &size_min.into(),
                 &size_max.into(),
-                Some(call_size_callback),
+                Some(call_size_callback::<U>),
                 id as *mut c_void,
             );
         }
@@ -297,7 +305,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
         }
     }
 
-    pub fn set_next_window_focus(_ui: Ui) {
+    pub fn set_next_window_focus(&mut self) {
         unsafe {
            ImGui_SetNextWindowFocus();
         }
@@ -322,7 +330,7 @@ impl<'cb, 'ctx> Ui<'cb, 'ctx> {
             ImGui_TextUnformatted(start as *const c_char, end as *const c_char);
         }
     }
-    pub fn get_window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx> {
+    pub fn get_window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx, U> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
             WindowDrawList {
@@ -357,36 +365,36 @@ impl SizeCallbackData<'_> {
     }
 }
 
-unsafe extern "C" fn call_size_callback(ptr: *mut ImGuiSizeCallbackData) {
+unsafe extern "C" fn call_size_callback<U>(ptr: *mut ImGuiSizeCallbackData) {
     let ptr = &mut *ptr;
     let id = ptr.UserData as usize;
     let data = SizeCallbackData {
         ptr,
     };
-    Ui::run_callback(id, data);
+    Ui::<U>::run_callback(id, data);
 }
 
-pub struct WindowDrawList<'a, 'cb, 'ctx> {
-    ui: &'a mut Ui<'cb, 'ctx>,
+pub struct WindowDrawList<'a, 'cb, 'ctx, U> {
+    ui: &'a mut Ui<'cb, 'ctx, U>,
     ptr: &'a mut ImDrawList,
 }
 
-impl<'a, 'cb, 'ctx> WindowDrawList<'a, 'cb, 'ctx> {
-    pub fn add_callback(&mut self, cb: impl FnOnce() + 'cb) {
+impl<'a, 'cb, 'ctx, U> WindowDrawList<'a, 'cb, 'ctx, U> {
+    pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut U) + 'cb) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
         let mut cb = Some(cb);
         unsafe {
-            let id = self.ui.push_callback(move |_: ()| {
+            let id = self.ui.push_callback(move |u, _: ()| {
                 if let Some(cb) = cb.take() {
-                    cb();
+                    cb(u);
                 }
             });
-            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback), id as *mut c_void);
+            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<U>), id as *mut c_void);
         }
     }
 }
 
-unsafe extern "C" fn call_drawlist_callback(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
+unsafe extern "C" fn call_drawlist_callback<U>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
     let id = (*cmd).UserCallbackData as usize;
-    Ui::run_callback(id, ());
+    Ui::<U>::run_callback(id, ());
 }

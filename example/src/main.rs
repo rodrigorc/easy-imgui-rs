@@ -156,9 +156,14 @@ fn main() {
                     }
 
                     let mut x = 0;
-                    renderer.do_frame(&mut imgui_context, |ui| {
-                        my_frame(ui, f2, &mut x);
-                    });
+                    let mut y = 0;
+                    renderer.do_frame(
+                        &mut imgui_context,
+                        &mut y,
+                        |ui| {
+                            my_frame(ui, f2, &mut x);
+                        }
+                    );
                 }
                 gl_window.surface.swap_buffers(&gl_context).unwrap();
             }
@@ -300,18 +305,20 @@ fn main() {
 
 static mut X: i32 = 0;
 
-fn my_frame<'cb, 'd: 'cb>(ui: &mut imgui::Ui<'cb, '_>, f2: imgui::FontId, x: &'d mut i32) {
+fn my_frame<'cb>(ui: &mut imgui::Ui<'cb, '_, i32>, f2: imgui::FontId, x: &'cb mut i32) {
     let mut y = 0;
     {
-        ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |mut d| {
+        *ui.user_data() += 1;
+        ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |user_data, mut d| {
             let mut sz = d.desired_size();
             sz.x = (sz.x / 100.0).round() * 100.0;
             sz.y = (sz.y / 100.0).round() * 100.0;
             d.set_desired_size(sz);
             //*x += 1;
             //y += 1;
-            let _ = *x;
+            //let _ = *x;
             unsafe { X += 1 };
+            *user_data += 1;
         });
         //println!("<<<<<<<<< {X}");
     }
@@ -325,12 +332,13 @@ fn my_frame<'cb, 'd: 'cb>(ui: &mut imgui::Ui<'cb, '_>, f2: imgui::FontId, x: &'d
             });
         });
         let mut dl = ui.get_window_draw_list();
-        dl.add_callback(|| {
+        dl.add_callback(|user_data| {
             //println!("callback!");
-            let _ = *x;
+            //let _ = *x;
             //y += 1;
+            *user_data += 1;
         });
     });
-
     ui.show_demo_window(&mut true);
+    println!("{}", *ui.user_data());
 }

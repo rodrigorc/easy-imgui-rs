@@ -309,11 +309,11 @@ fn my_frame<'ctx>(ui: &mut imgui::Ui<'ctx, i32>, f2: imgui::FontId, x: &'ctx mut
     let mut y = 0;
     {
         *ui.user_data() += 1;
-        ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |user_data, mut d| {
+        ui.set_next_window_size_constraints_callback(&[20.0, 20.0].into(), &[520.0, 520.0].into(), |user_data, mut d| {
             let mut sz = d.desired_size();
             sz.x = (sz.x / 100.0).round() * 100.0;
             sz.y = (sz.y / 100.0).round() * 100.0;
-            d.set_desired_size(sz);
+            d.set_desired_size(&sz);
             *x += 1;
             //y += 1;
             //let _ = *x;
@@ -322,10 +322,10 @@ fn my_frame<'ctx>(ui: &mut imgui::Ui<'ctx, i32>, f2: imgui::FontId, x: &'ctx mut
         });
         //println!("<<<<<<<<< {X}");
     }
-    ui.set_next_window_size([100.0, 100.0], imgui::Cond::ImGuiCond_Once);
-    ui.set_next_window_pos([0.0, 0.0], imgui::Cond::ImGuiCond_Once, [0.0, 0.0]);
+    ui.set_next_window_size(&[100.0, 100.0].into(), imgui::Cond::ImGuiCond_Once);
+    ui.set_next_window_pos(&[0.0, 0.0].into(), imgui::Cond::ImGuiCond_Once, &[0.0, 0.0].into());
     ui.with_window(cstr!("Yo"), Some(&mut true), 0, |ui| {
-        ui.with_child("T", [0.0, 0.0], true, 0, |ui| {
+        ui.with_child("T", &[0.0, 0.0].into(), true, 0, |ui| {
             ui.window_draw_list().add_callback(|user_data| {
                 //println!("callback!");
                 //let _ = *x;
@@ -339,8 +339,8 @@ fn my_frame<'ctx>(ui: &mut imgui::Ui<'ctx, i32>, f2: imgui::FontId, x: &'ctx mut
             ui.with_font(f2, |ui| {
                 ui.text_unformatted("Test #2");
             });
-            ui.foreground_draw_list().add_circle([50.0, 50.0], 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
-            ui.background_draw_list().add_circle([150.0, 150.0], 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
+            ui.foreground_draw_list().add_circle(&[50.0, 50.0].into(), 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
+            ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
         });
     });
     ui.show_demo_window(&mut true);

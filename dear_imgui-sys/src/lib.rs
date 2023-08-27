@@ -49,11 +49,11 @@ impl<'a, T> IntoIterator for &'a ImVector<T> {
 pub type Color = [u8; 4];
 
 pub trait IntoColor {
-    fn into(self) -> u32;
+    fn color(self) -> u32;
 }
 
 impl<T: Into<Color>> IntoColor for T {
-    fn into(self) -> u32 {
+    fn color(self) -> u32 {
         u32::from_ne_bytes(self.into())
     }
 }

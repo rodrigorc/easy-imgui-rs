@@ -229,40 +229,39 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
         }
     }
     pub fn set_next_window_size_constraints_callback(&mut self,
-        size_min: impl Into<ImVec2>,
-        size_max: impl Into<ImVec2>,
+        size_min: &ImVec2,
+        size_max: &ImVec2,
         cb: impl FnMut(&'ctx mut U, SizeCallbackData<'_>) + 'ctx,
     )
     {
         unsafe {
             let id = self.push_callback(cb);
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into(),
-                &size_max.into(),
+                size_min,
+                size_max,
                 Some(call_size_callback::<U>),
                 id as *mut c_void,
             );
         }
     }
     pub fn set_next_window_size_constraints(&mut self,
-        size_min: impl Into<ImVec2>,
-        size_max: impl Into<ImVec2>,
+        size_min: &ImVec2,
+        size_max: &ImVec2,
     )
     {
         unsafe {
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into(),
-                &size_max.into(),
+                size_min,
+                size_max,
                 None,
                 null_mut(),
             );
         }
     }
-    pub fn with_child(&mut self, name: impl IntoCStr, size: impl Into<ImVec2>, border: bool, flags: i32, f: impl FnOnce(&mut Self)) {
+    pub fn with_child(&mut self, name: impl IntoCStr, size: &ImVec2, border: bool, flags: i32, f: impl FnOnce(&mut Self)) {
         let name = name.into();
-        let size = size.into();
         let bres = unsafe {
-            ImGui_BeginChild(name.as_ptr(), &size, border, flags)
+            ImGui_BeginChild(name.as_ptr(), size, border, flags)
         };
         if bres {
             f(self);
@@ -290,20 +289,20 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
             ImGui_ShowDemoWindow(show);
         }
     }
-    pub fn set_next_window_pos(&mut self, pos: impl Into<ImVec2>, cond: Cond, pivot: impl Into<ImVec2>) {
+    pub fn set_next_window_pos(&mut self, pos: &ImVec2, cond: Cond, pivot: &ImVec2) {
         unsafe {
-            ImGui_SetNextWindowPos(&pos.into(), cond.0 as i32, &pivot.into());
+            ImGui_SetNextWindowPos(pos, cond.0 as i32, pivot);
         }
     }
-    pub fn set_next_window_size(&mut self, size: impl Into<ImVec2>, cond: Cond) {
+    pub fn set_next_window_size(&mut self, size: &ImVec2, cond: Cond) {
         unsafe {
-            ImGui_SetNextWindowSize(&size.into(), cond.0 as i32);
+            ImGui_SetNextWindowSize(size, cond.0 as i32);
         }
     }
 
-    pub fn set_next_window_content_size(&mut self, size: impl Into<ImVec2>) {
+    pub fn set_next_window_content_size(&mut self, size: &ImVec2) {
         unsafe {
-            ImGui_SetNextWindowContentSize(&size.into());
+            ImGui_SetNextWindowContentSize(size);
         }
     }
 
@@ -319,9 +318,9 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
         }
     }
 
-    pub fn set_next_window_scroll(&mut self, scroll: impl Into<ImVec2>) {
+    pub fn set_next_window_scroll(&mut self, scroll: &ImVec2) {
         unsafe {
-            ImGui_SetNextWindowScroll(&scroll.into());
+            ImGui_SetNextWindowScroll(scroll);
         }
     }
 
@@ -384,8 +383,8 @@ impl SizeCallbackData<'_> {
     pub fn desired_size(&self) -> ImVec2 {
         self.ptr.DesiredSize
     }
-    pub fn set_desired_size(&mut self, sz: impl Into<ImVec2>) {
-        self.ptr.DesiredSize = sz.into();
+    pub fn set_desired_size(&mut self, sz: &ImVec2) {
+        self.ptr.DesiredSize = *sz;
     }
 }
 
@@ -404,114 +403,114 @@ pub struct WindowDrawList<'a, 'ctx, U> {
 }
 
 impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
-    pub fn add_line(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+    pub fn add_line(&mut self, p1: &ImVec2, p2: &ImVec2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddLine(self.ptr, &p1.into(), &p2.into(), color.into(), thickness);
+            ImDrawList_AddLine(self.ptr, p1, p2, color.color(), thickness);
         }
     }
-    pub fn add_rect(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_, thickness: f32) {
+    pub fn add_rect(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_, thickness: f32) {
         unsafe {
-            ImDrawList_AddRect(self.ptr, &p_min.into(), &p_max.into(), color.into(), rounding, flags.0 as i32, thickness);
+            ImDrawList_AddRect(self.ptr, p_min, p_max, color.color(), rounding, flags.0 as i32, thickness);
         }
     }
-    pub fn add_rect_filled(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_) {
+    pub fn add_rect_filled(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_) {
         unsafe {
-            ImDrawList_AddRectFilled(self.ptr, &p_min.into(), &p_max.into(), color.into(), rounding, flags.0 as i32);
+            ImDrawList_AddRectFilled(self.ptr, p_min, p_max, color.color(), rounding, flags.0 as i32);
         }
     }
-    pub fn add_rect_filled_multicolor(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, col_upr_left: impl IntoColor, col_upr_right: impl IntoColor, col_bot_right: impl IntoColor, col_bot_left: impl IntoColor) {
+    pub fn add_rect_filled_multicolor(&mut self, p_min: &ImVec2, p_max: &ImVec2, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
         unsafe {
-            ImDrawList_AddRectFilledMultiColor(self.ptr, &p_min.into(), &p_max.into(), col_upr_left.into(), col_upr_right.into(), col_bot_right.into(), col_bot_left.into());
+            ImDrawList_AddRectFilledMultiColor(self.ptr, p_min, p_max, col_upr_left.color(), col_upr_right.color(), col_bot_right.color(), col_bot_left.color());
         }
     }
-    pub fn add_quad(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+    pub fn add_quad(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, p4: &ImVec2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddQuad(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into(), thickness);
+            ImDrawList_AddQuad(self.ptr, p1, p2, p3, p4, color.color(), thickness);
         }
     }
-    pub fn add_quad_filled(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor) {
+    pub fn add_quad_filled(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, p4: &ImVec2, color: Color) {
         unsafe {
-            ImDrawList_AddQuadFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into());
+            ImDrawList_AddQuadFilled(self.ptr, p1, p2, p3, p4, color.color());
         }
     }
-    pub fn add_triangle(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+    pub fn add_triangle(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddTriangle(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into(), thickness);
+            ImDrawList_AddTriangle(self.ptr, p1, p2, p3, color.color(), thickness);
         }
     }
-    pub fn add_triangle_filled(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor) {
+    pub fn add_triangle_filled(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, color: Color) {
         unsafe {
-            ImDrawList_AddTriangleFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into());
+            ImDrawList_AddTriangleFilled(self.ptr, p1, p2, p3, color.color());
         }
     }
-    pub fn add_circle(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32, thickness: f32) {
+    pub fn add_circle(&mut self, center: &ImVec2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddCircle(self.ptr, &center.into(), radius, color.into(), num_segments, thickness);
+            ImDrawList_AddCircle(self.ptr, center, radius, color.color(), num_segments, thickness);
         }
     }
-    pub fn add_circle_filled(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32) {
+    pub fn add_circle_filled(&mut self, center: &ImVec2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddCircleFilled(self.ptr, &center.into(), radius, color.into(), num_segments);
+            ImDrawList_AddCircleFilled(self.ptr, center, radius, color.color(), num_segments);
         }
     }
-    pub fn add_ngon(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32, thickness: f32) {
+    pub fn add_ngon(&mut self, center: &ImVec2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddNgon(self.ptr, &center.into(), radius, color.into(), num_segments, thickness);
+            ImDrawList_AddNgon(self.ptr, center, radius, color.color(), num_segments, thickness);
         }
     }
-    pub fn add_ngon_filled(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32) {
+    pub fn add_ngon_filled(&mut self, center: &ImVec2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddNgonFilled(self.ptr, &center.into(), radius, color.into(), num_segments);
+            ImDrawList_AddNgonFilled(self.ptr, center, radius, color.color(), num_segments);
         }
     }
-    pub fn add_text(&mut self, pos: impl Into<ImVec2>, color: impl IntoColor, text: &str) {
+    pub fn add_text(&mut self, pos: &ImVec2, color: Color, text: &str) {
         unsafe {
             let (start, end) = text_ptrs(text);
-            ImDrawList_AddText(self.ptr, &pos.into(), color.into(), start, end);
+            ImDrawList_AddText(self.ptr, pos, color.color(), start, end);
         }
     }
-    pub fn add_text_ex(&mut self, font: FontId, font_size: f32, pos: impl Into<ImVec2>, color: impl IntoColor, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
+    pub fn add_text_ex(&mut self, font: FontId, font_size: f32, pos: &ImVec2, color: Color, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
         unsafe {
             let (start, end) = text_ptrs(text);
             ImDrawList_AddText1(
-                self.ptr, font_ptr(font), font_size, &pos.into(), color.into(), start, end,
+                self.ptr, font_ptr(font), font_size, pos, color.color(), start, end,
                 wrap_width, cpu_fine_clip_rect.as_ref().map(|x| x as *const _).unwrap_or(null())
             );
         }
     }
-    pub fn add_polyline(&mut self, points: &[ImVec2], color: impl IntoColor, flags: ImDrawFlags_, thickness: f32) {
+    pub fn add_polyline(&mut self, points: &[ImVec2], color: Color, flags: ImDrawFlags_, thickness: f32) {
         unsafe {
-            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.into(), flags.0 as i32, thickness);
+            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.color(), flags.0 as i32, thickness);
         }
     }
-    pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: impl IntoColor) {
+    pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: Color) {
         unsafe {
-            ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color.into());
+            ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color.color());
         }
     }
-    pub fn add_bezier_cubic(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_cubic(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, p4: &ImVec2, color: Color, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierCubic(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into(), thickness, num_segments);
+            ImDrawList_AddBezierCubic(self.ptr, p1, p2, p3, p4, color.color(), thickness, num_segments);
         }
     }
-    pub fn add_bezier_quadratic(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_quadratic(&mut self, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, color: Color, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierQuadratic(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into(), thickness, num_segments);
+            ImDrawList_AddBezierQuadratic(self.ptr, p1, p2, p3, color.color(), thickness, num_segments);
         }
     }
-    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, uv_min: impl Into<ImVec2>, uv_max: impl Into<ImVec2>, color: impl IntoColor) {
+    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: &ImVec2, p_max: &ImVec2, uv_min: &ImVec2, uv_max: &ImVec2, color: Color) {
         unsafe {
-            ImDrawList_AddImage(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color.into());
+            ImDrawList_AddImage(self.ptr, user_texture_id, p_min, p_max, uv_min, uv_max, color.color());
         }
     }
-    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, uv1: impl Into<ImVec2>, uv2: impl Into<ImVec2>, uv3: impl Into<ImVec2>, uv4: impl Into<ImVec2>, color: impl IntoColor) {
+    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: &ImVec2, p2: &ImVec2, p3: &ImVec2, p4: &ImVec2, uv1: &ImVec2, uv2: &ImVec2, uv3: &ImVec2, uv4: &ImVec2, color: Color) {
         unsafe {
-            ImDrawList_AddImageQuad(self.ptr, user_texture_id, &p1.into(), &p2.into(), &p3.into(), &p4.into(), &uv1.into(), &uv2.into(), &uv3.into(), &uv4.into(), color.into());
+            ImDrawList_AddImageQuad(self.ptr, user_texture_id, p1, p2, p3, p4, uv1, uv2, uv3, uv4, color.color());
         }
     }
-    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, uv_min: impl Into<ImVec2>, uv_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_) {
+    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: &ImVec2, p_max: &ImVec2, uv_min: &ImVec2, uv_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color.into(), rounding, flags.0 as i32);
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id, p_min, p_max, uv_min, uv_max, color.color(), rounding, flags.0 as i32);
         }
     }
 

@@ -45,3 +45,15 @@ impl<'a, T> IntoIterator for &'a ImVector<T> {
     }
 }
 
+ /// Color is stored as [r, g, b, a]
+pub type Color = [u8; 4];
+
+pub trait IntoColor {
+    fn into(self) -> u32;
+}
+
+impl<T: Into<Color>> IntoColor for T {
+    fn into(self) -> u32 {
+        u32::from_ne_bytes(self.into())
+    }
+}

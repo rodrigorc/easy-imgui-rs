@@ -326,19 +326,23 @@ fn my_frame<'cb>(ui: &mut imgui::Ui<'cb, '_, i32>, f2: imgui::FontId, x: &'cb mu
     ui.set_next_window_pos([0.0, 0.0], imgui::Cond::ImGuiCond_Once, [0.0, 0.0]);
     ui.with_window(cstr!("Yo"), Some(&mut true), 0, |ui| {
         ui.with_child("T", [0.0, 0.0], true, 0, |ui| {
+            ui.window_draw_list().add_callback(|user_data| {
+                //println!("callback!");
+                //let _ = *x;
+                //y += 1;
+                *user_data += 1;
+                unsafe {
+                    gl::ClearColor(1.0, 0.0, 0.0, 1.0);
+                    gl::Clear(gl::COLOR_BUFFER_BIT);
+            }});
             ui.text_unformatted("Test #1");
             ui.with_font(f2, |ui| {
                 ui.text_unformatted("Test #2");
             });
-        });
-        let mut dl = ui.get_window_draw_list();
-        dl.add_callback(|user_data| {
-            //println!("callback!");
-            //let _ = *x;
-            //y += 1;
-            *user_data += 1;
+            ui.foreground_draw_list().add_circle([50.0, 50.0], 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
+            ui.background_draw_list().add_circle([150.0, 150.0], 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
         });
     });
     ui.show_demo_window(&mut true);
-    println!("{}", *ui.user_data());
+    //println!("{}", *ui.user_data());
 }

@@ -176,7 +176,20 @@ pub struct Ui<'cb, 'ctx, U> {
     callbacks: Vec<Box<dyn FnMut(&'ctx mut U, *mut c_void) + 'cb>>,
 }
 
-//type Ui<'cb, 'ctx> = UiT<'cb, 'ctx, ()>;
+// helper functions
+
+pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
+    let btxt = text.as_bytes();
+    let start = btxt.as_ptr() as *const c_char;
+    let end = unsafe { start.add(btxt.len()) };
+    ( start, end )
+
+}
+pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
+    let io = &*ImGui_GetIO();
+    let fonts = &*io.Fonts;
+    fonts.Fonts[font.0]
+}
 
 impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
     // The callback will be callable until the next call to do_frame()
@@ -231,6 +244,20 @@ impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
             );
         }
     }
+    pub fn set_next_window_size_constraints(&mut self,
+        size_min: impl Into<ImVec2>,
+        size_max: impl Into<ImVec2>,
+    )
+    {
+        unsafe {
+            ImGui_SetNextWindowSizeConstraints(
+                &size_min.into(),
+                &size_max.into(),
+                None,
+                null_mut(),
+            );
+        }
+    }
     pub fn with_child(&mut self, name: impl IntoCStr, size: impl Into<ImVec2>, border: bool, flags: i32, f: impl FnOnce(&mut Self)) {
         let name = name.into();
         let size = size.into();
@@ -252,13 +279,8 @@ impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
     }
     pub fn with_font(&mut self, font: FontId, f: impl FnOnce(&mut Self)) {
         unsafe {
-            let io = &*ImGui_GetIO();
-            let fonts = &*io.Fonts;
-            let font = fonts.Fonts[font.0];
-            ImGui_PushFont(font);
-        }
-        f(self);
-        unsafe {
+            ImGui_PushFont(font_ptr(font));
+            f(self);
             ImGui_PopFont();
         }
     }
@@ -276,20 +298,6 @@ impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
     pub fn set_next_window_size(&mut self, size: impl Into<ImVec2>, cond: Cond) {
         unsafe {
             ImGui_SetNextWindowSize(&size.into(), cond.0 as i32);
-        }
-    }
-    pub fn set_next_window_size_constraints(&mut self,
-        size_min: impl Into<ImVec2>,
-        size_max: impl Into<ImVec2>,
-    )
-    {
-        unsafe {
-            ImGui_SetNextWindowSizeConstraints(
-                &size_min.into(),
-                &size_max.into(),
-                None,
-                null_mut(),
-            );
         }
     }
 
@@ -322,17 +330,33 @@ impl<'cb, 'ctx, U: 'ctx> Ui<'cb, 'ctx, U> {
             ImGui_SetNextWindowBgAlpha(alpha);
         }
     }
-    pub fn text_unformatted(&mut self, txt: &str) {
-        let btxt = txt.as_bytes();
+    pub fn text_unformatted(&mut self, text: &str) {
         unsafe {
-            let start = btxt.as_ptr();
-            let end = start.add(btxt.len());
-            ImGui_TextUnformatted(start as *const c_char, end as *const c_char);
+            let (start, end) = text_ptrs(text);
+            ImGui_TextUnformatted(start, end);
         }
     }
-    pub fn get_window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx, U> {
+    pub fn window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx, U> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
+            WindowDrawList {
+                ui: self,
+                ptr: &mut *ptr,
+            }
+        }
+    }
+    pub fn foreground_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx, U> {
+        unsafe {
+            let ptr = ImGui_GetForegroundDrawList();
+            WindowDrawList {
+                ui: self,
+                ptr: &mut *ptr,
+            }
+        }
+    }
+    pub fn background_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'cb, 'ctx, U> {
+        unsafe {
+            let ptr = ImGui_GetBackgroundDrawList();
             WindowDrawList {
                 ui: self,
                 ptr: &mut *ptr,
@@ -380,6 +404,58 @@ pub struct WindowDrawList<'a, 'cb, 'ctx, U> {
 }
 
 impl<'a, 'cb, 'ctx, U> WindowDrawList<'a, 'cb, 'ctx, U> {
+    /*
+    void  AddLine(const ImVec2& p1, const ImVec2& p2, ImU32 col, float thickness = 1.0f);
+    void  AddRect(const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0, float thickness = 1.0f);   // a: upper-left, b: lower-right (== upper-left + size)
+    void  AddRectFilled(const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0);                     // a: upper-left, b: lower-right (== upper-left + size)
+    void  AddRectFilledMultiColor(const ImVec2& p_min, const ImVec2& p_max, ImU32 col_upr_left, ImU32 col_upr_right, ImU32 col_bot_right, ImU32 col_bot_left);
+    void  AddQuad(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness = 1.0f);
+    void  AddQuadFilled(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col);
+    void  AddTriangle(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col, float thickness = 1.0f);
+    void  AddTriangleFilled(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col);
+    - void  AddCircle(const ImVec2& center, float radius, ImU32 col, int num_segments = 0, float thickness = 1.0f);
+    - void  AddCircleFilled(const ImVec2& center, float radius, ImU32 col, int num_segments = 0);
+    void  AddNgon(const ImVec2& center, float radius, ImU32 col, int num_segments, float thickness = 1.0f);
+    void  AddNgonFilled(const ImVec2& center, float radius, ImU32 col, int num_segments);
+    - void  AddText(const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end = NULL);
+    - void  AddText(const ImFont* font, float font_size, const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end = NULL, float wrap_width = 0.0f, const ImVec4* cpu_fine_clip_rect = NULL);
+    void  AddPolyline(const ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags, float thickness);
+    void  AddConvexPolyFilled(const ImVec2* points, int num_points, ImU32 col);
+    void  AddBezierCubic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness, int num_segments = 0); // Cubic Bezier (4 control points)
+    void  AddBezierQuadratic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col, float thickness, int num_segments = 0);               // Quadratic Bezier (3 control points)
+
+    void  AddImage(ImTextureID user_texture_id, const ImVec2& p_min, const ImVec2& p_max, const ImVec2& uv_min = ImVec2(0, 0), const ImVec2& uv_max = ImVec2(1, 1), ImU32 col = IM_COL32_WHITE);
+    void  AddImageQuad(ImTextureID user_texture_id, const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, const ImVec2& uv1 = ImVec2(0, 0), const ImVec2& uv2 = ImVec2(1, 0), const ImVec2& uv3 = ImVec2(1, 1), const ImVec2& uv4 = ImVec2(0, 1), ImU32 col = IM_COL32_WHITE);
+    void  AddImageRounded(ImTextureID user_texture_id, const ImVec2& p_min, const ImVec2& p_max, const ImVec2& uv_min, const ImVec2& uv_max, ImU32 col, float rounding, ImDrawFlags flags = 0);
+
+    - void  AddCallback(ImDrawCallback callback, void* callback_data);  // Your rendering function must check for 'UserCallback' in ImDrawCmd and call the function instead of rendering triangles.
+    - void  AddDrawCmd();                                               // This is useful if you need to forcefully create a new draw call (to allow for dependent rendering / blending). Otherwise primitives are merged into the same draw-call as much as possible
+    */
+    pub fn add_circle(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32, thickness: f32) {
+        unsafe {
+            ImDrawList_AddCircle(self.ptr, &center.into(), radius, color.into(), num_segments, thickness);
+        }
+    }
+    pub fn add_circle_filled(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32) {
+        unsafe {
+            ImDrawList_AddCircleFilled(self.ptr, &center.into(), radius, color.into(), num_segments);
+        }
+    }
+    pub fn add_text(&mut self, pos: impl Into<ImVec2>, color: impl IntoColor, text: &str) {
+        unsafe {
+            let (start, end) = text_ptrs(text);
+            ImDrawList_AddText(self.ptr, &pos.into(), color.into(), start, end);
+        }
+    }
+    pub fn add_text_ex(&mut self, font: FontId, font_size: f32, pos: impl Into<ImVec2>, color: impl IntoColor, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
+        unsafe {
+            let (start, end) = text_ptrs(text);
+            ImDrawList_AddText1(
+                self.ptr, font_ptr(font), font_size, &pos.into(), color.into(), start, end,
+                wrap_width, cpu_fine_clip_rect.as_ref().map(|x| x as *const _).unwrap_or(null())
+            );
+        }
+    }
     pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut U) + 'cb) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
         let mut cb = Some(cb);
@@ -391,6 +467,12 @@ impl<'a, 'cb, 'ctx, U> WindowDrawList<'a, 'cb, 'ctx, U> {
             });
             ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<U>), id as *mut c_void);
         }
+    }
+    pub fn add_draw_cmd(&mut self) {
+        unsafe {
+            ImDrawList_AddDrawCmd(self.ptr);
+        }
+
     }
 }
 

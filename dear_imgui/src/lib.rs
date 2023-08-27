@@ -404,33 +404,46 @@ pub struct WindowDrawList<'a, 'ctx, U> {
 }
 
 impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
-    /*
-    void  AddLine(const ImVec2& p1, const ImVec2& p2, ImU32 col, float thickness = 1.0f);
-    void  AddRect(const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0, float thickness = 1.0f);   // a: upper-left, b: lower-right (== upper-left + size)
-    void  AddRectFilled(const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0);                     // a: upper-left, b: lower-right (== upper-left + size)
-    void  AddRectFilledMultiColor(const ImVec2& p_min, const ImVec2& p_max, ImU32 col_upr_left, ImU32 col_upr_right, ImU32 col_bot_right, ImU32 col_bot_left);
-    void  AddQuad(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness = 1.0f);
-    void  AddQuadFilled(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col);
-    void  AddTriangle(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col, float thickness = 1.0f);
-    void  AddTriangleFilled(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col);
-    - void  AddCircle(const ImVec2& center, float radius, ImU32 col, int num_segments = 0, float thickness = 1.0f);
-    - void  AddCircleFilled(const ImVec2& center, float radius, ImU32 col, int num_segments = 0);
-    void  AddNgon(const ImVec2& center, float radius, ImU32 col, int num_segments, float thickness = 1.0f);
-    void  AddNgonFilled(const ImVec2& center, float radius, ImU32 col, int num_segments);
-    - void  AddText(const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end = NULL);
-    - void  AddText(const ImFont* font, float font_size, const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end = NULL, float wrap_width = 0.0f, const ImVec4* cpu_fine_clip_rect = NULL);
-    void  AddPolyline(const ImVec2* points, int num_points, ImU32 col, ImDrawFlags flags, float thickness);
-    void  AddConvexPolyFilled(const ImVec2* points, int num_points, ImU32 col);
-    void  AddBezierCubic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, ImU32 col, float thickness, int num_segments = 0); // Cubic Bezier (4 control points)
-    void  AddBezierQuadratic(const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, ImU32 col, float thickness, int num_segments = 0);               // Quadratic Bezier (3 control points)
-
-    void  AddImage(ImTextureID user_texture_id, const ImVec2& p_min, const ImVec2& p_max, const ImVec2& uv_min = ImVec2(0, 0), const ImVec2& uv_max = ImVec2(1, 1), ImU32 col = IM_COL32_WHITE);
-    void  AddImageQuad(ImTextureID user_texture_id, const ImVec2& p1, const ImVec2& p2, const ImVec2& p3, const ImVec2& p4, const ImVec2& uv1 = ImVec2(0, 0), const ImVec2& uv2 = ImVec2(1, 0), const ImVec2& uv3 = ImVec2(1, 1), const ImVec2& uv4 = ImVec2(0, 1), ImU32 col = IM_COL32_WHITE);
-    void  AddImageRounded(ImTextureID user_texture_id, const ImVec2& p_min, const ImVec2& p_max, const ImVec2& uv_min, const ImVec2& uv_max, ImU32 col, float rounding, ImDrawFlags flags = 0);
-
-    - void  AddCallback(ImDrawCallback callback, void* callback_data);  // Your rendering function must check for 'UserCallback' in ImDrawCmd and call the function instead of rendering triangles.
-    - void  AddDrawCmd();                                               // This is useful if you need to forcefully create a new draw call (to allow for dependent rendering / blending). Otherwise primitives are merged into the same draw-call as much as possible
-    */
+    pub fn add_line(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+        unsafe {
+            ImDrawList_AddLine(self.ptr, &p1.into(), &p2.into(), color.into(), thickness);
+        }
+    }
+    pub fn add_rect(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_, thickness: f32) {
+        unsafe {
+            ImDrawList_AddRect(self.ptr, &p_min.into(), &p_max.into(), color.into(), rounding, flags.0 as i32, thickness);
+        }
+    }
+    pub fn add_rect_filled(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_) {
+        unsafe {
+            ImDrawList_AddRectFilled(self.ptr, &p_min.into(), &p_max.into(), color.into(), rounding, flags.0 as i32);
+        }
+    }
+    pub fn add_rect_filled_multicolor(&mut self, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, col_upr_left: impl IntoColor, col_upr_right: impl IntoColor, col_bot_right: impl IntoColor, col_bot_left: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddRectFilledMultiColor(self.ptr, &p_min.into(), &p_max.into(), col_upr_left.into(), col_upr_right.into(), col_bot_right.into(), col_bot_left.into());
+        }
+    }
+    pub fn add_quad(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+        unsafe {
+            ImDrawList_AddQuad(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into(), thickness);
+        }
+    }
+    pub fn add_quad_filled(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddQuadFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into());
+        }
+    }
+    pub fn add_triangle(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor, thickness: f32) {
+        unsafe {
+            ImDrawList_AddTriangle(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into(), thickness);
+        }
+    }
+    pub fn add_triangle_filled(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddTriangleFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into());
+        }
+    }
     pub fn add_circle(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32, thickness: f32) {
         unsafe {
             ImDrawList_AddCircle(self.ptr, &center.into(), radius, color.into(), num_segments, thickness);
@@ -439,6 +452,16 @@ impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
     pub fn add_circle_filled(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32) {
         unsafe {
             ImDrawList_AddCircleFilled(self.ptr, &center.into(), radius, color.into(), num_segments);
+        }
+    }
+    pub fn add_ngon(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32, thickness: f32) {
+        unsafe {
+            ImDrawList_AddNgon(self.ptr, &center.into(), radius, color.into(), num_segments, thickness);
+        }
+    }
+    pub fn add_ngon_filled(&mut self, center: impl Into<ImVec2>, radius: f32, color: impl IntoColor, num_segments: i32) {
+        unsafe {
+            ImDrawList_AddNgonFilled(self.ptr, &center.into(), radius, color.into(), num_segments);
         }
     }
     pub fn add_text(&mut self, pos: impl Into<ImVec2>, color: impl IntoColor, text: &str) {
@@ -456,6 +479,42 @@ impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
             );
         }
     }
+    pub fn add_polyline(&mut self, points: &[ImVec2], color: impl IntoColor, flags: ImDrawFlags_, thickness: f32) {
+        unsafe {
+            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.into(), flags.0 as i32, thickness);
+        }
+    }
+    pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color.into());
+        }
+    }
+    pub fn add_bezier_cubic(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, color: impl IntoColor, thickness: f32, num_segments: i32) {
+        unsafe {
+            ImDrawList_AddBezierCubic(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color.into(), thickness, num_segments);
+        }
+    }
+    pub fn add_bezier_quadratic(&mut self, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, color: impl IntoColor, thickness: f32, num_segments: i32) {
+        unsafe {
+            ImDrawList_AddBezierQuadratic(self.ptr, &p1.into(), &p2.into(), &p3.into(), color.into(), thickness, num_segments);
+        }
+    }
+    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, uv_min: impl Into<ImVec2>, uv_max: impl Into<ImVec2>, color: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddImage(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color.into());
+        }
+    }
+    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: impl Into<ImVec2>, p2: impl Into<ImVec2>, p3: impl Into<ImVec2>, p4: impl Into<ImVec2>, uv1: impl Into<ImVec2>, uv2: impl Into<ImVec2>, uv3: impl Into<ImVec2>, uv4: impl Into<ImVec2>, color: impl IntoColor) {
+        unsafe {
+            ImDrawList_AddImageQuad(self.ptr, user_texture_id, &p1.into(), &p2.into(), &p3.into(), &p4.into(), &uv1.into(), &uv2.into(), &uv3.into(), &uv4.into(), color.into());
+        }
+    }
+    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: impl Into<ImVec2>, p_max: impl Into<ImVec2>, uv_min: impl Into<ImVec2>, uv_max: impl Into<ImVec2>, color: impl IntoColor, rounding: f32, flags: ImDrawFlags_) {
+        unsafe {
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color.into(), rounding, flags.0 as i32);
+        }
+    }
+
     pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut U) + 'ctx) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
         let mut cb = Some(cb);

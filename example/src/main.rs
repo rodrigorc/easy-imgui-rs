@@ -305,7 +305,7 @@ fn main() {
 
 static mut X: i32 = 0;
 
-fn my_frame<'cb>(ui: &mut imgui::Ui<'cb, '_, i32>, f2: imgui::FontId, x: &'cb mut i32) {
+fn my_frame<'ctx>(ui: &mut imgui::Ui<'ctx, i32>, f2: imgui::FontId, x: &'ctx mut i32) {
     let mut y = 0;
     {
         *ui.user_data() += 1;
@@ -314,7 +314,7 @@ fn my_frame<'cb>(ui: &mut imgui::Ui<'cb, '_, i32>, f2: imgui::FontId, x: &'cb mu
             sz.x = (sz.x / 100.0).round() * 100.0;
             sz.y = (sz.y / 100.0).round() * 100.0;
             d.set_desired_size(sz);
-            //*x += 1;
+            *x += 1;
             //y += 1;
             //let _ = *x;
             unsafe { X += 1 };

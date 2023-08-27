@@ -276,7 +276,7 @@ impl Renderer {
             imgui.set_size(size, scale);
         }
     }
-    pub fn do_frame<'cb, U>(&mut self, imgui: &mut imgui::Context, user_data: &mut U, do_ui: impl FnOnce(&mut imgui::Ui<'cb, '_, U>)) {
+    pub fn do_frame<'ctx, U>(&mut self, imgui: &'ctx mut imgui::Context, user_data: &'ctx mut U, do_ui: impl FnOnce(&mut imgui::Ui<'ctx, U>)) {
         self.update_atlas(imgui);
         unsafe {
             imgui.do_frame(

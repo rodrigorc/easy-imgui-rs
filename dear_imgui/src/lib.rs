@@ -7,29 +7,30 @@ use std::borrow::Cow;
 pub type Cond = ImGuiCond_;
 
 pub struct Context {
-    _imgui: *mut ImGuiContext,
+    imgui: *mut ImGuiContext,
     pending_atlas: bool,
     fonts: Vec<FontInfo>,
 }
 
-
 impl Context {
-    pub fn new() -> Context {
+    pub unsafe fn new() -> Context {
         let imgui = unsafe {
             let imgui = ImGui_CreateContext(null_mut());
 
             let io = &mut *ImGui_GetIO();
             io.IniFilename = null();
-            //TODO: clipboard should go here?
             //io.FontAllowUserScaling = true;
             //ImGui_StyleColorsDark(null_mut());
             imgui
         };
         Context {
-            _imgui: imgui,
+            imgui,
             pending_atlas: true,
             fonts: Vec::new(),
         }
+    }
+    pub unsafe fn set_current(&mut self) {
+        ImGui_SetCurrentContext(self.imgui);
     }
     pub unsafe fn set_size(&mut self, size: ImVec2, scale: f32) {
         self.pending_atlas = true;
@@ -88,28 +89,33 @@ impl Context {
         }
         true
     }
-    pub unsafe fn do_frame<'ctx, U>(
+    pub unsafe fn do_frame<'ctx, A: UiBuilder>(
         &'ctx mut self,
-        user_data: &'ctx mut U,
-        do_ui: impl FnOnce(&mut Ui<'ctx, U>),
-        do_render: impl FnOnce(),
+        data: &'ctx mut A::Data,
+        app: &mut A,
+        do_render: impl FnOnce(&mut A),
     )
     {
         let mut ui = Ui {
             _ctx: self,
-            user_data,
+            data,
             callbacks: Vec::new(),
         };
 
         let io = &mut *ImGui_GetIO();
-        io.BackendLanguageUserData = &mut ui as *mut Ui<U> as *mut c_void;
+        io.BackendLanguageUserData = &mut ui as *mut _ as *mut c_void;
         ImGui_NewFrame();
-        do_ui(&mut ui);
+        app.do_ui(&mut ui);
         ImGui_Render();
-        do_render();
+        do_render(app);
         io.BackendLanguageUserData = null_mut();
     }
 
+}
+
+pub trait UiBuilder {
+    type Data;
+    fn do_ui(&mut self, ui: &mut Ui<Self::Data>);
 }
 
 pub struct FontInfo {
@@ -170,12 +176,6 @@ impl IntoCStr for CString {
     }
 }
 
-pub struct Ui<'ctx, U> {
-    _ctx: &'ctx mut Context,
-    user_data: &'ctx mut U,
-    callbacks: Vec<Box<dyn FnMut(&'ctx mut U, *mut c_void) + 'ctx>>,
-}
-
 // helper functions
 
 pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
@@ -191,12 +191,18 @@ pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     fonts.Fonts[font.0]
 }
 
-impl<'ctx, U: 'ctx> Ui<'ctx, U> {
+pub struct Ui<'ctx, D> {
+    _ctx: &'ctx mut Context,
+    data: &'ctx mut D,
+    callbacks: Vec<Box<dyn FnMut(&'ctx mut D, *mut c_void) + 'ctx>>,
+}
+
+impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     // The callback will be callable until the next call to do_frame()
-    unsafe fn push_callback<A>(&mut self, mut cb: impl FnMut(&'ctx mut U, A) + 'ctx) -> usize {
-        let cb = Box::new(move |user_data: &'ctx mut U, ptr: *mut c_void| {
+    unsafe fn push_callback<A>(&mut self, mut cb: impl FnMut(&'ctx mut D, A) + 'ctx) -> usize {
+        let cb = Box::new(move |data: &'ctx mut D, ptr: *mut c_void| {
             let a = ptr as *mut A;
-            cb(user_data, unsafe { std::ptr::read(a) });
+            cb(data, unsafe { std::ptr::read(a) });
         });
         let id = self.callbacks.len();
 
@@ -210,10 +216,10 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
         // The lifetimes of ui have been erased, but it shouldn't matter
         let cb = &mut ui.callbacks[id];
         let mut a = MaybeUninit::new(a);
-        cb(ui.user_data, a.as_mut_ptr() as *mut c_void);
+        cb(ui.data, a.as_mut_ptr() as *mut c_void);
     }
-    pub fn user_data(&mut self) -> &mut U {
-        self.user_data
+    pub fn data(&mut self) -> &mut D {
+        self.data
     }
     pub fn with_window(&mut self, name: impl IntoCStr, open: Option<&mut bool>, flags: i32, f: impl FnOnce(&mut Self))
     {
@@ -231,7 +237,7 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
     pub fn set_next_window_size_constraints_callback(&mut self,
         size_min: &ImVec2,
         size_max: &ImVec2,
-        cb: impl FnMut(&'ctx mut U, SizeCallbackData<'_>) + 'ctx,
+        cb: impl FnMut(&'ctx mut D, SizeCallbackData<'_>) + 'ctx,
     )
     {
         unsafe {
@@ -239,7 +245,7 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
             ImGui_SetNextWindowSizeConstraints(
                 size_min,
                 size_max,
-                Some(call_size_callback::<U>),
+                Some(call_size_callback::<D>),
                 id as *mut c_void,
             );
         }
@@ -335,7 +341,7 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
             ImGui_TextUnformatted(start, end);
         }
     }
-    pub fn window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, U> {
+    pub fn window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, D> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
             WindowDrawList {
@@ -344,7 +350,7 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
             }
         }
     }
-    pub fn foreground_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, U> {
+    pub fn foreground_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, D> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList();
             WindowDrawList {
@@ -353,7 +359,7 @@ impl<'ctx, U: 'ctx> Ui<'ctx, U> {
             }
         }
     }
-    pub fn background_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, U> {
+    pub fn background_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, D> {
         unsafe {
             let ptr = ImGui_GetBackgroundDrawList();
             WindowDrawList {
@@ -388,21 +394,21 @@ impl SizeCallbackData<'_> {
     }
 }
 
-unsafe extern "C" fn call_size_callback<U>(ptr: *mut ImGuiSizeCallbackData) {
+unsafe extern "C" fn call_size_callback<D>(ptr: *mut ImGuiSizeCallbackData) {
     let ptr = &mut *ptr;
     let id = ptr.UserData as usize;
     let data = SizeCallbackData {
         ptr,
     };
-    Ui::<U>::run_callback(id, data);
+    Ui::<D>::run_callback(id, data);
 }
 
-pub struct WindowDrawList<'a, 'ctx, U> {
-    ui: &'a mut Ui<'ctx, U>,
+pub struct WindowDrawList<'a, 'ctx, D> {
+    ui: &'a mut Ui<'ctx, D>,
     ptr: &'a mut ImDrawList,
 }
 
-impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
+impl<'a, 'ctx, D> WindowDrawList<'a, 'ctx, D> {
     pub fn add_line(&mut self, p1: &ImVec2, p2: &ImVec2, color: Color, thickness: f32) {
         unsafe {
             ImDrawList_AddLine(self.ptr, p1, p2, color.color(), thickness);
@@ -514,16 +520,16 @@ impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
         }
     }
 
-    pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut U) + 'ctx) {
+    pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut D) + 'ctx) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
         let mut cb = Some(cb);
         unsafe {
-            let id = self.ui.push_callback(move |u, _: ()| {
+            let id = self.ui.push_callback(move |d, _: ()| {
                 if let Some(cb) = cb.take() {
-                    cb(u);
+                    cb(d);
                 }
             });
-            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<U>), id as *mut c_void);
+            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<D>), id as *mut c_void);
         }
     }
     pub fn add_draw_cmd(&mut self) {
@@ -534,7 +540,7 @@ impl<'a, 'ctx, U> WindowDrawList<'a, 'ctx, U> {
     }
 }
 
-unsafe extern "C" fn call_drawlist_callback<U>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
+unsafe extern "C" fn call_drawlist_callback<D>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
     let id = (*cmd).UserCallbackData as usize;
-    Ui::<U>::run_callback(id, ());
+    Ui::<D>::run_callback(id, ());
 }

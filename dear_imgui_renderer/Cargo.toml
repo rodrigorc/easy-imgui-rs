@@ -1,19 +1,16 @@
 [package]
-name = "example"
+name = "dear_imgui_renderer"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-dear_imgui-sys = { path = "../dear_imgui-sys", features = ["freetype"] }
-dear_imgui = { path = "../dear_imgui", features = ["freetype"] }
-dear_imgui_renderer = { path = "../dear_imgui_renderer" }
+dear_imgui-sys = { path = "../dear_imgui-sys" }
+dear_imgui = { path = "../dear_imgui" }
 
 anyhow = "*"
 smallvec = "*"
-cstr = "*"
 cgmath = "*"
 
-gl_loader = "0.1"
 gl = "0.14"
 glutin = "0.30"
 glutin-winit = "0.3"

@@ -335,6 +335,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dear_imgui_renderer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cgmath",
+ "clipboard",
+ "dear_imgui",
+ "dear_imgui-sys",
+ "gl",
+ "glutin",
+ "glutin-winit",
+ "raw-window-handle",
+ "smallvec",
+ "winit",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -377,6 +394,7 @@ dependencies = [
  "cstr",
  "dear_imgui",
  "dear_imgui-sys",
+ "dear_imgui_renderer",
  "gl",
  "gl_loader",
  "glutin",

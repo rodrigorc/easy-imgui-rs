@@ -1,54 +1,12 @@
-use std::{num::NonZeroU32, ffi::{CString, c_void, c_char, CStr}, time::{Instant, Duration}, rc::Rc, mem::size_of, borrow::Cow, ptr::null};
+use std::{ffi::{CString, c_void, c_char, CStr}, mem::size_of};
 
-use winit::{window::{Window, CursorIcon}, event::{VirtualKeyCode, MouseButton}, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}};
+use winit::{window::CursorIcon, event::{VirtualKeyCode, MouseButton}};
 use dear_imgui_sys::*;
-use glutin::{prelude::*, config::{ConfigTemplateBuilder, Config}, display::GetGlDisplay, context::{ContextAttributesBuilder, ContextApi}, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}};
-use raw_window_handle::HasRawWindowHandle;
 use clipboard::{ClipboardProvider, ClipboardContext};
-use crate::{glr, imgui};
-
 use anyhow::{Result, anyhow};
 
-pub struct GlWindow {
-    // The surface must be dropped before the window.
-    pub surface: Surface<WindowSurface>,
-    pub window: Window,
-}
-
-impl GlWindow {
-    pub fn new(window: Window, config: &Config) -> Self {
-        let (width, height): (u32, u32) = window.inner_size().into();
-        let raw_window_handle = window.raw_window_handle();
-        let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
-            raw_window_handle,
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
-        );
-
-        let surface = unsafe { config.display().create_window_surface(config, &attrs).unwrap() };
-
-        Self { window, surface }
-    }
-
-    pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
-        let scale = self.window.scale_factor();
-        size.to_logical(scale)
-    }
-    #[allow(dead_code)]
-    pub fn to_physical_size<X: Pixel, Y: Pixel>(&self, size: LogicalSize<X>) -> PhysicalSize<Y> {
-        let scale = self.window.scale_factor();
-        size.to_physical(scale)
-    }
-    pub fn to_logical_pos<X: Pixel, Y: Pixel>(&self, pos: PhysicalPosition<X>) -> LogicalPosition<Y> {
-        let scale = self.window.scale_factor();
-        pos.to_logical(scale)
-    }
-    #[allow(dead_code)]
-    pub fn to_physical_pos<X: Pixel, Y: Pixel>(&self, pos: LogicalPosition<X>) -> PhysicalPosition<Y> {
-        let scale = self.window.scale_factor();
-        pos.to_physical(scale)
-    }
-}
+use dear_imgui as imgui;
+use crate::glr;
 
 pub fn to_imgui_button(btncode: MouseButton) -> Option<ImGuiMouseButton_> {
     let btn = match btncode {
@@ -188,7 +146,16 @@ pub fn from_imgui_cursor(cursor: ImGuiMouseCursor_) -> CursorIcon {
     }
 }
 
+pub trait Application: imgui::UiBuilder {
+    fn do_background(&mut self);
+}
+
 pub struct Renderer {
+    imgui: imgui::Context,
+    objs: GlObjects,
+}
+
+struct GlObjects {
     atlas: glr::Texture,
     program: glr::Program,
     vao: glr::VertexArray,
@@ -213,6 +180,8 @@ impl Renderer {
         let u_matrix_location;
         let u_tex_location;
 
+        let imgui = unsafe { imgui::Context::new() };
+
         unsafe {
             let io = &mut *ImGui_GetIO();
             io.BackendFlags |= (
@@ -233,7 +202,7 @@ impl Renderer {
 
             tex = glr::Texture::generate();
 
-            program = gl_program_from_source(include_str!("shader.glsl")).unwrap();
+            program = gl_program_from_source(include_str!("shader.glsl"))?;
             vao = glr::VertexArray::generate();
             gl::BindVertexArray(vao.id());
 
@@ -259,30 +228,39 @@ impl Renderer {
             ibuf = glr::Buffer::generate();
         }
         Ok(Renderer {
-            atlas: tex,
-            program,
-            vao,
-            vbuf,
-            ibuf,
-            a_pos_location,
-            a_uv_location,
-            a_color_location,
-            u_matrix_location,
-            u_tex_location,
+            imgui,
+            objs: GlObjects {
+                atlas: tex,
+                program,
+                vao,
+                vbuf,
+                ibuf,
+                a_pos_location,
+                a_uv_location,
+                a_color_location,
+                u_matrix_location,
+                u_tex_location,
+            }
         })
     }
-    pub fn set_size(&mut self, imgui: &mut imgui::Context, size: ImVec2, scale: f32) {
+    pub fn imgui(&mut self) -> &mut imgui::Context {
+        &mut self.imgui
+    }
+    /// size in logical units
+    pub fn set_size(&mut self, size: ImVec2, scale: f32) {
         unsafe {
-            imgui.set_size(size, scale);
+            self.imgui.set_current();
+            self.imgui.set_size(size, scale);
         }
     }
-    pub fn do_frame<'ctx, U>(&mut self, imgui: &'ctx mut imgui::Context, user_data: &'ctx mut U, do_ui: impl FnOnce(&mut imgui::Ui<'ctx, U>)) {
-        self.update_atlas(imgui);
+    pub fn do_frame<A: Application>(&mut self, data: &mut A::Data, app: &mut A) {
         unsafe {
-            imgui.do_frame(
-                user_data,
-                do_ui,
-                /* do_render */ || {
+            self.imgui.set_current();
+            self.update_atlas();
+            self.imgui.do_frame(
+                data,
+                app,
+                |app| {
                     let io = &*ImGui_GetIO();
 
                     gl::Viewport(
@@ -290,54 +268,51 @@ impl Renderer {
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
                         (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
                         );
-                    gl::ClearColor(0.45, 0.55, 0.60, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT);
 
+                    app.do_background();
                     let draw_data = ImGui_GetDrawData();
-                    self.render(draw_data);
+                    Self::render(&self.objs, draw_data);
                 }
             );
         }
     }
-    fn update_atlas(&mut self, imgui: &mut imgui::Context) {
-        unsafe {
-            if !imgui.update_atlas() {
-                return;
-            }
-
-            let io = &mut *ImGui_GetIO();
-            let mut data = std::ptr::null_mut();
-            let mut width = 0;
-            let mut height = 0;
-            let mut pixel_size = 0;
-            ImFontAtlas_GetTexDataAsAlpha8(io.Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
-            gl::BindTexture(gl::TEXTURE_2D, self.atlas.id());
-
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
-            gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RED as i32,
-                           width, height, 0,
-                           gl::RED, gl::UNSIGNED_BYTE, data as *const _);
-            gl::BindTexture(gl::TEXTURE_2D, 0);
-
-            // bindgen: ImFontAtlas_SetTexID is inline
-            (*io.Fonts).TexID = Self::map_tex(self.atlas.id());
-
-            // We keep this, no need for imgui to hold a copy
-            ImFontAtlas_ClearTexData(io.Fonts);
-            ImFontAtlas_ClearInputData(io.Fonts);
+    unsafe fn update_atlas(&mut self) {
+        if !self.imgui.update_atlas() {
+            return;
         }
+
+        let io = &mut *ImGui_GetIO();
+        let mut data = std::ptr::null_mut();
+        let mut width = 0;
+        let mut height = 0;
+        let mut pixel_size = 0;
+        ImFontAtlas_GetTexDataAsAlpha8(io.Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
+        gl::BindTexture(gl::TEXTURE_2D, self.objs.atlas.id());
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
+        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RED as i32,
+                       width, height, 0,
+                       gl::RED, gl::UNSIGNED_BYTE, data as *const _);
+        gl::BindTexture(gl::TEXTURE_2D, 0);
+
+        // bindgen: ImFontAtlas_SetTexID is inline
+        (*io.Fonts).TexID = Self::map_tex(self.objs.atlas.id());
+
+        // We keep this, no need for imgui to hold a copy
+        ImFontAtlas_ClearTexData(io.Fonts);
+        ImFontAtlas_ClearInputData(io.Fonts);
     }
-    unsafe fn render(&mut self, draw_data: *mut ImDrawData) {
+    unsafe fn render(objs: &GlObjects, draw_data: *mut ImDrawData) {
         let draw_data = &*draw_data;
 
-        gl::BindVertexArray(self.vao.id());
-        gl::UseProgram(self.program.id());
-        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbuf.id());
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ibuf.id());
+        gl::BindVertexArray(objs.vao.id());
+        gl::UseProgram(objs.program.id());
+        gl::BindBuffer(gl::ARRAY_BUFFER, objs.vbuf.id());
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, objs.ibuf.id());
         gl::Enable(gl::BLEND);
         gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
         gl::Disable(gl::CULL_FACE);
@@ -345,13 +320,13 @@ impl Renderer {
         gl::Enable(gl::SCISSOR_TEST);
 
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::Uniform1i(self.u_tex_location, 0);
+        gl::Uniform1i(objs.u_tex_location, 0);
 
         let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
         let ImVec2 { x: width, y: height } = draw_data.DisplaySize;
         let right = left + width;
         let bottom = top + height;
-        gl::UniformMatrix3fv(self.u_matrix_location, 1, gl::FALSE,
+        gl::UniformMatrix3fv(objs.u_matrix_location, 1, gl::FALSE,
                              [
                              2.0 / width, 0.0, 0.0,
                              0.0, -2.0 / height, 0.0,
@@ -376,7 +351,7 @@ impl Renderer {
                 );
             #[allow(clippy::zero_ptr)]
             gl::VertexAttribPointer(
-                self.a_pos_location as u32,
+                objs.a_pos_location as u32,
                 2 /*xy*/,
                 gl::FLOAT,
                 gl::FALSE,
@@ -384,7 +359,7 @@ impl Renderer {
                 0 as *const _
                 );
             gl::VertexAttribPointer(
-                self.a_uv_location as u32,
+                objs.a_uv_location as u32,
                 2 /*xy*/,
                 gl::FLOAT,
                 gl::FALSE,
@@ -392,7 +367,7 @@ impl Renderer {
                 8 as *const _
                 );
             gl::VertexAttribPointer(
-                self.a_color_location as u32,
+                objs.a_color_location as u32,
                 4 /*rgba*/,
                 gl::UNSIGNED_BYTE,
                 gl::TRUE,
@@ -502,3 +477,4 @@ struct MyClipboard {
     ctx: ClipboardContext,
     text: CString,
 }
+

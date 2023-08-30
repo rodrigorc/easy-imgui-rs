@@ -1,23 +1,63 @@
 use std::ffi::{CString, c_char, CStr, c_void};
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
+use std::cell::UnsafeCell;
 use dear_imgui_sys::*;
 use std::borrow::Cow;
 
 pub type Cond = ImGuiCond_;
 
+struct BackendData {
+    generation: usize,
+    ui_ptr: *mut c_void,
+}
+
+impl Default for BackendData {
+    fn default() -> Self {
+        BackendData {
+            generation: 0,
+            ui_ptr: null_mut(),
+        }
+    }
+}
+
+const GEN_BITS: u32 = 8;
+const GEN_ID_BITS: u32 = usize::BITS - GEN_BITS;
+const GEN_MASK: usize = (1 << GEN_BITS) - 1;
+const GEN_ID_MASK: usize = (1 << GEN_ID_BITS) - 1;
+
+fn merge_generation(id: usize, gen: usize) -> usize {
+    if (id & GEN_ID_MASK) != id {
+        panic!("UI callback overflow")
+    }
+    (gen << GEN_ID_BITS) | id
+}
+fn remove_generation(id: usize, gen: usize) -> Option<usize> {
+    if (id >> GEN_ID_BITS) != (gen & GEN_MASK) {
+        eprintln!("lost generation callback");
+        None
+    } else {
+        Some(id & GEN_ID_MASK)
+    }
+}
+
+
 pub struct Context {
     imgui: *mut ImGuiContext,
+    backend: Box<UnsafeCell<BackendData>>,
     pending_atlas: bool,
     fonts: Vec<FontInfo>,
 }
 
 impl Context {
     pub unsafe fn new() -> Context {
+        let backend = Box::new(UnsafeCell::new(BackendData::default()));
         let imgui = unsafe {
             let imgui = ImGui_CreateContext(null_mut());
+            ImGui_SetCurrentContext(imgui);
 
             let io = &mut *ImGui_GetIO();
+            io.BackendLanguageUserData = backend.get() as *mut c_void;
             io.IniFilename = null();
             //io.FontAllowUserScaling = true;
             //ImGui_StyleColorsDark(null_mut());
@@ -25,6 +65,7 @@ impl Context {
         };
         Context {
             imgui,
+            backend,
             pending_atlas: true,
             fonts: Vec::new(),
         }
@@ -96,21 +137,46 @@ impl Context {
         do_render: impl FnOnce(&mut A),
     )
     {
-        let mut ui = Ui {
-            _ctx: self,
-            data,
-            callbacks: Vec::new(),
-        };
+        let ref mut gen = self.backend.get_mut().generation;
+        *gen = gen.wrapping_add(1);
 
-        let io = &mut *ImGui_GetIO();
-        io.BackendLanguageUserData = &mut ui as *mut _ as *mut c_void;
+        let mut ui = UnsafeCell::new(Ui {
+            data,
+            generation: *gen,
+            callbacks: Vec::new(),
+        });
+
+
+        // Not sure if this is totally sound, C callbacks will cast this pointer back to a
+        // mutable reference, but those callbacks cannot see this "ui" any other way.
+        self.backend.get_mut().ui_ptr = &mut ui as *mut _ as *mut c_void;
+        let _guard = UiPtrToNullGuard(self);
+
         ImGui_NewFrame();
-        app.do_ui(&mut ui);
+        app.do_ui(ui.get_mut());
         ImGui_Render();
         do_render(app);
-        io.BackendLanguageUserData = null_mut();
     }
+}
 
+impl Drop for Context {
+    fn drop(&mut self) {
+        unsafe {
+            ImGui_DestroyContext(self.imgui);
+        }
+    }
+}
+
+struct UiPtrToNullGuard<'a>(&'a mut Context);
+
+impl Drop for UiPtrToNullGuard<'_> {
+    fn drop(&mut self) {
+        self.0.backend.get_mut().ui_ptr = null_mut();
+
+        // change the generation to avoid trying to call stale callbacks
+        let ref mut gen = self.0.backend.get_mut().generation;
+        *gen = gen.wrapping_add(1);
+    }
 }
 
 pub trait UiBuilder {
@@ -192,8 +258,8 @@ pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
 }
 
 pub struct Ui<'ctx, D> {
-    _ctx: &'ctx mut Context,
     data: &'ctx mut D,
+    generation: usize,
     callbacks: Vec<Box<dyn FnMut(&'ctx mut D, *mut c_void) + 'ctx>>,
 }
 
@@ -207,13 +273,22 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         let id = self.callbacks.len();
 
         self.callbacks.push(cb);
-        id
+        merge_generation(id, self.generation)
     }
     unsafe fn run_callback<A>(id: usize, a: A) {
         let io = &*ImGui_GetIO();
-        let ui = &mut *(io.BackendLanguageUserData as *mut Self);
+        if io.BackendLanguageUserData.is_null() {
+            return;
+        }
+        let backend = &*(io.BackendLanguageUserData as *const BackendData);
+        let Some(id) = remove_generation(id, backend.generation) else {
+            // lost callback!
+            return;
+        };
 
-        // The lifetimes of ui have been erased, but it shouldn't matter
+        // The lifetime of ui has been erased, but at least the type of D should be correct
+        let ui = &mut *(backend.ui_ptr as *mut Self);
+
         let cb = &mut ui.callbacks[id];
         let mut a = MaybeUninit::new(a);
         cb(ui.data, a.as_mut_ptr() as *mut c_void);

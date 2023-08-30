@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, ffi::CString};
+use std::num::NonZeroU32;
 use std::time::{Instant, Duration};
 
 use glutin_winit::DisplayBuilder;
@@ -8,8 +8,6 @@ use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGl
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
 use crate::renderer::{Renderer, Application};
-
-static GL_LOADED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
 struct MainWindowStatus {
     last_frame: Instant,
@@ -108,19 +106,18 @@ impl MainWindow {
             .take()
             .unwrap()
             .make_current(&surface)?;
+
         // Enable v-sync to avoid consuming too much CPU
         let _ = surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()));
-
-        GL_LOADED.get_or_init(|| {
-            let dsp = gl_context.display();
-            gl::load_with(|s| dsp.get_proc_address(&CString::new(s).unwrap()));
-        });
 
         Ok(MainWindow {
             gl_context,
             window,
             surface,
         })
+    }
+    pub fn gl_context(&self) -> &glutin::context::PossiblyCurrentContext {
+        &self.gl_context
     }
 
     pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
@@ -159,6 +156,13 @@ impl<A: Application> MainWindowWithRenderer<A> {
     }
     pub fn renderer(&mut self) -> &mut Renderer {
         &mut self.renderer
+    }
+    pub fn application(&mut self) -> &mut A {
+        &mut self.app
+    }
+    pub fn ping_user_input(&mut self) {
+        self.status.last_input_time = Instant::now();
+        self.status.last_input_frame = 0;
     }
     pub fn do_event_with_data<'ctx, EventUserType>(&'ctx mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow, data: &'ctx mut A::Data) {
         match event {
@@ -226,8 +230,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
             } if *window_id == self.main_window.window.id() => {
                 use winit::event::WindowEvent::*;
 
-                self.status.last_input_time = Instant::now();
-                self.status.last_input_frame = 0;
+                self.ping_user_input();
 
                 match event {
                     CloseRequested => {

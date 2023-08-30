@@ -1,7 +1,9 @@
 #![allow(unused_variables, unused_mut)]
 
+use std::ffi::CString;
 use cstr::cstr;
 use winit::event_loop::EventLoopBuilder;
+use glutin::display::{GetGlDisplay, GlDisplay};
 use dear_imgui as imgui;
 use imgui::{FontId, UiBuilder};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
@@ -12,6 +14,10 @@ static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
 fn main() {
     let event_loop = EventLoopBuilder::new().build();
     let mut window = MainWindow::new(&event_loop).unwrap();
+
+    let dsp = window.gl_context().display();
+    gl::load_with(|s| dsp.get_proc_address(&CString::new(s).unwrap()));
+
     let mut renderer = Renderer::new().unwrap();
 
     let imgui = renderer.imgui();
@@ -31,6 +37,7 @@ fn main() {
     let mut y = 0;
     event_loop.run(move |event, _w, control_flow| {
         x += 1;
+        //window.ping_user_input();
         window.do_event_with_data(&event, control_flow, &mut x);
     });
 }

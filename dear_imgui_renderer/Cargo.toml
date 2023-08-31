@@ -11,7 +11,7 @@ anyhow = "*"
 smallvec = "*"
 cgmath = "*"
 
-gl = "0.14"
+glow = "*"
 glutin = "0.30"
 glutin-winit = "0.3"
 raw-window-handle = "0.5"

@@ -1,8 +1,10 @@
 use std::{ffi::{CString, c_void, c_char, CStr}, mem::size_of};
+use std::num::NonZeroU32;
 
 use dear_imgui_sys::*;
 use clipboard::{ClipboardProvider, ClipboardContext};
 use anyhow::{Result, anyhow};
+use glow::HasContext;
 
 use dear_imgui as imgui;
 use crate::glr;
@@ -13,6 +15,7 @@ pub trait Application: imgui::UiBuilder {
 
 pub struct Renderer {
     imgui: imgui::Context,
+    gl: glr::GlContext,
     objs: GlObjects,
 }
 
@@ -22,16 +25,16 @@ struct GlObjects {
     vao: glr::VertexArray,
     vbuf: glr::Buffer,
     ibuf: glr::Buffer,
-    a_pos_location: i32,
-    a_uv_location: i32,
-    a_color_location: i32,
-    u_matrix_location: i32,
-    u_tex_location: i32,
+    a_pos_location: u32,
+    a_uv_location: u32,
+    a_color_location: u32,
+    u_matrix_location: glow::UniformLocation,
+    u_tex_location: glow::UniformLocation,
 }
 
 impl Renderer {
-    pub fn new() -> Result<Renderer> {
-        let tex;
+    pub fn new(gl: glr::GlContext) -> Result<Renderer> {
+        let atlas;
         let program;
         let vao;
         let (vbuf, ibuf);
@@ -61,23 +64,22 @@ impl Renderer {
                 io.GetClipboardTextFn = Some(get_clipboard_text);
             }
 
-            tex = glr::Texture::generate();
-
-            program = gl_program_from_source(include_str!("shader.glsl"))?;
-            vao = glr::VertexArray::generate();
-            gl::BindVertexArray(vao.id());
+            atlas = glr::Texture::generate(&gl)?;
+            program = gl_program_from_source(&gl, include_str!("shader.glsl"))?;
+            vao = glr::VertexArray::generate(&gl)?;
+            gl.bind_vertex_array(Some(vao.id()));
 
             let a_pos = program.attrib_by_name("pos").unwrap();
             a_pos_location = a_pos.location();
-            gl::EnableVertexAttribArray(a_pos_location as u32);
+            gl.enable_vertex_attrib_array(a_pos_location as u32);
 
             let a_uv = program.attrib_by_name("uv").unwrap();
             a_uv_location = a_uv.location();
-            gl::EnableVertexAttribArray(a_uv_location as u32);
+            gl.enable_vertex_attrib_array(a_uv_location as u32);
 
             let a_color = program.attrib_by_name("color").unwrap();
             a_color_location = a_color.location();
-            gl::EnableVertexAttribArray(a_color_location as u32);
+            gl.enable_vertex_attrib_array(a_color_location as u32);
 
             let u_matrix = program.uniform_by_name("matrix").unwrap();
             u_matrix_location = u_matrix.location();
@@ -85,13 +87,14 @@ impl Renderer {
             let u_tex = program.uniform_by_name("tex").unwrap();
             u_tex_location = u_tex.location();
 
-            vbuf = glr::Buffer::generate();
-            ibuf = glr::Buffer::generate();
+            vbuf = glr::Buffer::generate(&gl)?;
+            ibuf = glr::Buffer::generate(&gl)?;
         }
         Ok(Renderer {
             imgui,
+            gl,
             objs: GlObjects {
-                atlas: tex,
+                atlas,
                 program,
                 vao,
                 vbuf,
@@ -124,15 +127,15 @@ impl Renderer {
                 |app| {
                     let io = &*ImGui_GetIO();
 
-                    gl::Viewport(
+                    self.gl.viewport(
                         0, 0,
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
                         (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
-                        );
+                    );
 
                     app.do_background();
                     let draw_data = ImGui_GetDrawData();
-                    Self::render(&self.objs, draw_data);
+                    Self::render(&self.gl, &self.objs, draw_data);
                 }
             );
         }
@@ -148,100 +151,97 @@ impl Renderer {
         let mut height = 0;
         let mut pixel_size = 0;
         ImFontAtlas_GetTexDataAsAlpha8(io.Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
-        gl::BindTexture(gl::TEXTURE_2D, self.objs.atlas.id());
+        self.gl.bind_texture(glow::TEXTURE_2D, Some(self.objs.atlas.id()));
 
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RED as i32,
+        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
+        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
+        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
+        self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RED as i32,
                        width, height, 0,
-                       gl::RED, gl::UNSIGNED_BYTE, data as *const _);
-        gl::BindTexture(gl::TEXTURE_2D, 0);
+                       glow::RED, glow::UNSIGNED_BYTE, Some(std::slice::from_raw_parts(data, (width * height * pixel_size) as usize)));
+        self.gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
         (*io.Fonts).TexID = Self::map_tex(self.objs.atlas.id());
 
         // We keep this, no need for imgui to hold a copy
         ImFontAtlas_ClearTexData(io.Fonts);
-        ImFontAtlas_ClearInputData(io.Fonts);
     }
-    unsafe fn render(objs: &GlObjects, draw_data: *mut ImDrawData) {
+    unsafe fn render(gl: &glow::Context, objs: &GlObjects, draw_data: *mut ImDrawData) {
         let draw_data = &*draw_data;
 
-        gl::BindVertexArray(objs.vao.id());
-        gl::UseProgram(objs.program.id());
-        gl::BindBuffer(gl::ARRAY_BUFFER, objs.vbuf.id());
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, objs.ibuf.id());
-        gl::Enable(gl::BLEND);
-        gl::BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ONE, gl::ONE_MINUS_SRC_ALPHA);
-        gl::Disable(gl::CULL_FACE);
-        gl::Disable(gl::DEPTH_TEST);
-        gl::Enable(gl::SCISSOR_TEST);
+        gl.bind_vertex_array(Some(objs.vao.id()));
+        gl.use_program(Some(objs.program.id()));
+        gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));
+        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(objs.ibuf.id()));
+        gl.enable(glow::BLEND);
+        gl.blend_func_separate(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA, glow::ONE, glow::ONE_MINUS_SRC_ALPHA);
+        gl.disable(glow::CULL_FACE);
+        gl.disable(glow::DEPTH_TEST);
+        gl.enable(glow::SCISSOR_TEST);
 
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::Uniform1i(objs.u_tex_location, 0);
+        gl.active_texture(glow::TEXTURE0);
+        gl.uniform_1_i32(Some(&objs.u_tex_location), 0);
 
         let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
         let ImVec2 { x: width, y: height } = draw_data.DisplaySize;
         let right = left + width;
         let bottom = top + height;
-        gl::UniformMatrix3fv(objs.u_matrix_location, 1, gl::FALSE,
-                             [
-                             2.0 / width, 0.0, 0.0,
-                             0.0, -2.0 / height, 0.0,
-                             -(right + left) / width, (top + bottom) / height, 1.0,
-                             ].as_ptr()
-                            );
+        gl.uniform_matrix_3_f32_slice(Some(&objs.u_matrix_location), false,
+            &[
+                2.0 / width, 0.0, 0.0,
+                0.0, -2.0 / height, 0.0,
+                -(right + left) / width, (top + bottom) / height, 1.0,
+            ]
+        );
 
         for cmd_list in &draw_data.CmdLists {
             let cmd_list = &**cmd_list;
 
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (size_of::<ImDrawVert>() * cmd_list.VtxBuffer.Size as usize) as isize,
-                cmd_list.VtxBuffer.Data as *const _,
-                gl::DYNAMIC_DRAW
+            gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                glr::as_u8_slice(&cmd_list.VtxBuffer),
+                glow::DYNAMIC_DRAW
                 );
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (size_of::<ImDrawIdx>() * cmd_list.IdxBuffer.Size as usize) as isize,
-                cmd_list.IdxBuffer.Data as *const _,
-                gl::DYNAMIC_DRAW
+            gl.buffer_data_u8_slice(
+                glow::ELEMENT_ARRAY_BUFFER,
+                glr::as_u8_slice(&cmd_list.IdxBuffer),
+                glow::DYNAMIC_DRAW
                 );
-            #[allow(clippy::zero_ptr)]
-            gl::VertexAttribPointer(
-                objs.a_pos_location as u32,
+            let stride = size_of::<ImDrawVert>() as i32;
+            gl.vertex_attrib_pointer_f32(
+                objs.a_pos_location,
                 2 /*xy*/,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<ImDrawVert>() as i32,
-                0 as *const _
-                );
-            gl::VertexAttribPointer(
+                glow::FLOAT,
+                false,
+                stride,
+                0
+            );
+            gl.vertex_attrib_pointer_f32(
                 objs.a_uv_location as u32,
                 2 /*xy*/,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<ImDrawVert>() as i32,
-                8 as *const _
-                );
-            gl::VertexAttribPointer(
+                glow::FLOAT,
+                false,
+                stride,
+                8,
+            );
+            gl.vertex_attrib_pointer_f32(
                 objs.a_color_location as u32,
                 4 /*rgba*/,
-                gl::UNSIGNED_BYTE,
-                gl::TRUE,
-                size_of::<ImDrawVert>() as i32,
-                16 as *const _
-                );
+                glow::UNSIGNED_BYTE,
+                true,
+                stride,
+                16,
+            );
 
             for cmd in &cmd_list.CmdBuffer {
                 let clip_x = cmd.ClipRect.x - left;
                 let clip_y = cmd.ClipRect.y - top;
                 let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
                 let clip_h = cmd.ClipRect.w - cmd.ClipRect.y;
-                gl::Scissor(
+                gl.scissor(
                     (clip_x * draw_data.FramebufferScale.x) as i32,
                     ((height - (clip_y + clip_h)) * draw_data.FramebufferScale.y) as i32,
                     (clip_w * draw_data.FramebufferScale.x) as i32,
@@ -254,29 +254,29 @@ impl Renderer {
                         cb(cmd_list, cmd);
                     }
                     None => {
-                        gl::BindTexture(gl::TEXTURE_2D, Self::unmap_tex(cmd.TextureId));
+                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(cmd.TextureId));
 
-                        gl::DrawElementsBaseVertex(
-                            gl::TRIANGLES,
+                        gl.draw_elements_base_vertex(
+                            glow::TRIANGLES,
                             cmd.ElemCount as i32,
-                            if size_of::<ImDrawIdx>() == 2 { gl::UNSIGNED_SHORT } else { gl::UNSIGNED_INT },
-                            (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as *const _,
+                            if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
+                            (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
                             cmd.VtxOffset as i32,
-                            );
+                        );
                     }
                 }
             }
 
         }
-        gl::UseProgram(0);
-        gl::BindVertexArray(0);
-        gl::Disable(gl::SCISSOR_TEST);
+        gl.use_program(None);
+        gl.bind_vertex_array(None);
+        gl.disable(glow::SCISSOR_TEST);
     }
-    fn map_tex(ntex: u32) -> ImTextureID {
-        ntex as ImTextureID
+    fn map_tex(ntex: glow::Texture) -> ImTextureID {
+        ntex.0.get() as ImTextureID
     }
-    fn unmap_tex(tex: ImTextureID) -> u32 {
-        tex as u32
+    fn unmap_tex(tex: ImTextureID) -> Option<glow::Texture> {
+        Some(glow::NativeTexture(NonZeroU32::new(tex as u32)?))
     }
 }
 
@@ -289,7 +289,7 @@ impl Drop for Renderer {
     }
 }
 
-pub fn gl_program_from_source(shaders: &str) -> Result<glr::Program> {
+pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr::Program> {
     let split = shaders.find("###").ok_or_else(|| anyhow!("shader marker not found"))?;
     let vertex = &shaders[.. split];
     let frag = &shaders[split ..];
@@ -306,7 +306,7 @@ pub fn gl_program_from_source(shaders: &str) -> Result<glr::Program> {
         None
     };
 
-    let prg = glr::Program::from_source(vertex, frag, geom)?;
+    let prg = glr::Program::from_source(gl, vertex, frag, geom)?;
     Ok(prg)
 }
 

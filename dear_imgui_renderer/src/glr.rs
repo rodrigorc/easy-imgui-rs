@@ -1,12 +1,14 @@
 #![allow(dead_code)]
 
-use std::{ffi::CString, cell::Cell, marker::PhantomData};
+use std::num::NonZeroU32;
+use std::{cell::Cell, marker::PhantomData};
+use std::rc::Rc;
 
-use gl::types::*;
+use glow::{HasContext, UniformLocation};
 use smallvec::SmallVec;
 
 #[derive(Debug, Clone)]
-pub struct GLError(GLuint);
+pub struct GLError(u32);
 
 impl std::error::Error for GLError {
 }
@@ -17,40 +19,49 @@ impl std::fmt::Display for GLError {
 }
 
 pub type Result<T> = std::result::Result<T, GLError>;
+pub type GlContext = Rc<glow::Context>;
 
-pub fn check_gl() -> Result<()> {
-    let err = unsafe { gl::GetError() };
-    if err == gl::NO_ERROR {
+pub fn check_gl(gl: &GlContext) -> std::result::Result<(), GLError> {
+    let err = unsafe { gl.get_error() };
+    if err == glow::NO_ERROR {
         Ok(())
     } else {
         Err(GLError(err))
     }
 }
 
+pub fn to_gl_err(gl: &GlContext) -> GLError {
+    unsafe { GLError(gl.get_error()) }
+}
+
 pub struct Texture {
-    id: u32,
+    gl: GlContext,
+    id: glow::Texture,
 }
 
 impl Drop for Texture {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteTextures(1, &self.id);
+            self.gl.delete_texture(self.id);
         }
     }
 }
 
 impl Texture {
-    pub fn generate() -> Texture {
+    pub fn generate(gl: &GlContext) -> Result<Texture> {
         unsafe {
-            let mut id = 0;
-            gl::GenTextures(1, &mut id);
-            Texture { id }
+            let id = gl.create_texture()
+                .map_err(|_| to_gl_err(gl))?;
+            Ok(Texture {
+                gl: gl.clone(),
+                id,
+            })
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::Texture {
         self.id
     }
-    pub fn into_id(self) -> u32 {
+    pub fn into_id(self) -> glow::Texture {
         let id = self.id;
         std::mem::forget(self);
         id
@@ -58,43 +69,55 @@ impl Texture {
 }
 
 
-pub struct EnablerVertexAttribArray(GLuint);
+pub struct EnablerVertexAttribArray {
+    gl: GlContext,
+    id: u32,
+}
 
 impl EnablerVertexAttribArray {
-    fn enable(id: GLuint) -> EnablerVertexAttribArray {
+    fn enable(gl: &GlContext, id: u32) -> EnablerVertexAttribArray {
         unsafe {
-            gl::EnableVertexAttribArray(id);
+            gl.enable_vertex_attrib_array(id);
         }
-         EnablerVertexAttribArray(id)
+         EnablerVertexAttribArray {
+            gl: gl.clone(),
+            id,
+         }
     }
 }
 
 impl Drop for EnablerVertexAttribArray {
     fn drop(&mut self) {
         unsafe {
-            gl::DisableVertexAttribArray(self.0);
+            self.gl.disable_vertex_attrib_array(self.id);
         }
     }
 }
 
-pub struct PushViewport([i32; 4]);
+pub struct PushViewport {
+    gl: GlContext,
+    prev: [i32; 4],
+}
 
 impl PushViewport {
-    pub fn new() -> PushViewport {
+    pub fn new(gl: &GlContext) -> PushViewport {
         unsafe {
             let mut prev = [0; 4];
-            gl::GetIntegerv(gl::VIEWPORT, prev.as_mut_ptr());
-            PushViewport(prev)
+            gl.get_parameter_i32_slice(glow::VIEWPORT, &mut prev);
+            PushViewport {
+                gl: gl.clone(),
+                prev,
+            }
         }
     }
-    pub fn push(x: i32, y: i32, width: i32, height: i32) -> PushViewport {
-        let pv = Self::new();
+    pub fn push(gl: &GlContext, x: i32, y: i32, width: i32, height: i32) -> PushViewport {
+        let pv = Self::new(gl);
         pv.viewport(x, y, width, height);
         pv
     }
     pub fn viewport(&self, x: i32, y: i32, width: i32, height: i32) {
         unsafe {
-            gl::Viewport(x, y, width, height);
+            self.gl.viewport(x, y, width, height);
         }
     }
 }
@@ -102,13 +125,14 @@ impl PushViewport {
 impl Drop for PushViewport {
     fn drop(&mut self) {
         unsafe {
-            gl::Viewport(self.0[0], self.0[1], self.0[2], self.0[3]);
+            self.gl.viewport(self.prev[0], self.prev[1], self.prev[2], self.prev[3]);
         }
     }
 }
 
 pub struct Program {
-    id: u32,
+    gl: GlContext,
+    id: glow::Program,
     uniforms: Vec<Uniform>,
     attribs: Vec<Attribute>,
 }
@@ -116,92 +140,69 @@ pub struct Program {
 impl Drop for Program {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteProgram(self.id);
+            self.gl.delete_program(self.id);
         }
     }
 }
 
 impl Program {
-    pub fn from_source(vertex: &str, fragment: &str, geometry: Option<&str>) -> Result<Program> {
+    pub fn from_source(gl: &GlContext, vertex: &str, fragment: &str, geometry: Option<&str>) -> Result<Program> {
         unsafe {
             // Purge error status
-            gl::GetError();
-            let vsh = Shader::compile(gl::VERTEX_SHADER, vertex)?;
-            let fsh = Shader::compile(gl::FRAGMENT_SHADER, fragment)?;
+            gl.get_error();
+            let vsh = Shader::compile(gl, glow::VERTEX_SHADER, vertex)?;
+            let fsh = Shader::compile(gl, glow::FRAGMENT_SHADER, fragment)?;
             let gsh = match geometry {
-                Some(source) => Some(Shader::compile(gl::GEOMETRY_SHADER, source)?),
+                Some(source) => Some(Shader::compile(gl, glow::GEOMETRY_SHADER, source)?),
                 None => None,
             };
-            let id = gl::CreateProgram();
+            let id = gl.create_program()
+                .map_err(|_| to_gl_err(gl))?;
             let mut prg = Program {
+                gl: gl.clone(),
                 id,
                 uniforms: Vec::new(),
                 attribs: Vec::new(),
             };
-            gl::AttachShader(prg.id, vsh.id);
-            gl::AttachShader(prg.id, fsh.id);
-            if let Some(id) = gsh {
-                gl::AttachShader(prg.id, id.id);
+            gl.attach_shader(prg.id, vsh.id);
+            gl.attach_shader(prg.id, fsh.id);
+            if let Some(g) = gsh {
+                gl.attach_shader(prg.id, g.id);
             }
-            gl::LinkProgram(prg.id);
+            gl.link_program(prg.id);
 
-            let mut st = 0;
-            gl::GetProgramiv(prg.id, gl::LINK_STATUS, &mut st);
-            if st == gl::FALSE as  GLint {
-                let mut buf = [0; 1024];
-                let mut len_msg = 0;
-                gl::GetProgramInfoLog(prg.id, buf.len() as _, &mut len_msg, buf.as_mut_ptr() as *mut i8);
-                let bmsg = &buf[0..len_msg as usize];
-                let msg = String::from_utf8_lossy(bmsg);
+            let st = gl.get_program_link_status(prg.id);
+            if !st {
+                let msg = gl.get_program_info_log(prg.id);
                 eprintln!("{msg}");
-                return Err(GLError(gl::GetError()));
+                return Err(GLError(gl.get_error()));
             }
 
-            let mut nu = 0;
-            gl::GetProgramiv(prg.id, gl::ACTIVE_UNIFORMS, &mut nu);
+            let nu = gl.get_active_uniforms(prg.id);
             prg.uniforms = Vec::with_capacity(nu as usize);
             for u in 0..nu {
-                let mut name = [0; 64];
-                let mut len_name = 0;
-                let mut size = 0;
-                let mut type_ = 0;
-                gl::GetActiveUniform(prg.id, u as u32, name.len() as i32, &mut len_name, &mut size, &mut type_, name.as_mut_ptr() as *mut i8);
-                if len_name == 0 {
-                    continue;
-                }
-                let name = CString::new(&name[0..len_name as usize]).unwrap();
-                let location = gl::GetUniformLocation(prg.id, name.as_ptr());
-                let name = name.into_string().unwrap();
+                let Some(ac) = gl.get_active_uniform(prg.id, u as u32) else { continue; };
+                let Some(location) = gl.get_uniform_location(prg.id, &ac.name) else { continue; };
 
                 let u = Uniform {
-                    name,
+                    name: ac.name,
                     location,
-                    _size: size,
-                    _type: type_,
+                    _size: ac.size,
+                    _type: ac.utype,
                 };
                 prg.uniforms.push(u);
             }
-            let mut na = 0;
-            gl::GetProgramiv(prg.id, gl::ACTIVE_ATTRIBUTES, &mut na);
+            let na = gl.get_active_attributes(prg.id);
             prg.attribs = Vec::with_capacity(na as usize);
             for a in 0..na {
-                let mut name = [0; 64];
-                let mut len_name = 0;
-                let mut size = 0;
-                let mut type_ = 0;
-                gl::GetActiveAttrib(prg.id, a as u32, name.len() as i32, &mut len_name, &mut size, &mut type_, name.as_mut_ptr() as *mut i8);
-                if len_name == 0 {
-                    continue;
-                }
-                let name = CString::new(&name[0..len_name as usize]).unwrap();
-                let location = gl::GetAttribLocation(prg.id, name.as_ptr());
-                let name = name.into_string().unwrap();
+                let Some(aa) = gl.get_active_attribute(prg.id, a as u32) else { continue; };
+                let Some(location) = gl.get_attrib_location(prg.id, &aa.name) else { continue; };
 
                 let a = Attribute {
-                    name,
+                    name: aa.name,
                     location,
-                    _size: size,
-                    _type: type_,
+                    _size: aa.size,
+                    _type: aa.atype,
                 };
                 prg.attribs.push(a);
             }
@@ -209,7 +210,7 @@ impl Program {
             Ok(prg)
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::Program {
         self.id
     }
     pub fn attrib_by_name(&self, name: &str) -> Option<&Attribute> {
@@ -218,7 +219,7 @@ impl Program {
     pub fn uniform_by_name(&self, name: &str) -> Option<&Uniform> {
         self.uniforms.iter().find(|u| u.name == name)
     }
-    pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: GLenum)
+    pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: u32)
         where
             U: UniformProvider,
             AS: AttribProviderList,
@@ -227,15 +228,15 @@ impl Program {
             return;
         }
         unsafe {
-            gl::UseProgram(self.id);
+            self.gl.use_program(Some(self.id));
 
             for u in &self.uniforms {
                 uniforms.apply(u);
             }
 
             let _bufs = attribs.bind(self);
-            gl::DrawArrays(primitive, 0, attribs.len() as i32);
-            if let Err(e) = check_gl() {
+            self.gl.draw_arrays(primitive, 0, attribs.len() as i32);
+            if let Err(e) = check_gl(&self.gl) {
                 eprintln!("Error {e:?}");
             }
         }
@@ -243,43 +244,36 @@ impl Program {
 }
 
 struct Shader {
-    id: u32,
+    gl: GlContext,
+    id: glow::Shader,
 }
 
 impl Drop for Shader {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteShader(self.id);
+            self.gl.delete_shader(self.id);
         }
     }
 }
 
 impl Shader {
-    fn compile(ty: GLenum, source: &str) -> Result<Shader> {
+    fn compile(gl: &GlContext, ty: u32, source: &str) -> Result<Shader> {
         unsafe {
-            let id = gl::CreateShader(ty);
-            check_gl()?;
-            let sh = Shader{id};
-            let mut lines = Vec::new();
-            let mut lens = Vec::new();
-
-            for line in source.split_inclusive('\n') {
-                lines.push(line.as_ptr() as *const i8);
-                lens.push(line.len() as i32);
-            }
-            gl::ShaderSource(sh.id, lines.len() as i32, lines.as_ptr(), lens.as_ptr());
-            gl::CompileShader(sh.id);
-            let mut st = 0;
-            gl::GetShaderiv(sh.id, gl::COMPILE_STATUS, &mut st);
-            if st == gl::FALSE as GLint {
+            let id = gl.create_shader(ty)
+                .map_err(|_| to_gl_err(gl))?;
+            let sh = Shader{
+                gl: gl.clone(),
+                id,
+            };
+            //multiline
+            gl.shader_source(sh.id, source);
+            gl.compile_shader(sh.id);
+            let st = gl.get_shader_compile_status(sh.id);
+            if !st {
                 //TODO: get errors
-                let mut buf = [0u8; 1024];
-                let mut len_msg = 0;
-                gl::GetShaderInfoLog(sh.id, buf.len() as _, &mut len_msg, buf.as_mut_ptr() as *mut i8);
-                let bmsg = &buf[0..len_msg as usize];
-                let msg = String::from_utf8_lossy(bmsg);
+                let msg = gl.get_shader_info_log(sh.id);
                 eprintln!("{msg}");
-                return Err(GLError(gl::GetError()));
+                return Err(GLError(gl.get_error()));
             }
             Ok(sh)
         }
@@ -304,16 +298,16 @@ impl Rgba {
 #[derive(Debug)]
 pub struct Uniform {
     name: String,
-    location: GLint,
-    _size: GLint,
-    _type: GLenum,
+    location: glow::UniformLocation,
+    _size: i32,
+    _type: u32,
 }
 
 impl Uniform {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn location(&self) -> GLint {
+    pub fn location(&self) -> glow::UniformLocation {
         self.location
     }
 }
@@ -321,16 +315,16 @@ impl Uniform {
 #[derive(Debug)]
 pub struct Attribute {
     name: String,
-    location: GLint,
-    _size: GLint,
-    _type: GLenum,
+    location: u32,
+    _size: i32,
+    _type: u32,
 }
 
 impl Attribute {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn location(&self) -> GLint {
+    pub fn location(&self) -> u32 {
         self.location
     }
 }
@@ -344,7 +338,7 @@ pub trait UniformProvider {
 /// This trait returns offsets from Self that will be used to index the raw memory of a
 /// VertexAttribBuffer. Better implemented using the `attrib!` macro.
 pub unsafe trait AttribProvider: Copy {
-    fn apply(a: &Attribute) -> Option<(usize, GLenum, usize)>;
+    fn apply(a: &Attribute) -> Option<(usize, u32, usize)>;
 }
 
 pub trait AttribProviderList {
@@ -380,13 +374,13 @@ impl<A: AttribProvider> AttribProviderList for &[A] {
         let buf = Buffer::generate();
         let mut vas = SmallVec::new();
         unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, buf.id());
-            gl::BufferData(gl::ARRAY_BUFFER, (std::mem::size_of::<A>() * self.len()) as isize, self.as_ptr() as *const A as *const _, gl::STATIC_DRAW);
+            gl.bind_buffer(glow::ARRAY_BUFFER, buf.id());
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_u8_slice(self), glow::STATIC_DRAW);
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(a) {
                     let loc = a.location() as u32;
                     vas.push(EnablerVertexAttribArray::enable(loc));
-                    gl::VertexAttribPointer(loc, size as i32, ty, gl::FALSE, std::mem::size_of::<A>() as i32, offs as *const _);
+                    gl.vertex_attrib_pointer(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
                 }
             }
         }
@@ -399,48 +393,48 @@ impl<A: AttribProvider> AttribProviderList for &[A] {
 /// Returned information will be used to index the raw memory of a VertexAttribBuffer. Returning
 /// wrong information will cause seg faults.
 pub unsafe trait AttribField {
-    fn detail() -> (usize, GLenum);
+    fn detail() -> (usize, u32);
 }
 
 unsafe impl AttribField for f32 {
-    fn detail() -> (usize, GLenum) {
-        (1, gl::FLOAT)
+    fn detail() -> (usize, u32) {
+        (1, glow::FLOAT)
     }
 }
 unsafe impl AttribField for u8 {
-    fn detail() -> (usize, GLenum) {
-        (1, gl::BYTE)
+    fn detail() -> (usize, u32) {
+        (1, glow::BYTE)
     }
 }
 unsafe impl AttribField for u32 {
-    fn detail() -> (usize, GLenum) {
-        (1, gl::UNSIGNED_INT)
+    fn detail() -> (usize, u32) {
+        (1, glow::UNSIGNED_INT)
     }
 }
 unsafe impl AttribField for i32 {
-    fn detail() -> (usize, GLenum) {
-        (1, gl::INT)
+    fn detail() -> (usize, u32) {
+        (1, glow::INT)
     }
 }
 unsafe impl AttribField for Rgba {
-    fn detail() -> (usize, GLenum) {
-        (4, gl::FLOAT)
+    fn detail() -> (usize, u32) {
+        (4, glow::FLOAT)
     }
 }
 unsafe impl<F: AttribField, const N: usize> AttribField for [F; N] {
-    fn detail() -> (usize, GLenum) {
+    fn detail() -> (usize, u32) {
         let (d, t) = F::detail();
         (N * d, t)
     }
 }
 unsafe impl<F: AttribField> AttribField for cgmath::Vector2<F> {
-    fn detail() -> (usize, GLenum) {
+    fn detail() -> (usize, u32) {
         let (d, t) = F::detail();
         (2 * d, t)
     }
 }
 unsafe impl<F: AttribField> AttribField for cgmath::Vector3<F> {
-    fn detail() -> (usize, GLenum) {
+    fn detail() -> (usize, u32) {
         let (d, t) = F::detail();
         (3 * d, t)
     }
@@ -465,7 +459,7 @@ macro_rules! attrib {
                 )*
             }
             unsafe impl $crate::glr::AttribProvider for $name {
-                fn apply(a: &$crate::glr::Attribute) -> Option<(usize, gl::types::GLenum, usize)> {
+                fn apply(a: &$crate::glr::Attribute) -> Option<(usize, glow::types::u32, usize)> {
                     let name = a.name();
                     $(
                         if name == stringify!($f) {
@@ -484,60 +478,61 @@ macro_rules! attrib {
 ///
 /// This trait returns pointers and size information to OpenGL, if it is wrong it will read out of bounds
 pub unsafe trait UniformField {
-    fn apply(&self, count: i32, location: GLint);
+    fn apply(&self, gl: &GlContext, count: i32, location: UniformLocation);
 }
 
 unsafe impl UniformField for cgmath::Matrix4<f32> {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::UniformMatrix4fv(location, count, gl::FALSE, &self[0][0]);
+            gl.uniform_matrix_4_f32_slice(Some(&location), false, self.as_ref() as &[f32; 16]);
         }
     }
 }
 
 unsafe impl UniformField for cgmath::Matrix3<f32> {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::UniformMatrix3fv(location, count, gl::FALSE, &self[0][0]);
+            gl.uniform_matrix_3_f32_slice(Some(&location), false, self.as_ref() as &[f32; 9]);
         }
     }
 }
 
 unsafe impl UniformField for cgmath::Vector3<f32> {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::Uniform3fv(location, count, &self[0]);
+            gl.uniform_3_f32_slice(Some(&location), self.as_ref() as &[f32; 3]);
         }
     }
 }
 
 unsafe impl UniformField for i32 {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::Uniform1iv(location, count, self);
+            gl.uniform_1_i32(Some(&location), *self);
         }
     }
 }
 
 unsafe impl UniformField for f32 {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::Uniform1fv(location, count, self);
+            gl.uniform_1_f32(Some(&location), *self);
         }
     }
 }
 
 unsafe impl UniformField for Rgba {
-    fn apply(&self, count: i32, location: GLint) {
+    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
         unsafe {
-            gl::Uniform4fv(location, count, &self.r);
+            gl.uniform_4_f32(Some(&location), self.r, self.g, self.b, self.a);
         }
     }
 }
 
 unsafe impl<T: UniformField, const N: usize> UniformField for [T; N] {
-    fn apply(&self, count: i32, location: GLint) {
-        T::apply(&self[0], count * N as i32, location);
+    fn apply(&self, _gl: &GlContext, _count: i32, _location: UniformLocation) {
+        //T::apply(&self[0], count * N as i32, location);
+        todo!()
     }
 }
 
@@ -597,8 +592,16 @@ pub struct DynamicVertexArray<A> {
 }
 
 impl<A: AttribProvider> DynamicVertexArray<A> {
-    pub fn new() -> Self {
-        Self::from(Vec::new())
+    pub fn new(gl: &GlContext) -> Result<Self> {
+        Self::from_data(gl, Vec::new())
+    }
+    pub fn from_data(gl: &GlContext, data: Vec<A>) -> Result<Self> {
+        Ok(DynamicVertexArray {
+            data,
+            buf: Buffer::generate(gl)?,
+            buf_len: Cell::new(0),
+            dirty: Cell::new(true),
+        })
     }
     pub fn len(&self) -> usize {
         self.data.len()
@@ -621,36 +624,22 @@ impl<A: AttribProvider> DynamicVertexArray<A> {
             return;
         }
         unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.buf.id());
+            self.buf.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.buf.id()));
             if self.dirty.get() {
-                let len = (std::mem::size_of::<A>() * self.data.len()) as isize;
                 if self.data.len() > self.buf_len.get() {
-                    gl::BufferData(gl::ARRAY_BUFFER,
-                        len,
-                        self.data.as_ptr() as *const _,
-                        gl::DYNAMIC_DRAW
+                    self.buf.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER,
+                        as_u8_slice(&self.data),
+                        glow::DYNAMIC_DRAW
                     );
                     self.buf_len.set(self.data.len());
                 } else {
-                    gl::BufferSubData(gl::ARRAY_BUFFER,
+                    self.buf.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER,
                         0,
-                        len,
-                        self.data.as_ptr() as *const _
+                        as_u8_slice(&self.data)
                     );
                 }
                 self.dirty.set(false);
             }
-        }
-    }
-}
-
-impl<A: AttribProvider > From<Vec<A>> for DynamicVertexArray<A> {
-    fn from(data: Vec<A>) -> Self {
-        DynamicVertexArray {
-            data,
-            buf: Buffer::generate(),
-            buf_len: Cell::new(0),
-            dirty: Cell::new(true),
         }
     }
 }
@@ -684,8 +673,8 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(a) {
                     let loc = a.location() as u32;
-                    vas.push(EnablerVertexAttribArray::enable(loc));
-                    gl::VertexAttribPointer(loc, size as i32, ty, gl::FALSE, std::mem::size_of::<A>() as i32, offs as *const _);
+                    vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
+                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
                 }
             }
         }
@@ -712,9 +701,9 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(a) {
                     let loc = a.location() as u32;
-                    vas.push(EnablerVertexAttribArray::enable(loc));
+                    vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     let offs = offs + std::mem::size_of::<A>() * self.range.start;
-                    gl::VertexAttribPointer(loc, size as i32, ty, gl::FALSE, std::mem::size_of::<A>() as i32, offs as *const _);
+                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
                 }
             }
         }
@@ -724,160 +713,186 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
 }
 
 pub struct Buffer {
-    id: u32,
+    gl: GlContext,
+    id: glow::Buffer,
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteBuffers(1, &self.id);
+            self.gl.delete_buffer(self.id);
         }
     }
 }
 
 impl Buffer {
-    pub fn generate() -> Buffer {
+    pub fn generate(gl: &GlContext) -> Result<Buffer> {
         unsafe {
-            let mut id = 0;
-            gl::GenBuffers(1, &mut id);
-            Buffer { id }
+            let id = gl.create_buffer()
+                .map_err(|_| to_gl_err(gl))?;
+            Ok(Buffer {
+                gl: gl.clone(),
+                id,
+            })
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::Buffer {
         self.id
     }
 }
 
 pub struct VertexArray {
-    id: u32,
+    gl: GlContext,
+    id: glow::VertexArray,
 }
 
 impl Drop for VertexArray {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteVertexArrays(1, &self.id);
+            self.gl.delete_vertex_array(self.id);
         }
     }
 }
 
 impl VertexArray {
-    pub fn generate() -> VertexArray {
+    pub fn generate(gl: &GlContext) -> Result<VertexArray> {
         unsafe {
-            let mut id = 0;
-            gl::GenVertexArrays(1, &mut id);
-            VertexArray { id }
+            let id = gl.create_vertex_array()
+                .map_err(|_| to_gl_err(gl))?;
+            Ok(VertexArray {
+                gl: gl.clone(),
+                id,
+            })
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::VertexArray {
         self.id
     }
 }
 
 pub struct Renderbuffer {
-    id: u32,
+    gl: GlContext,
+    id: glow::Renderbuffer,
 }
 
 impl Drop for Renderbuffer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteRenderbuffers(1, &self.id);
+            self.gl.delete_renderbuffer(self.id);
         }
     }
 }
 
 impl Renderbuffer {
-    pub fn generate() -> Renderbuffer {
+    pub fn generate(gl: &GlContext) -> Result<Renderbuffer> {
         unsafe {
-            let mut id = 0;
-            gl::GenRenderbuffers(1, &mut id);
-            Renderbuffer { id }
+            let id = gl.create_renderbuffer()
+                .map_err(|_| to_gl_err(gl))?;
+            Ok(Renderbuffer {
+                gl: gl.clone(),
+                id,
+            })
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::Renderbuffer {
         self.id
     }
 }
 
-pub struct BinderRenderbuffer(());
+pub struct BinderRenderbuffer(GlContext);
 
 impl BinderRenderbuffer {
     pub fn bind(rb: &Renderbuffer) -> BinderRenderbuffer {
         unsafe {
-            gl::BindRenderbuffer(gl::RENDERBUFFER, rb.id);
+            rb.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rb.id));
         }
-        BinderRenderbuffer(())
+        BinderRenderbuffer(rb.gl.clone())
     }
-    pub fn target(&self) -> GLenum {
-        gl::RENDERBUFFER
+    pub fn target(&self) -> u32 {
+        glow::RENDERBUFFER
     }
     pub fn rebind(&self, rb: &Renderbuffer) {
         unsafe {
-            gl::BindRenderbuffer(gl::RENDERBUFFER, rb.id);
+            rb.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rb.id));
         }
     }
 }
 impl Drop for BinderRenderbuffer {
     fn drop(&mut self) {
         unsafe {
-            gl::BindRenderbuffer(gl::RENDERBUFFER, 0);
+            self.0.bind_renderbuffer(glow::RENDERBUFFER, None);
         }
     }
 }
 
-
 pub struct Framebuffer {
-    id: u32,
+    gl: GlContext,
+    id: glow::Framebuffer,
 }
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteFramebuffers(1, &self.id);
+            self.gl.delete_framebuffer(self.id);
         }
     }
 }
 
 impl Framebuffer {
-    pub fn generate() -> Framebuffer {
+    pub fn generate(gl: &GlContext) -> Result<Framebuffer> {
         unsafe {
-            let mut id = 0;
-            gl::GenFramebuffers(1, &mut id);
-            Framebuffer { id }
+            let id = gl.create_framebuffer()
+                .map_err(|_| to_gl_err(gl))?;
+            Ok(Framebuffer {
+                gl: gl.clone(),
+                id
+            })
         }
     }
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> glow::Framebuffer {
         self.id
     }
 }
 
 
 pub trait BinderFBOTarget {
-    const TARGET: GLenum;
-    const GET_BINDING: GLenum;
+    const TARGET: u32;
+    const GET_BINDING: u32;
 }
 
-pub struct BinderFramebuffer<TGT: BinderFBOTarget>(u32, PhantomData<TGT>);
+pub struct BinderFramebuffer<TGT: BinderFBOTarget> {
+    gl: GlContext,
+    id: Option<glow::Framebuffer>,
+    _pd: PhantomData<TGT>,
+}
 
 impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
-    pub fn new() -> Self {
-        let mut id = 0;
-        unsafe {
-            gl::GetIntegerv(TGT::GET_BINDING, &mut id);
+    pub fn new(gl: &GlContext) -> Self {
+        let id = unsafe {
+            gl.get_parameter_i32(TGT::GET_BINDING) as u32
+        };
+        BinderFramebuffer {
+            gl: gl.clone(),
+            id: NonZeroU32::new(id).map(|n| glow::NativeFramebuffer(n)),
+            _pd: PhantomData
         }
-        BinderFramebuffer(id as u32, PhantomData)
     }
-    pub fn target(&self) -> GLenum {
+    pub fn target(&self) -> u32 {
         TGT::TARGET
     }
     pub fn bind(fb: &Framebuffer) -> Self {
         unsafe {
-            gl::BindFramebuffer(TGT::TARGET, fb.id);
+            fb.gl.bind_framebuffer(TGT::TARGET, Some(fb.id));
         }
-        BinderFramebuffer(0, PhantomData)
+        BinderFramebuffer {
+            gl: fb.gl.clone(),
+            id: None,
+            _pd: PhantomData
+        }
     }
     pub fn rebind(&self, fb: &Framebuffer) {
         unsafe {
-            gl::BindFramebuffer(TGT::TARGET, fb.id);
+            fb.gl.bind_framebuffer(TGT::TARGET, Some(fb.id));
         }
     }
 }
@@ -885,7 +900,7 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
 impl<TGT: BinderFBOTarget> Drop for BinderFramebuffer<TGT> {
     fn drop(&mut self) {
         unsafe {
-            gl::BindFramebuffer(TGT::TARGET, self.0);
+            self.gl.bind_framebuffer(TGT::TARGET, self.id);
         }
     }
 }
@@ -893,8 +908,8 @@ impl<TGT: BinderFBOTarget> Drop for BinderFramebuffer<TGT> {
 pub struct BinderFBODraw;
 
 impl BinderFBOTarget for BinderFBODraw {
-    const TARGET: GLenum = gl::DRAW_FRAMEBUFFER;
-    const GET_BINDING: GLenum = gl::DRAW_FRAMEBUFFER_BINDING;
+    const TARGET: u32 = glow::DRAW_FRAMEBUFFER;
+    const GET_BINDING: u32 = glow::DRAW_FRAMEBUFFER_BINDING;
 }
 
 pub type BinderDrawFramebuffer = BinderFramebuffer<BinderFBODraw>;
@@ -902,33 +917,27 @@ pub type BinderDrawFramebuffer = BinderFramebuffer<BinderFBODraw>;
 pub struct BinderFBORead;
 
 impl BinderFBOTarget for BinderFBORead {
-    const TARGET: GLenum = gl::READ_FRAMEBUFFER;
-    const GET_BINDING: GLenum = gl::READ_FRAMEBUFFER_BINDING;
+    const TARGET: u32 = glow::READ_FRAMEBUFFER;
+    const GET_BINDING: u32 = glow::READ_FRAMEBUFFER_BINDING;
 }
 
 pub type BinderReadFramebuffer = BinderFramebuffer<BinderFBORead>;
 
-pub fn available_multisamples(target: GLenum, internalformat: GLenum) -> Vec<GLint> {
-    unsafe {
-        let mut num = 0;
-        gl::GetInternalformativ(target, internalformat, gl::NUM_SAMPLE_COUNTS, 1, &mut num);
-        let mut samples = vec![0; num as usize];
-        gl::GetInternalformativ(target, internalformat, gl::SAMPLES, samples.len() as i32, samples.as_mut_ptr());
-        samples
-    }
-}
-
-pub fn try_renderbuffer_storage_multisample(target: GLenum, internalformat: GLenum, width: i32, height: i32) -> Option<GLint> {
-    let all_samples = available_multisamples(target, internalformat);
+pub fn try_renderbuffer_storage_multisample(gl: &GlContext, target: u32, internalformat: u32, width: i32, height: i32) -> Option<i32> {
+    let all_samples = [16, 8, 4, 2];
     unsafe {
         for samples in all_samples {
             // purge the gl error
-            gl::GetError();
-            gl::RenderbufferStorageMultisample(target, samples, internalformat, width, height);
-            if gl::GetError() == 0 {
+            gl.get_error();
+            gl.renderbuffer_storage_multisample(target, samples, internalformat, width, height);
+            if gl.get_error() == 0 {
                 return Some(samples);
             }
         }
     }
     None
+}
+
+pub unsafe fn as_u8_slice<T>(data: &[T]) -> &[u8] {
+    std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))
 }

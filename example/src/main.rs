@@ -1,9 +1,10 @@
 #![allow(unused_variables, unused_mut)]
 
-use std::ffi::CString;
+use std::rc::Rc;
 use cstr::cstr;
 use winit::event_loop::EventLoopBuilder;
 use glutin::display::{GetGlDisplay, GlDisplay};
+use glow::HasContext;
 use dear_imgui as imgui;
 use imgui::{FontId, UiBuilder};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
@@ -16,9 +17,10 @@ fn main() {
     let mut window = MainWindow::new(&event_loop).unwrap();
 
     let dsp = window.gl_context().display();
-    gl::load_with(|s| dsp.get_proc_address(&CString::new(s).unwrap()));
+    let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
+    let gl = Rc::new(gl);
 
-    let mut renderer = Renderer::new().unwrap();
+    let mut renderer = Renderer::new(gl.clone()).unwrap();
 
     let imgui = renderer.imgui();
     let f1 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
@@ -26,13 +28,14 @@ fn main() {
     let f2 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
     let my = MyData {
+        gl,
         _f1: f1,
         f2,
         z: 0,
     };
 
     let mut window = MainWindowWithRenderer::new(window, renderer, my);
-    
+
     let mut x = 0;
     let mut y = 0;
     event_loop.run(move |event, _w, control_flow| {
@@ -45,6 +48,7 @@ fn main() {
 static mut X: i32 = 0;
 
 struct MyData {
+    gl: Rc<glow::Context>,
     _f1: FontId,
     f2: FontId,
     z: i32,
@@ -74,15 +78,19 @@ impl UiBuilder for MyData {
         ui.set_next_window_pos(&[0.0, 0.0].into(), imgui::Cond::ImGuiCond_Once, &[0.0, 0.0].into());
         ui.with_window(cstr!("Yo"), Some(&mut true), 0, |ui| {
             ui.with_child("T", &[0.0, 0.0].into(), true, 0, |ui| {
-                ui.window_draw_list().add_callback(|data| {
-                    //println!("callback!");
-                    //let _ = *x;
-                    //y += 1;
-                    *data += 1;
-                    unsafe {
-                        gl::ClearColor(1.0, 0.0, 0.0, 1.0);
-                        gl::Clear(gl::COLOR_BUFFER_BIT);
-                    }});
+                ui.window_draw_list().add_callback({
+                    let gl = self.gl.clone();
+                    move |data| {
+                        //println!("callback!");
+                        //let _ = *x;
+                        //y += 1;
+                        *data += 1;
+                        unsafe {
+                            gl.clear_color(1.0, 1.0, 0.0, 1.0);
+                            gl.clear(glow::COLOR_BUFFER_BIT);
+                        }
+                    }
+                });
                 ui.text_unformatted("Test #1");
                 ui.with_font(self.f2, |ui| {
                     ui.text_unformatted("Test #2");
@@ -95,18 +103,15 @@ impl UiBuilder for MyData {
         //println!("{}", *ui.data());
 
         //my_frame(ui, self.f2, &mut self.z);
-        ui.set_next_window_size_constraints_callback(&[20.0, 20.0].into(), &[520.0, 520.0].into(), |_data, mut d| {
-            unsafe { X += 1 };
-        });
         self.z += 1;
     }
 }
 
 impl Application for MyData {
     fn do_background(&mut self) {
-        unsafe { 
-            gl::ClearColor(0.45, 0.55, 0.60, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+        unsafe {
+            self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
         }
     }
 }

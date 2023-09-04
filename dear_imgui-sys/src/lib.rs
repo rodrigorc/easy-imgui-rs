@@ -48,8 +48,14 @@ impl<'a, T> IntoIterator for &'a ImVector<T> {
  /// Color is stored as [r, g, b, a]
 pub type Color = [u8; 4];
 
-pub trait IntoColor {
+pub trait IntoColor: Sized {
     fn color(self) -> u32;
+    fn color_vec(self) -> ImVec4 {
+        let c = self.color();
+        unsafe {
+            ImGui_ColorConvertU32ToFloat4(c)
+        }
+    }
 }
 
 impl<T: Into<Color>> IntoColor for T {

@@ -322,7 +322,10 @@ dependencies = [
 name = "dear_imgui"
 version = "0.1.0"
 dependencies = [
+ "bitflags 1.3.2",
+ "cstr",
  "dear_imgui-sys",
+ "paste",
 ]
 
 [[package]]
@@ -886,6 +889,12 @@ checksum = "706de7e2214113d63a8238d1910463cfce781129a6f263d13fdb09ff64355ba4"
 dependencies = [
  "ttf-parser",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
 name = "peeking_take_while"

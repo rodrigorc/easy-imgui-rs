@@ -6,7 +6,7 @@ use winit::event_loop::EventLoopBuilder;
 use glutin::display::{GetGlDisplay, GlDisplay};
 use glow::HasContext;
 use dear_imgui as imgui;
-use imgui::{FontId, UiBuilder};
+use imgui::{FontId, UiBuilder, SelectableFlags, SliderFlags};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
@@ -32,6 +32,9 @@ fn main() {
         _f1: f1,
         f2,
         z: 0,
+        sel: 0,
+        checked: false,
+        drags: [0.0, 0.0, 0.0],
     };
 
     let mut window = MainWindowWithRenderer::new(window, renderer, my);
@@ -52,6 +55,9 @@ struct MyData {
     _f1: FontId,
     f2: FontId,
     z: i32,
+    checked: bool,
+    sel: usize,
+    drags: [f32; 3],
 }
 
 impl UiBuilder for MyData {
@@ -74,31 +80,80 @@ impl UiBuilder for MyData {
             });
             //println!("<<<<<<<<< {X}");
         }
-        ui.set_next_window_size(&[100.0, 100.0].into(), imgui::Cond::ImGuiCond_Once);
-        ui.set_next_window_pos(&[0.0, 0.0].into(), imgui::Cond::ImGuiCond_Once, &[0.0, 0.0].into());
-        ui.with_window(cstr!("Yo"), Some(&mut true), 0, |ui| {
-            ui.with_child("T", &[0.0, 0.0].into(), true, 0, |ui| {
-                ui.window_draw_list().add_callback({
-                    let gl = self.gl.clone();
-                    move |data| {
-                        //println!("callback!");
-                        //let _ = *x;
-                        //y += 1;
-                        *data += 1;
-                        unsafe {
-                            gl.clear_color(1.0, 1.0, 0.0, 1.0);
-                            gl.clear(glow::COLOR_BUFFER_BIT);
+        ui.set_next_window_size(&[300.0, 300.0].into(), imgui::Cond::Once);
+        ui.set_next_window_pos(&[0.0, 0.0].into(), imgui::Cond::Once, &[0.0, 0.0].into());
+        ui.do_window(cstr!("Yo"), Some(&mut true), imgui::WindowFlags::MenuBar)
+            .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
+            .with(|ui: &mut imgui::Ui<Self::Data>| {
+
+                ui.with_menu_bar(|ui| {
+                    ui.with_menu("File", true, |ui| {
+                        if ui.do_menu_item("Exit").shortcut("Ctrl-X").build() {
+                            let st = ui.styles();
+                            println!("{:#?}", st);
                         }
-                    }
+                    });
                 });
-                ui.text_unformatted("Test #1");
-                ui.with_font(self.f2, |ui| {
-                    ui.text_unformatted("Test #2");
+                ui.do_child("T", &[0.0, 0.0].into(), true, imgui::WindowFlags::None).with(|ui| {
+                    ui.window_draw_list().add_callback({
+                        let gl = self.gl.clone();
+                        move |data| {
+                            //println!("callback!");
+                            //let _ = *x;
+                            //y += 1;
+                            *data += 1;
+                            unsafe {
+                                gl.clear_color(0.2, 0.2, 0.0, 1.0);
+                                gl.clear(glow::COLOR_BUFFER_BIT);
+                            }
+                        }
+                    });
+                    ui.text("Test #1");
+                    ui.separator();
+                    ui.separator_text("Hala");
+                    ui.push(
+                        (
+                            self.f2,
+                            [
+                                (imgui::ColorId::Text, [0xff, 0x00, 0x00, 0xff]),
+                                (imgui::ColorId::WindowBg, [0x80, 0x00, 0x00, 0xff]),
+                            ],
+                            [
+                                (imgui::StyleVar::Alpha, imgui::StyleValue::F32(0.25)),
+                            ],
+                        ),
+                        |ui| {
+                            ui.text("Test #2");
+                            ui.with_item_tooltip(|ui| {
+                                ui.push(self._f1, |ui| {
+                                    ui.text("ok...");
+                                });
+                            })
+                        }
+                    );
+                    ui.checkbox("Click me!", &mut self.checked);
+                    ui.do_combo("Combo", "One").with(|ui| {
+                        ui.text("ha");
+                        ui.do_selectable("One").flags(SelectableFlags::DontClosePopups).build();
+                        ui.do_selectable("Two").build();
+                        ui.do_selectable("Three").build();
+                    });
+                    ui.combo("Other", &["One", "Two", "Three", "Two"], &mut self.sel);
+                    ui.do_drag_float_2("Drag x 2##d1", (&mut self.drags[0..2]).try_into().unwrap())
+                        .speed(0.01)
+                        .range(0.0, 1.0)
+                        .flags(SliderFlags::AlwaysClamp)
+                        .build();
+                    ui.do_drag_float_2("Drag x 2##d2", (&mut self.drags[1..3]).try_into().unwrap())
+                        .speed(0.01)
+                        .range(0.0, 1.0)
+                        .flags(SliderFlags::AlwaysClamp)
+                        .build();
+
+                    ui.foreground_draw_list().add_circle(&[50.0, 50.0].into(), 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
+                    ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
                 });
-                ui.foreground_draw_list().add_circle(&[50.0, 50.0].into(), 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
-                ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
             });
-        });
         ui.show_demo_window(&mut true);
         //println!("{}", *ui.data());
 

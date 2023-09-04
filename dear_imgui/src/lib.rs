@@ -1,11 +1,14 @@
 use std::ffi::{CString, c_char, CStr, c_void};
+use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
 use std::cell::UnsafeCell;
-use dear_imgui_sys::*;
 use std::borrow::Cow;
+use cstr::cstr;
+use dear_imgui_sys::*;
 
-pub type Cond = ImGuiCond_;
+mod enums;
+pub use enums::*;
 
 struct BackendData {
     generation: usize,
@@ -210,7 +213,7 @@ impl FontInfo {
 }
 
 pub trait IntoCStr {
-    type Temp: std::ops::Deref<Target = CStr>;
+    type Temp: Deref<Target = CStr>;
     fn into(self) -> Self::Temp;
 }
 
@@ -242,6 +245,11 @@ impl IntoCStr for CString {
     }
 }
 
+// Take care to not consume the argument before using the pointer
+fn optional_str<S: Deref<Target = CStr>>(t: &Option<S>) -> *const c_char {
+    t.as_ref().map(|s| s.as_ptr()).unwrap_or(null())
+}
+
 // helper functions
 
 pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
@@ -262,6 +270,304 @@ pub struct Ui<'ctx, D> {
     generation: usize,
     callbacks: Vec<Box<dyn FnMut(&'ctx mut D, *mut c_void) + 'ctx>>,
 }
+
+macro_rules! with_begin_end {
+    ( $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) { $($init:tt)* } ($pass:expr),)*) ) => {
+        pub fn $name<R>(&mut self, $($arg: $($type)*,)* f: impl FnOnce(&mut Self) -> R) -> R {
+            $(
+                $($init)*
+            )*
+            unsafe { $begin( $( $pass, )* ) }
+            let r = f(self);
+            unsafe { $end() }
+            r
+        }
+    };
+}
+
+macro_rules! with_begin_end_opt {
+    ( $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) { $($init:tt)* } ($pass:expr),)*) ) => {
+        pub fn $name<R>(&mut self, $($arg: $($type)*,)* f: impl FnOnce(&mut Self) -> R) -> Option<R> {
+            $(
+                $($init)*
+            )*
+            if !unsafe { $begin( $( $pass, )* ) } {
+                return None;
+            }
+            let r = f(self);
+            unsafe { $end() }
+            Some(r)
+        }
+    };
+}
+
+macro_rules! decl_builder {
+    ( $sname:ident -> $tres:ty, $func:ident ($($life:lifetime),*) ( $( $gen_n:ident : $gen_d:tt ),* )
+        (
+            $(
+                $arg:ident ($($ty:tt)*) ($($init:tt)*) ($pass:expr)
+            ,)*
+        )
+        { $($extra:tt)* }
+        { $($constructor:tt)* }
+    ) => {
+        pub struct $sname<$($life,)* U, $($gen_n : $gen_d, )* > {
+            u: U,
+            $(
+                $arg: $($ty)*,
+            )*
+        }
+        impl <$($life,)* U, $($gen_n : $gen_d, )* > $sname<$($life,)* U, $($gen_n, )* > {
+            pub fn build(self) -> $tres {
+                let $sname { u: _u, $($arg, )* } = self;
+                unsafe {
+                    $func($($pass,)*)
+                }
+            }
+            $($extra)*
+        }
+
+        impl<'ctx, D: 'ctx> Ui<'ctx, D> {
+            $($constructor)*
+        }
+    };
+}
+
+macro_rules! decl_builder_setter {
+    ($name:ident: $ty:ty) => {
+        pub fn $name(mut self, $name: $ty) -> Self {
+            self.$name = $name;
+            self
+        }
+    };
+}
+
+decl_builder!{ MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
+    (
+        label (S1::Temp) (let label = label.into()) (label.as_ptr()),
+        shortcut (Option<S2::Temp>) (let shortcut = shortcut.into()) (optional_str(&shortcut)),
+        selected (bool) () (selected),
+        enabled (bool) () (enabled),
+    )
+    {
+        pub fn shortcut<S3: IntoCStr>(self, shortcut: S3) -> MenuItem<U, S1, S3> {
+            MenuItem {
+                u: self.u,
+                label: self.label,
+                shortcut: Some(shortcut.into()),
+                selected: self.selected,
+                enabled: self.enabled,
+            }
+        }
+        decl_builder_setter!{selected: bool}
+        decl_builder_setter!{enabled: bool}
+    }
+    {
+        #[must_use]
+        pub fn do_menu_item<S: IntoCStr>(&mut self, label: S) -> MenuItem<&mut Self, S, &str> {
+            MenuItem {
+                u: self,
+                label: label.into(),
+                shortcut: None,
+                selected: false,
+                enabled: true,
+            }
+        }
+    }
+}
+
+decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        size (ImVec2) () (&size),
+    )
+    {
+        decl_builder_setter!{size: ImVec2}
+    }
+    {
+        #[must_use]
+        pub fn do_button<S: IntoCStr>(&mut self, label: S) -> Button<&mut Self, S> {
+            Button {
+                u: self,
+                label: label.into(),
+                size: [0.0, 0.0].into(),
+            }
+        }
+    }
+}
+
+decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+    )
+    {}
+    {
+        #[must_use]
+        pub fn do_small_button<S: IntoCStr>(&mut self, label: S) -> SmallButton<&mut Self, S> {
+            SmallButton {
+                u: self,
+                label: label.into(),
+            }
+        }
+        pub fn small_button<S: IntoCStr>(&mut self, label: S) -> bool {
+            self.do_small_button(label).build()
+        }
+    }
+}
+
+decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
+    (
+        id (S::Temp) (let id = id.into()) (id.as_ptr()),
+        size (ImVec2) () (&size),
+        flags (ButtonFlags) () (flags.bits()),
+    )
+    {
+        decl_builder_setter!{size: ImVec2}
+        decl_builder_setter!{flags: ButtonFlags}
+    }
+    {
+        #[must_use]
+        pub fn do_invisible_button<S: IntoCStr>(&mut self, id: S) -> InvisibleButton<&mut Self, S> {
+            InvisibleButton {
+                u: self,
+                id: id.into(),
+                size: [0.0, 0.0].into(),
+                flags: ButtonFlags::MouseButtonLeft,
+            }
+        }
+    }
+}
+
+decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
+    (
+        id (S::Temp) (let id = id.into()) (id.as_ptr()),
+        dir (Dir) () (dir.bits()),
+    )
+    {}
+    {
+        #[must_use]
+        pub fn do_arrow_button<S: IntoCStr>(&mut self, id: S, dir: Dir) -> ArrowButton<&mut Self, S> {
+            ArrowButton {
+                u: self,
+                id: id.into(),
+                dir,
+            }
+        }
+        pub fn arrow_button<S: IntoCStr>(&mut self, id: S, dir: Dir) -> bool {
+            self.do_arrow_button(id, dir).build()
+        }
+    }
+}
+
+decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        value (&'v mut bool) () (value),
+    )
+    {}
+    {
+        #[must_use]
+        pub fn do_checkbox<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut bool) -> Checkbox<'v, &mut Self, S> {
+            Checkbox {
+                u: self,
+                label: label.into(),
+                value,
+            }
+        }
+        pub fn checkbox<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut bool) -> bool {
+            self.do_checkbox(label, value).build()
+        }
+    }
+}
+
+decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        active (bool) () (active),
+    )
+    {}
+    {
+        #[must_use]
+        pub fn do_radio_button<S: IntoCStr>(&mut self, label: S, active: bool) -> RadioButton<&mut Self, S> {
+            RadioButton {
+                u: self,
+                label: label.into(),
+                active,
+            }
+        }
+    }
+}
+
+decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        selected (bool) () (selected),
+        flags (SelectableFlags) () (flags.bits()),
+        size (ImVec2) () (&size),
+    )
+    {
+        decl_builder_setter!{selected: bool}
+        decl_builder_setter!{flags: SelectableFlags}
+        decl_builder_setter!{size: ImVec2}
+    }
+    {
+        #[must_use]
+        pub fn do_selectable<S: IntoCStr>(&mut self, label: S) -> Selectable<&mut Self, S> {
+            Selectable {
+                u: self,
+                label: label.into(),
+                selected: false,
+                flags: SelectableFlags::None,
+                size: [0.0, 0.0].into(),
+            }
+        }
+    }
+}
+
+macro_rules! decl_builder_drag_float {
+    ($name:ident $func:ident $cfunc:ident $life:lifetime ($ty:ty) ($expr:expr)) => {
+        decl_builder! { $name -> bool, $cfunc ($life) (S: IntoCStr)
+            (
+                label (S::Temp) (let label = label.into()) (label.as_ptr()),
+                value ($ty) () ($expr(value)),
+                speed (f32) () (speed),
+                min (f32) () (min),
+                max (f32) () (max),
+                format (&'static CStr) () (format.as_ptr()),
+                flags (SliderFlags) () (flags.bits()),
+            )
+            {
+                decl_builder_setter!{speed: f32}
+                pub fn range(mut self, min: f32, max: f32) -> Self {
+                    self.min = min;
+                    self.max = max;
+                    self
+                }
+                decl_builder_setter!{flags: SliderFlags}
+            }
+            {
+                #[must_use]
+                pub fn $func<$life, S: IntoCStr>(&mut self, label: S, value: $ty) -> $name<$life, &mut Self, S> {
+                    $name {
+                        u: self,
+                        label: label.into(),
+                        value,
+                        speed: 1.0,
+                        min: 0.0,
+                        max: 0.0,
+                        format: cstr!("%.3f"),
+                        flags: SliderFlags::None,
+                    }
+                }
+            }
+        }
+    };
+}
+
+decl_builder_drag_float!{ DragFloat do_drag_float ImGui_DragFloat 'v (&'v mut f32) (std::convert::identity)}
+decl_builder_drag_float!{ DragFloat2 do_drag_float_2 ImGui_DragFloat2 'v (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag_float!{ DragFloat3 do_drag_float_3 ImGui_DragFloat3 'v (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag_float!{ DragFloat4 do_drag_float_4 ImGui_DragFloat4 'v (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
 impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     // The callback will be callable until the next call to do_frame()
@@ -296,17 +602,14 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     pub fn data(&mut self) -> &mut D {
         self.data
     }
-    pub fn with_window(&mut self, name: impl IntoCStr, open: Option<&mut bool>, flags: i32, f: impl FnOnce(&mut Self))
-    {
-        let name = name.into();
-        let bres = unsafe {
-            ImGui_Begin(name.as_ptr(), open.map(|x| x as *mut bool).unwrap_or(null_mut()), flags)
-        };
-        if bres {
-            f(self);
-        }
-        unsafe {
-            ImGui_End();
+    #[must_use]
+    pub fn do_window<'s, S: IntoCStr>(&'s mut self, name: S, open: Option<&'s mut bool>, flags: WindowFlags) -> Window<&'s mut Self, S> {
+        Window {
+            u: self,
+            name: name.into(),
+            open,
+            flags,
+            push: (),
         }
     }
     pub fn set_next_window_size_constraints_callback(&mut self,
@@ -339,32 +642,49 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             );
         }
     }
-    pub fn with_child(&mut self, name: impl IntoCStr, size: &ImVec2, border: bool, flags: i32, f: impl FnOnce(&mut Self)) {
-        let name = name.into();
-        let bres = unsafe {
-            ImGui_BeginChild(name.as_ptr(), size, border, flags)
-        };
-        if bres {
-            f(self);
-        }
+    pub fn styles(&mut self) -> &ImGuiStyle {
         unsafe {
-            ImGui_EndChild();
+            &*ImGui_GetStyle()
+        }
+    }
+    #[must_use]
+    pub fn do_child<'s, S: IntoCStr>(&'s mut self, name: S, size: &'s ImVec2, border: bool, flags: WindowFlags) -> Child<&'s mut Self, S> {
+        Child {
+            u: self,
+            name: name.into(),
+            size,
+            border,
+            flags,
+            push: (),
         }
     }
 
-    pub fn with_group(&mut self, f: impl FnOnce(&mut Self)) {
-        unsafe { ImGui_BeginGroup(); }
-        f(self);
-        unsafe { ImGui_EndGroup(); }
-    }
-    pub fn with_font(&mut self, font: FontId, f: impl FnOnce(&mut Self)) {
-        unsafe {
-            ImGui_PushFont(font_ptr(font));
-            f(self);
-            ImGui_PopFont();
-        }
-    }
+    with_begin_end!{with_group ImGui_BeginGroup ImGui_EndGroup ()}
+    with_begin_end_opt!{with_main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()}
+    with_begin_end_opt!{with_menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar () }
+    with_begin_end_opt!{with_menu ImGui_BeginMenu ImGui_EndMenu (
+        name (impl IntoCStr) {let name = name.into();} (name.as_ptr()),
+        enabled (bool) {} (enabled),
+    )}
+    with_begin_end_opt!{with_tooltip ImGui_BeginTooltip ImGui_EndTooltip () }
+    with_begin_end_opt!{with_item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip () }
+    with_begin_end!{with_disabled ImGui_BeginDisabled ImGui_EndDisabled (
+        disabled (bool) {} (disabled),
+    ) }
 
+    pub fn push<R>(&mut self, style: impl Pushable, f: impl FnOnce(&mut Self) -> R) -> R {
+        let r;
+        unsafe {
+            style.push();
+            r = f(self);
+            style.pop();
+        }
+        r
+    }
+    pub fn pushes<'a>(&mut self, styles: impl AsRef<[&'a dyn Pushable]>, f: impl FnOnce(&mut Self)) {
+        // &[&dyn Pushable] implements Pushable
+        self.push(styles.as_ref(), f);
+    }
     pub fn show_demo_window(&mut self, show: &mut bool) {
         unsafe {
             ImGui_ShowDemoWindow(show);
@@ -372,12 +692,12 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     }
     pub fn set_next_window_pos(&mut self, pos: &ImVec2, cond: Cond, pivot: &ImVec2) {
         unsafe {
-            ImGui_SetNextWindowPos(pos, cond.0 as i32, pivot);
+            ImGui_SetNextWindowPos(pos, cond.bits(), pivot);
         }
     }
     pub fn set_next_window_size(&mut self, size: &ImVec2, cond: Cond) {
         unsafe {
-            ImGui_SetNextWindowSize(size, cond.0 as i32);
+            ImGui_SetNextWindowSize(size, cond.bits());
         }
     }
 
@@ -389,7 +709,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
 
     pub fn set_next_window_collapsed(&mut self, collapsed: bool, cond: Cond) {
         unsafe {
-           ImGui_SetNextWindowCollapsed(collapsed, cond.0 as i32);
+           ImGui_SetNextWindowCollapsed(collapsed, cond.bits());
         }
     }
 
@@ -408,12 +728,6 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     pub fn set_next_window_bg_alpha(&mut self, alpha: f32) {
         unsafe {
             ImGui_SetNextWindowBgAlpha(alpha);
-        }
-    }
-    pub fn text_unformatted(&mut self, text: &str) {
-        unsafe {
-            let (start, end) = text_ptrs(text);
-            ImGui_TextUnformatted(start, end);
         }
     }
     pub fn window_draw_list<'a>(&'a mut self) -> WindowDrawList<'a, 'ctx, D> {
@@ -443,8 +757,198 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             }
         }
     }
+    pub fn text(&mut self, text: &str) {
+        unsafe {
+            let (start, end) = text_ptrs(text);
+            ImGui_TextUnformatted(start, end);
+        }
+
+    }
+    pub fn text_colored(&mut self, color: Color, text: impl IntoCStr) {
+        let text = text.into();
+        unsafe {
+            ImGui_TextColored(&color.color_vec(), cstr!("%s").as_ptr(), text.as_ptr())
+        }
+    }
+    pub fn text_disabled(&mut self, text: impl IntoCStr) {
+        let text = text.into();
+        unsafe {
+            ImGui_TextDisabled(cstr!("%s").as_ptr(), text.as_ptr())
+        }
+    }
+    pub fn text_wrapped(&mut self, text: impl IntoCStr) {
+        let text = text.into();
+        unsafe {
+            ImGui_TextWrapped(cstr!("%s").as_ptr(), text.as_ptr())
+        }
+    }
+    pub fn label_text(&mut self, label: impl IntoCStr, text: impl IntoCStr) {
+        let label = label.into();
+        let text = text.into();
+        unsafe {
+            ImGui_LabelText(label.as_ptr(), cstr!("%s").as_ptr(), text.as_ptr())
+        }
+    }
+    pub fn bullet_text(&mut self, text: impl IntoCStr) {
+        let text = text.into();
+        unsafe {
+            ImGui_BulletText(cstr!("%s").as_ptr(), text.as_ptr())
+        }
+    }
+    pub fn bullet(&mut self) {
+        unsafe {
+            ImGui_Bullet();
+        }
+    }
+    pub fn separator_text(&mut self, text: impl IntoCStr) {
+        let text = text.into();
+        unsafe {
+            ImGui_SeparatorText(text.as_ptr());
+        }
+    }
+    pub fn separator(&mut self) {
+        unsafe {
+            ImGui_Separator();
+        }
+    }
+    #[must_use]
+    pub fn do_combo<S1: IntoCStr, S2: IntoCStr>(&mut self, label: S1, preview_value: S2) -> Combo<&mut Self, S1, S2> {
+        Combo {
+            u: self,
+            label: label.into(),
+            preview_value: preview_value.into(),
+            flags: ComboFlags::None,
+        }
+    }
+    // Helper functions, should it be here?
+    pub fn combo(&mut self, label: impl IntoCStr, values: &[&str], selection: &mut usize) -> bool {
+        let mut changed = false;
+        self.do_combo(label, values[*selection]).with(|ui| {
+            for (idx, value) in values.into_iter().enumerate() {
+                let selected = idx == *selection;
+                ui.push(ItemId(idx), |ui| {
+                    if ui.do_selectable(*value).selected(selected).build() {
+                        *selection = idx;
+                        changed = true;
+                    }
+                });
+                if selected {
+                    ui.set_item_default_focus();
+                }
+            }
+        });
+        changed
+    }
+
+    pub fn set_item_default_focus(&mut self) {
+        unsafe {
+            ImGui_SetItemDefaultFocus();
+        }
+    }
 }
 
+pub struct Window<'a, U, S: IntoCStr, P: Pushable = ()> {
+    u: U,
+    name: S::Temp,
+    open: Option<&'a mut bool>,
+    flags: WindowFlags,
+    push: P,
+}
+
+impl<'a, U, S: IntoCStr, P: Pushable> Window<'a, U, S, P> {
+    pub fn push_for_begin<P2: Pushable>(self, push: P2) -> Window<'a, U, S, (P, P2)> {
+        Window {
+            u: self.u,
+            name: self.name,
+            open: self.open,
+            flags: self.flags,
+            push: (self.push, push),
+        }
+    }
+    pub fn with<R>(self, f: impl FnOnce(U) -> R) -> Option<R> {
+        let bres;
+        unsafe {
+            self.push.push();
+            bres = ImGui_Begin(self.name.as_ptr(), self.open.map(|x| x as *mut bool).unwrap_or(null_mut()), self.flags.bits());
+            self.push.pop();
+        };
+        let r = if bres {
+            Some(f(self.u))
+        } else {
+            None
+        };
+        unsafe {
+            ImGui_End();
+        }
+        r
+    }
+}
+
+pub struct Child<'a, U, S: IntoCStr, P: Pushable = ()> {
+    u: U,
+    name: S::Temp,
+    size: &'a ImVec2,
+    border: bool,
+    flags: WindowFlags,
+    push: P,
+}
+
+impl <'a, U, S: IntoCStr, P: Pushable> Child<'a, U, S, P> {
+    pub fn push_for_begin<P2: Pushable>(self, push: P2) -> Child<'a, U, S, (P, P2)> {
+        Child {
+            u: self.u,
+            name: self.name,
+            size: self.size,
+            border: self.border,
+            flags: self.flags,
+            push: (self.push, push),
+        }
+    }
+    pub fn with<R>(self, f: impl FnOnce(U) -> R) -> Option<R> {
+        let bres;
+        unsafe {
+            self.push.push();
+            bres = ImGui_BeginChild(self.name.as_ptr(), self.size, self.border, self.flags.bits());
+            self.push.pop();
+        };
+        let r = if bres {
+            Some(f(self.u))
+        } else {
+            None
+        };
+        unsafe {
+            ImGui_EndChild();
+        }
+        r
+    }
+}
+
+pub struct Combo<U, S1: IntoCStr, S2: IntoCStr> {
+    u: U,
+    label: S1::Temp,
+    preview_value: S2::Temp,
+    flags: ComboFlags,
+}
+
+impl<U, S1: IntoCStr, S2: IntoCStr> Combo<U, S1, S2> {
+    pub fn flags(mut self, flags: ComboFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+    pub fn with<R>(self, f: impl FnOnce(U) -> R) -> Option<R> {
+        let bres = unsafe {
+            ImGui_BeginCombo(self.label.as_ptr(), self.preview_value.as_ptr(), self.flags.bits())
+        };
+        if !bres {
+            return None;
+        }
+        let r = f(self.u);
+        unsafe {
+            ImGui_EndCombo();
+        }
+        Some(r)
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
@@ -489,14 +993,14 @@ impl<'a, 'ctx, D> WindowDrawList<'a, 'ctx, D> {
             ImDrawList_AddLine(self.ptr, p1, p2, color.color(), thickness);
         }
     }
-    pub fn add_rect(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_, thickness: f32) {
+    pub fn add_rect(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: DrawFlags, thickness: f32) {
         unsafe {
-            ImDrawList_AddRect(self.ptr, p_min, p_max, color.color(), rounding, flags.0 as i32, thickness);
+            ImDrawList_AddRect(self.ptr, p_min, p_max, color.color(), rounding, flags.bits(), thickness);
         }
     }
-    pub fn add_rect_filled(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_) {
+    pub fn add_rect_filled(&mut self, p_min: &ImVec2, p_max: &ImVec2, color: Color, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddRectFilled(self.ptr, p_min, p_max, color.color(), rounding, flags.0 as i32);
+            ImDrawList_AddRectFilled(self.ptr, p_min, p_max, color.color(), rounding, flags.bits());
         }
     }
     pub fn add_rect_filled_multicolor(&mut self, p_min: &ImVec2, p_max: &ImVec2, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
@@ -559,9 +1063,9 @@ impl<'a, 'ctx, D> WindowDrawList<'a, 'ctx, D> {
             );
         }
     }
-    pub fn add_polyline(&mut self, points: &[ImVec2], color: Color, flags: ImDrawFlags_, thickness: f32) {
+    pub fn add_polyline(&mut self, points: &[ImVec2], color: Color, flags: DrawFlags, thickness: f32) {
         unsafe {
-            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.color(), flags.0 as i32, thickness);
+            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.color(), flags.bits(), thickness);
         }
     }
     pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: Color) {
@@ -589,9 +1093,9 @@ impl<'a, 'ctx, D> WindowDrawList<'a, 'ctx, D> {
             ImDrawList_AddImageQuad(self.ptr, user_texture_id, p1, p2, p3, p4, uv1, uv2, uv3, uv4, color.color());
         }
     }
-    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: &ImVec2, p_max: &ImVec2, uv_min: &ImVec2, uv_max: &ImVec2, color: Color, rounding: f32, flags: ImDrawFlags_) {
+    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: &ImVec2, p_max: &ImVec2, uv_min: &ImVec2, uv_max: &ImVec2, color: Color, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id, p_min, p_max, uv_min, uv_max, color.color(), rounding, flags.0 as i32);
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id, p_min, p_max, uv_min, uv_max, color.color(), rounding, flags.bits());
         }
     }
 
@@ -619,3 +1123,248 @@ unsafe extern "C" fn call_drawlist_callback<D>(_parent_lilst: *const ImDrawList,
     let id = (*cmd).UserCallbackData as usize;
     Ui::<D>::run_callback(id, ());
 }
+
+pub trait Hashable {
+    unsafe fn get_id(&self) -> ImGuiID;
+    unsafe fn push(&self);
+}
+
+impl Hashable for &str {
+    unsafe fn get_id(&self) -> ImGuiID {
+        let (start, end) = text_ptrs(self);
+        ImGui_GetID1(start, end)
+    }
+    unsafe fn push(&self) {
+        let (start, end) = text_ptrs(self);
+        ImGui_PushID1(start, end);
+    }
+}
+
+impl Hashable for usize {
+    unsafe fn get_id(&self) -> ImGuiID {
+        ImGui_GetID2(*self as *const c_void)
+    }
+    unsafe fn push(&self) {
+        ImGui_PushID2(*self as *const c_void);
+    }
+}
+
+pub trait Pushable {
+    unsafe fn push(&self);
+    unsafe fn pop(&self);
+}
+
+impl Pushable for () {
+    unsafe fn push(&self) {}
+    unsafe fn pop(&self) {}
+}
+
+impl<A: Pushable, B: Pushable> Pushable for (A, B) {
+    unsafe fn push(&self) {
+        self.0.push();
+        self.1.push();
+    }
+    unsafe fn pop(&self) {
+        self.1.pop();
+        self.0.pop();
+    }
+}
+
+impl<A: Pushable, B: Pushable, C: Pushable> Pushable for (A, B, C) {
+    unsafe fn push(&self) {
+        self.0.push();
+        self.1.push();
+        self.2.push();
+    }
+    unsafe fn pop(&self) {
+        self.2.pop();
+        self.1.pop();
+        self.0.pop();
+    }
+}
+
+impl<A: Pushable, B: Pushable, C: Pushable, D: Pushable> Pushable for (A, B, C, D) {
+    unsafe fn push(&self) {
+        self.0.push();
+        self.1.push();
+        self.2.push();
+        self.3.push();
+    }
+    unsafe fn pop(&self) {
+        self.3.pop();
+        self.2.pop();
+        self.1.pop();
+        self.0.pop();
+    }
+}
+
+impl Pushable for &[&dyn Pushable] {
+    unsafe fn push(&self) {
+        for st in *self {
+            st.push();
+        }
+    }
+    unsafe fn pop(&self) {
+        for st in self.iter().rev() {
+            st.pop();
+        }
+    }
+}
+
+impl<T: Pushable> Pushable for Option<T> {
+    unsafe fn push(&self) {
+        if let Some(s) = self {
+            s.push();
+        }
+    }
+    unsafe fn pop(&self) {
+        if let Some(s) = self {
+            s.pop();
+        }
+    }
+}
+
+impl Pushable for FontId {
+    unsafe fn push(&self) {
+        ImGui_PushFont(font_ptr(*self));
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopFont();
+    }
+}
+
+//#[derive(Debug, Copy, Clone)]
+//pub struct StyleColor(pub ColorId, pub Color);
+pub type StyleColor = (ColorId, Color);
+
+impl Pushable for StyleColor {
+    unsafe fn push(&self) {
+        ImGui_PushStyleColor(self.0.bits(), self.1.color());
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleColor(1);
+    }
+}
+
+impl Pushable for [StyleColor] {
+    unsafe fn push(&self) {
+        for sc in self {
+            sc.push();
+        }
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleColor(self.len() as i32);
+    }
+}
+
+impl<const N: usize> Pushable for [StyleColor; N] {
+    unsafe fn push(&self) {
+        self.as_slice().push();
+    }
+    unsafe fn pop(&self) {
+        self.as_slice().pop();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum StyleValue {
+    F32(f32),
+    Vec2(ImVec2),
+}
+
+//#[derive(Debug, Copy, Clone)]
+//pub struct Style(pub StyleVar, pub StyleValue);
+pub type Style = (StyleVar, StyleValue);
+
+impl Pushable for Style {
+    unsafe fn push(&self) {
+        match self.1 {
+            StyleValue::F32(f) => ImGui_PushStyleVar(self.0.bits(), f),
+            StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v),
+        }
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleVar(1);
+    }
+}
+
+impl Pushable for [Style] {
+    unsafe fn push(&self) {
+        for sc in self {
+            sc.push();
+        }
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleVar(self.len() as i32);
+    }
+}
+
+impl<const N: usize> Pushable for [Style; N] {
+    unsafe fn push(&self) {
+        self.as_slice().push();
+    }
+    unsafe fn pop(&self) {
+        self.as_slice().pop();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ItemWidth(pub f32);
+
+impl Pushable for ItemWidth {
+    unsafe fn push(&self) {
+        ImGui_PushItemWidth(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopItemWidth();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct TextWrapPos(pub f32);
+
+impl Pushable for TextWrapPos {
+    unsafe fn push(&self) {
+        ImGui_PushTextWrapPos(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopTextWrapPos();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct TabStop(pub bool);
+
+impl Pushable for TabStop {
+    unsafe fn push(&self) {
+        ImGui_PushTabStop(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopTabStop();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ButtonRepeat(pub bool);
+
+impl Pushable for ButtonRepeat {
+    unsafe fn push(&self) {
+        ImGui_PushButtonRepeat(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopButtonRepeat();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ItemId<H: Hashable>(pub H);
+
+impl<H: Hashable> Pushable for ItemId<H> {
+    unsafe fn push(&self) {
+        self.0.push();
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopID();
+    }
+}
+

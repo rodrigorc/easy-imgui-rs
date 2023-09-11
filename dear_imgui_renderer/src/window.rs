@@ -4,6 +4,7 @@ use std::time::{Instant, Duration};
 use glutin_winit::DisplayBuilder;
 use winit::{window::{Window, CursorIcon, WindowBuilder}, event::{Event, VirtualKeyCode}, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::{EventLoopWindowTarget, ControlFlow}};
 use dear_imgui_sys::*;
+use dear_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
@@ -201,11 +202,12 @@ impl<A: Application> MainWindowWithRenderer<A> {
                 unsafe {
                     let io = &*ImGui_GetIO();
                     if (ImGuiConfigFlags_(io.ConfigFlags as u32) & ImGuiConfigFlags_::ImGuiConfigFlags_NoMouseCursorChange) == ImGuiConfigFlags_(0) {
-                        let cursor = ImGuiMouseCursor_(ImGui_GetMouseCursor());
-                        let cursor = if io.MouseDrawCursor || cursor == ImGuiMouseCursor_::ImGuiMouseCursor_None {
+                        let cursor = if io.MouseDrawCursor {
                             None
                         } else {
-                            Some(from_imgui_cursor(cursor))
+                            let cursor = imgui::MouseCursor::from_bits(ImGui_GetMouseCursor())
+                                .unwrap_or(imgui::MouseCursor::Arrow);
+                            from_imgui_cursor(cursor)
                         };
                         if cursor != self.status.current_cursor {
                             match cursor {
@@ -264,10 +266,10 @@ impl<A: Application> MainWindowWithRenderer<A> {
                     ModifiersChanged(mods) => {
                         unsafe {
                             let io = &mut *ImGui_GetIO();
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey::ImGuiMod_Ctrl, mods.ctrl());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey::ImGuiMod_Shift, mods.shift());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey::ImGuiMod_Alt, mods.alt());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey::ImGuiMod_Super, mods.logo());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Ctrl.bits()), mods.ctrl());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Shift.bits()), mods.shift());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Alt.bits()), mods.alt());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Super.bits()), mods.logo());
                         }
                     }
                     KeyboardInput {
@@ -282,21 +284,21 @@ impl<A: Application> MainWindowWithRenderer<A> {
                             let pressed = *state == winit::event::ElementState::Pressed;
                             unsafe {
                                 let io = &mut *ImGui_GetIO();
-                                ImGuiIO_AddKeyEvent(io, key, pressed);
+                                ImGuiIO_AddKeyEvent(io, ImGuiKey(key.bits()), pressed);
 
                                 let kmod = match wkey {
                                     VirtualKeyCode::LControl |
-                                    VirtualKeyCode::RControl => Some(ImGuiKey::ImGuiMod_Ctrl),
+                                    VirtualKeyCode::RControl => Some(imgui::KeyMod::Ctrl),
                                     VirtualKeyCode::LShift |
-                                    VirtualKeyCode::RShift => Some(ImGuiKey::ImGuiMod_Shift),
+                                    VirtualKeyCode::RShift => Some(imgui::KeyMod::Shift),
                                     VirtualKeyCode::LAlt |
-                                    VirtualKeyCode::RAlt => Some(ImGuiKey::ImGuiMod_Alt),
+                                    VirtualKeyCode::RAlt => Some(imgui::KeyMod::Alt),
                                     VirtualKeyCode::LWin |
-                                    VirtualKeyCode::RWin => Some(ImGuiKey::ImGuiMod_Super),
+                                    VirtualKeyCode::RWin => Some(imgui::KeyMod::Super),
                                     _ => None
                                 };
                                 if let Some(kmod) = kmod {
-                                    ImGuiIO_AddKeyEvent(io, kmod, pressed);
+                                    ImGuiIO_AddKeyEvent(io, ImGuiKey(kmod.bits()), pressed);
                                 }
                             }
                         }
@@ -333,7 +335,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
                             let io = &mut *ImGui_GetIO();
                             if let Some(btn) = to_imgui_button(*button) {
                                 let pressed = *state == winit::event::ElementState::Pressed;
-                                ImGuiIO_AddMouseButtonEvent(io, btn.0 as i32, pressed);
+                                ImGuiIO_AddMouseButtonEvent(io, btn.bits(), pressed);
                             }
                         }
                     }

@@ -524,21 +524,21 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
     }
 }
 
-macro_rules! decl_builder_drag_float {
-    ($name:ident $func:ident $cfunc:ident $life:lifetime ($ty:ty) ($expr:expr)) => {
+macro_rules! decl_builder_drag {
+    ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
         decl_builder! { $name -> bool, $cfunc ($life) (S: IntoCStr)
             (
                 label (S::Temp) (let label = label.into()) (label.as_ptr()),
                 value ($ty) () ($expr(value)),
                 speed (f32) () (speed),
-                min (f32) () (min),
-                max (f32) () (max),
+                min ($argty) () (min),
+                max ($argty) () (max),
                 format (&'static CStr) () (format.as_ptr()),
                 flags (SliderFlags) () (flags.bits()),
             )
             {
                 decl_builder_setter!{speed: f32}
-                pub fn range(mut self, min: f32, max: f32) -> Self {
+                pub fn range(mut self, min: $argty, max: $argty) -> Self {
                     self.min = min;
                     self.max = max;
                     self
@@ -553,8 +553,8 @@ macro_rules! decl_builder_drag_float {
                         label: label.into(),
                         value,
                         speed: 1.0,
-                        min: 0.0,
-                        max: 0.0,
+                        min: <$argty>::default(),
+                        max: <$argty>::default(),
                         format: cstr!("%.3f"),
                         flags: SliderFlags::None,
                     }
@@ -564,10 +564,302 @@ macro_rules! decl_builder_drag_float {
     };
 }
 
-decl_builder_drag_float!{ DragFloat do_drag_float ImGui_DragFloat 'v (&'v mut f32) (std::convert::identity)}
-decl_builder_drag_float!{ DragFloat2 do_drag_float_2 ImGui_DragFloat2 'v (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag_float!{ DragFloat3 do_drag_float_3 ImGui_DragFloat3 'v (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag_float!{ DragFloat4 do_drag_float_4 ImGui_DragFloat4 'v (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat do_drag_float ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_drag!{ DragFloat2 do_drag_float_2 ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat3 do_drag_float_3 ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat4 do_drag_float_4 ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+
+decl_builder_drag!{ DragInt do_drag_int ImGui_DragInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_drag!{ DragInt2 do_drag_int_2 ImGui_DragInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag!{ DragInt3 do_drag_int_3 ImGui_DragInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag!{ DragInt4 do_drag_int_4 ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+
+macro_rules! decl_builder_slider {
+    ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
+        decl_builder! { $name -> bool, $cfunc ($life) (S: IntoCStr)
+            (
+                label (S::Temp) (let label = label.into()) (label.as_ptr()),
+                value ($ty) () ($expr(value)),
+                min ($argty) () (min),
+                max ($argty) () (max),
+                format (&'static CStr) () (format.as_ptr()),
+                flags (SliderFlags) () (flags.bits()),
+            )
+            {
+                pub fn range(mut self, min: $argty, max: $argty) -> Self {
+                    self.min = min;
+                    self.max = max;
+                    self
+                }
+                decl_builder_setter!{flags: SliderFlags}
+            }
+            {
+                #[must_use]
+                pub fn $func<$life, S: IntoCStr>(&mut self, label: S, value: $ty) -> $name<$life, &mut Self, S> {
+                    $name {
+                        u: self,
+                        label: label.into(),
+                        value,
+                        min: <$argty>::default(),
+                        max: <$argty>::default(),
+                        format: cstr!("%.3f"),
+                        flags: SliderFlags::None,
+                    }
+                }
+            }
+        }
+    };
+}
+
+decl_builder_slider!{ SliderFloat do_slider_float ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_slider!{ SliderFloat2 do_slider_float_2 ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderFloat3 do_slider_float_3 ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderFloat4 do_slider_float_4 ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+
+decl_builder_slider!{ SliderInt do_slider_int ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_slider!{ SliderInt2 do_slider_int_2 ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderInt3 do_slider_int_3 ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderInt4 do_slider_int_4 ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+
+unsafe extern "C" fn input_text_callback(data: *mut ImGuiInputTextCallbackData) -> i32 {
+    let data = &mut *data;
+    if data.EventFlag  == InputTextFlags::CallbackResize.bits() {
+        let this = &mut *(data.UserData as *mut String);
+        let extra = (data.BufSize as usize).saturating_sub(this.len());
+        this.reserve(extra);
+        data.Buf = this.as_mut_ptr() as *mut c_char;
+        // TODO: doc says BufSize is read-only, but I think it should work
+        data.BufSize = this.capacity() as i32;
+    }
+    0
+}
+
+#[inline]
+fn text_pre_edit(text: &mut String) {
+    // Ensure a NUL at the end
+    text.push('\0');
+}
+
+#[inline]
+unsafe fn text_post_edit(text: &mut String) {
+    let buf = text.as_mut_vec();
+    // Look for the ending NUL that must be there, instead of memchr or iter::position, leverage the standard CStr
+    let len = CStr::from_ptr(buf.as_ptr() as *const c_char).to_bytes().len();
+    buf.set_len(len);
+}
+
+unsafe fn input_text_wrapper(label: *const c_char, text: &mut String, flags: InputTextFlags) -> bool {
+    let flags = flags | InputTextFlags::CallbackResize;
+
+    text_pre_edit(text);
+    let r = ImGui_InputText(
+        label,
+        text.as_mut_ptr() as *mut c_char,
+        text.capacity(),
+        flags.bits(),
+        Some(input_text_callback),
+        text as *mut String as *mut c_void
+    );
+    text_post_edit(text);
+    r
+}
+
+decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        text (&'v mut String) () (text),
+        flags (InputTextFlags) () (flags),
+    )
+    {
+        decl_builder_setter!{flags: InputTextFlags}
+    }
+    {
+        #[must_use]
+        pub fn do_input_text<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputText<'v, &mut Self, S> {
+            InputText {
+                u:self,
+                label:label.into(),
+                text,
+                flags: InputTextFlags::None,
+            }
+        }
+    }
+}
+
+unsafe fn input_text_multiline_wrapper(label: *const c_char, text: &mut String, size: &ImVec2, flags: InputTextFlags) -> bool {
+    let flags = flags | InputTextFlags::CallbackResize;
+    text_pre_edit(text);
+    let r = ImGui_InputTextMultiline(
+        label,
+        text.as_mut_ptr() as *mut c_char,
+        text.capacity(),
+        size,
+        flags.bits(),
+        Some(input_text_callback),
+        text as *mut String as *mut c_void
+    );
+    text_post_edit(text);
+    r
+}
+
+decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        text (&'v mut String) () (text),
+        size (ImVec2) () (&size),
+        flags (InputTextFlags) () (flags),
+    )
+    {
+        decl_builder_setter!{flags: InputTextFlags}
+        decl_builder_setter!{size: ImVec2}
+    }
+    {
+        #[must_use]
+        pub fn do_input_text_multiline<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputTextMultiline<'v, &mut Self, S> {
+            InputTextMultiline {
+                u:self,
+                label:label.into(),
+                text,
+                flags: InputTextFlags::None,
+                size: [0.0, 0.0].into(),
+            }
+        }
+    }
+}
+
+unsafe fn input_text_hint_wrapper(label: *const c_char, hint: *const c_char, text: &mut String, flags: InputTextFlags) -> bool {
+    let flags = flags | InputTextFlags::CallbackResize;
+    text_pre_edit(text);
+    let r = ImGui_InputTextWithHint(
+        label,
+        hint,
+        text.as_mut_ptr() as *mut c_char,
+        text.capacity(),
+        flags.bits(),
+        Some(input_text_callback),
+        text as *mut String as *mut c_void
+    );
+    text_post_edit(text);
+    r
+}
+
+decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCStr, S2: IntoCStr)
+    (
+        label (S1::Temp) (let label = label.into()) (label.as_ptr()),
+        hint (S2::Temp) (let hint = hint.into()) (hint.as_ptr()),
+        text (&'v mut String) () (text),
+        flags (InputTextFlags) () (flags),
+    )
+    {
+        decl_builder_setter!{flags: InputTextFlags}
+    }
+    {
+        #[must_use]
+        pub fn do_input_text_hint<'v, S1: IntoCStr, S2: IntoCStr>(&mut self, label: S1, hint: S2, text: &'v mut String) -> InputTextHint<'v, &mut Self, S1, S2> {
+            InputTextHint {
+                u:self,
+                label:label.into(),
+                hint: hint.into(),
+                text,
+                flags: InputTextFlags::None,
+            }
+        }
+    }
+}
+
+decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
+    (
+        label (S::Temp) (let label = label.into()) (label.as_ptr()),
+        value (&'v mut f32) () (value),
+        step (f32) () (step),
+        step_fast (f32) () (step_fast),
+        format (&'static CStr) () (format.as_ptr()),
+        flags (InputTextFlags) () (flags.bits()),
+    )
+    {
+        decl_builder_setter!{flags: InputTextFlags}
+        decl_builder_setter!{step: f32}
+        decl_builder_setter!{step_fast: f32}
+    }
+    {
+        #[must_use]
+        pub fn do_input_float<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut f32) -> InputFloat<'v, &mut Self, S> {
+            InputFloat {
+                u:self,
+                label:label.into(),
+                value,
+                step: 0.0,
+                step_fast: 0.0,
+                format: cstr!("%.3f"),
+                flags: InputTextFlags::None,
+            }
+        }
+    }
+}
+
+macro_rules! decl_builder_input_f {
+    ($name:ident $func:ident $cfunc:ident $len:literal) => {
+        decl_builder! { $name -> bool, $cfunc ('v) (S: IntoCStr)
+        (
+            label (S::Temp) (let label = label.into()) (label.as_ptr()),
+            value (&'v mut [f32; $len]) () (value.as_mut_ptr()),
+            format (&'static CStr) () (format.as_ptr()),
+            flags (InputTextFlags) () (flags.bits()),
+        )
+        {
+            decl_builder_setter!{flags: InputTextFlags}
+        }
+        {
+            #[must_use]
+            pub fn $func<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut [f32; $len]) -> $name<'v, &mut Self, S> {
+                $name {
+                    u:self,
+                    label:label.into(),
+                    value,
+                    format: cstr!("%.3f"),
+                    flags: InputTextFlags::None,
+                }
+            }
+        }
+    }
+
+    };
+}
+
+decl_builder_input_f!{ InputFloat2 do_input_float_2 ImGui_InputFloat2 2}
+decl_builder_input_f!{ InputFloat3 do_input_float_3 ImGui_InputFloat3 3}
+decl_builder_input_f!{ InputFloat4 do_input_float_4 ImGui_InputFloat4 4}
+
+macro_rules! decl_builder_input_i {
+    ($name:ident $func:ident $cfunc:ident $len:literal) => {
+        decl_builder! { $name -> bool, $cfunc ('v) (S: IntoCStr)
+        (
+            label (S::Temp) (let label = label.into()) (label.as_ptr()),
+            value (&'v mut [i32; $len]) () (value.as_mut_ptr()),
+            flags (InputTextFlags) () (flags.bits()),
+        )
+        {
+            decl_builder_setter!{flags: InputTextFlags}
+        }
+        {
+            #[must_use]
+            pub fn $func<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut [i32; $len]) -> $name<'v, &mut Self, S> {
+                $name {
+                    u:self,
+                    label:label.into(),
+                    value,
+                    flags: InputTextFlags::None,
+                }
+            }
+        }
+    }
+
+    };
+}
+
+decl_builder_input_i!{ InputInt2 do_input_int_2 ImGui_InputInt2 2}
+decl_builder_input_i!{ InputInt3 do_input_int_3 ImGui_InputInt3 3}
+decl_builder_input_i!{ InputInt4 do_input_int_4 ImGui_InputInt4 4}
 
 impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     // The callback will be callable until the next call to do_frame()
@@ -670,6 +962,11 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     with_begin_end_opt!{with_item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip () }
     with_begin_end!{with_disabled ImGui_BeginDisabled ImGui_EndDisabled (
         disabled (bool) {} (disabled),
+    ) }
+    with_begin_end!{with_clip_rect ImGui_PushClipRect ImGui_PopClipRect (
+        clip_rect_min (&ImVec2) {} (clip_rect_min),
+        clip_rect_max (&ImVec2) {} (clip_rect_max),
+        intersect_with_current_clip_rect (bool) {} (intersect_with_current_clip_rect),
     ) }
 
     pub fn push<R>(&mut self, style: impl Pushable, f: impl FnOnce(&mut Self) -> R) -> R {
@@ -843,6 +1140,98 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     pub fn set_item_default_focus(&mut self) {
         unsafe {
             ImGui_SetItemDefaultFocus();
+        }
+    }
+    pub fn is_item_hovered(&mut self, flags: HoveredFlags) -> bool {
+        unsafe {
+            ImGui_IsItemHovered(flags.bits())
+        }
+    }
+    pub fn is_item_active(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemActive()
+        }
+    }
+    pub fn is_item_focused(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemFocused()
+        }
+    }
+    pub fn is_item_clicked(&mut self, flags: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsItemClicked(flags.bits())
+        }
+    }
+    pub fn is_item_visible(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemVisible()
+        }
+    }
+    pub fn is_item_edited(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemEdited()
+        }
+    }
+    pub fn is_item_activated(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemActivated()
+        }
+    }
+    pub fn is_item_deactivated(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemDeactivated()
+        }
+    }
+    pub fn is_item_deactivated_after_edit(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemDeactivatedAfterEdit()
+        }
+    }
+    pub fn is_item_toggled_open(&mut self) -> bool {
+        unsafe {
+            ImGui_IsItemToggledOpen()
+        }
+    }
+    pub fn is_any_item_hovered(&mut self) -> bool {
+        unsafe {
+            ImGui_IsAnyItemHovered()
+        }
+    }
+    pub fn is_any_item_active(&mut self) -> bool {
+        unsafe {
+            ImGui_IsAnyItemActive()
+        }
+    }
+    pub fn is_any_item_focused(&mut self) -> bool {
+        unsafe {
+            ImGui_IsAnyItemFocused()
+        }
+    }
+    pub fn get_item_id(&mut self) -> ImGuiID {
+        unsafe {
+            ImGui_GetItemID()
+        }
+    }
+    pub fn get_item_rect_min(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetItemRectMin()
+        }
+    }
+    pub fn get_item_rect_max(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetItemRectMax()
+        }
+    }
+    pub fn get_item_rect_size(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetItemRectSize()
+        }
+    }
+    pub fn get_main_viewport<'s>(&'s mut self) -> Viewport<'s> {
+        unsafe {
+            Viewport {
+                ptr: &*ImGui_GetMainViewport()
+            }
         }
     }
 }
@@ -1368,3 +1757,24 @@ impl<H: Hashable> Pushable for ItemId<H> {
     }
 }
 
+pub struct Viewport<'s> {
+    ptr: &'s ImGuiViewport,
+}
+
+impl Viewport<'_> {
+    pub fn flags(&self) -> ViewportFlags {
+        ViewportFlags::from_bits_truncate(self.ptr.Flags)
+    }
+    pub fn pos(&self) -> &ImVec2 {
+        &self.ptr.Pos
+    }
+    pub fn size(&self) -> &ImVec2 {
+        &self.ptr.Size
+    }
+    pub fn work_pos(&self) -> &ImVec2 {
+        &self.ptr.WorkPos
+    }
+    pub fn work_size(&self) -> &ImVec2 {
+        &self.ptr.WorkSize
+    }
+}

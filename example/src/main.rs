@@ -35,6 +35,8 @@ fn main() {
         sel: 0,
         checked: false,
         drags: [0.0, 0.0, 0.0],
+        input: String::with_capacity(10),
+        x: 0.0,
     };
 
     let mut window = MainWindowWithRenderer::new(window, renderer, my);
@@ -58,6 +60,8 @@ struct MyData {
     checked: bool,
     sel: usize,
     drags: [f32; 3],
+    input: String,
+    x: f32,
 }
 
 impl UiBuilder for MyData {
@@ -144,11 +148,11 @@ impl UiBuilder for MyData {
                         .range(0.0, 1.0)
                         .flags(SliderFlags::AlwaysClamp)
                         .build();
-                    ui.do_drag_float_2("Drag x 2##d2", (&mut self.drags[1..3]).try_into().unwrap())
-                        .speed(0.01)
-                        .range(0.0, 1.0)
-                        .flags(SliderFlags::AlwaysClamp)
+                    ui.do_input_float("Float", &mut self.x)
+                        .step(1.0)
+                        .step_fast(10.0)
                         .build();
+                    ui.do_input_text_hint("Input", "Aquí", &mut self.input).build();
 
                     ui.foreground_draw_list().add_circle(&[50.0, 50.0].into(), 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
                     ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);

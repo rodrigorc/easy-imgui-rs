@@ -3,6 +3,9 @@ name = "dear_imgui_renderer"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["arboard"]
+
 [dependencies]
 dear_imgui-sys = { path = "../dear_imgui-sys" }
 dear_imgui = { path = "../dear_imgui" }
@@ -12,8 +15,8 @@ smallvec = "*"
 cgmath = "*"
 
 glow = "*"
-glutin = "0.30"
-glutin-winit = "0.3"
-raw-window-handle = "0.5"
-arboard = { version = "*", default_features = false }
-winit = { version = "0.28", features = ["x11"] }
+glutin = "*"
+glutin-winit = "*"
+raw-window-handle = "*"
+arboard = { version = "*", optional = true, default_features = false }
+winit = { version = "*", features = ["x11"] }

@@ -14,6 +14,6 @@ cstr = "*"
 cgmath = "*"
 
 glow = "*"
-glutin = "0.30"
-glutin-winit = "0.3"
-winit = { version = "0.28", features = ["x11"] }
+glutin = "*"
+glutin-winit = "*"
+winit = { version = "*", features = ["x11"] }

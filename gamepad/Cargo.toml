@@ -9,8 +9,8 @@ dear_imgui = { path = "../dear_imgui" }
 dear_imgui_renderer = { path = "../dear_imgui_renderer" }
 
 glow = "*"
-glutin = "0.30"
-glutin-winit = "0.3"
-winit = { version = "0.28", features = ["x11"] }
+glutin = "*"
+glutin-winit = "*"
+winit = { version = "*", features = ["x11"] }
 gilrs = "*"
 anyhow = "*"

@@ -158,7 +158,7 @@ impl UiBuilder for MyData {
                     ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
                 });
             });
-        ui.show_demo_window(&mut true);
+        ui.show_demo_window(None);
         //println!("{}", *ui.data());
 
         //my_frame(ui, self.f2, &mut self.z);

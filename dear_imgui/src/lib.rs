@@ -982,9 +982,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         // &[&dyn Pushable] implements Pushable
         self.push(styles.as_ref(), f);
     }
-    pub fn show_demo_window(&mut self, show: &mut bool) {
+    pub fn show_demo_window(&mut self, show: Option<&mut bool>) {
         unsafe {
-            ImGui_ShowDemoWindow(show);
+            ImGui_ShowDemoWindow(show.map(|b| b as *mut bool).unwrap_or(null_mut()));
         }
     }
     pub fn set_next_window_pos(&mut self, pos: &ImVec2, cond: Cond, pivot: &ImVec2) {
@@ -1232,6 +1232,176 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             Viewport {
                 ptr: &*ImGui_GetMainViewport()
             }
+        }
+    }
+    pub fn get_content_region_avail(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetContentRegionAvail()
+        }
+    }
+    pub fn get_content_region_max(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetContentRegionMax()
+        }
+    }
+    pub fn get_window_content_region_min(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetWindowContentRegionMin()
+        }
+    }
+    pub fn get_window_content_region_max(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetWindowContentRegionMax()
+        }
+    }
+    pub fn get_scroll_x(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetScrollX()
+        }
+    }
+    pub fn get_scroll_y(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetScrollY()
+        }
+    }
+    pub fn set_scroll_x(&mut self, scroll_x: f32) {
+        unsafe {
+            ImGui_SetScrollX(scroll_x);
+        }
+    }
+    pub fn set_scroll_y(&mut self, scroll_y: f32) {
+        unsafe {
+            ImGui_SetScrollY(scroll_y);
+        }
+    }
+    pub fn get_scroll_max_x(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetScrollMaxX()
+        }
+    }
+    pub fn get_scroll_max_y(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetScrollMaxY()
+        }
+    }
+    pub fn set_scroll_here_x(&mut self, center_x_ratio: f32) {
+        unsafe {
+            ImGui_SetScrollHereX(center_x_ratio);
+        }
+    }
+    pub fn set_scroll_here_y(&mut self, center_y_ratio: f32) {
+        unsafe {
+            ImGui_SetScrollHereY(center_y_ratio);
+        }
+    }
+    pub fn set_scroll_from_pos_x(&mut self, local_x: f32, center_x_ratio: f32) {
+        unsafe {
+            ImGui_SetScrollFromPosX(local_x, center_x_ratio);
+        }
+    }
+    pub fn set_scroll_from_pos_y(&mut self, local_y: f32, center_y_ratio: f32) {
+        unsafe {
+            ImGui_SetScrollFromPosY(local_y, center_y_ratio);
+        }
+    }
+    pub fn same_line(&mut self, offset_from_start_x: f32, spacing: f32) {
+        unsafe {
+            ImGui_SameLine(offset_from_start_x, spacing);
+        }
+    }
+    pub fn new_line(&mut self) {
+        unsafe {
+            ImGui_NewLine();
+        }
+    }
+    pub fn spacing(&mut self) {
+        unsafe {
+            ImGui_Spacing();
+        }
+    }
+    pub fn dummy(&mut self, size: &ImVec2) {
+        unsafe {
+            ImGui_Dummy(size);
+        }
+    }
+    pub fn indent(&mut self, indent_w: f32) {
+        unsafe {
+            ImGui_Indent(indent_w);
+        }
+    }
+    pub fn unindent(&mut self, indent_w: f32) {
+        unsafe {
+            ImGui_Unindent(indent_w);
+        }
+    }
+    pub fn get_cursor_pos(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetCursorPos()
+        }
+    }
+    pub fn get_cursor_pos_x(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetCursorPosX()
+        }
+    }
+    pub fn get_cursor_pos_y(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetCursorPosY()
+        }
+    }
+    pub fn set_cursor_pos(&mut self, local_pos: &ImVec2) {
+        unsafe {
+            ImGui_SetCursorPos(local_pos);
+        }
+    }
+    pub fn set_cursor_pos_x(&mut self, local_x: f32) {
+        unsafe {
+            ImGui_SetCursorPosX(local_x);
+        }
+    }
+    pub fn set_cursor_pos_y(&mut self, local_y: f32) {
+        unsafe {
+            ImGui_SetCursorPosY(local_y);
+        }
+    }
+    pub fn get_cursor_start_pos(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetCursorStartPos()
+        }
+    }
+    pub fn get_cursor_screen_pos(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetCursorScreenPos()
+        }
+    }
+    pub fn set_cursor_screen_pos(&mut self, pos: &ImVec2) {
+        unsafe {
+            ImGui_SetCursorScreenPos(pos);
+        }
+    }
+    pub fn align_text_to_frame_padding(&mut self) {
+        unsafe {
+            ImGui_AlignTextToFramePadding();
+        }
+    }
+    pub fn get_text_line_height(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetTextLineHeight()
+        }
+    }
+    pub fn get_text_line_height_with_spacing(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetTextLineHeightWithSpacing()
+        }
+    }
+    pub fn get_frame_height(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetFrameHeight()
+        }
+    }
+    pub fn get_frame_height_with_spacing(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetFrameHeightWithSpacing()
         }
     }
 }

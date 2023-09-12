@@ -5,4 +5,5 @@ members = [
     "dear_imgui",
     "dear_imgui_renderer",
     "example",
+    "gamepad",
 ]

@@ -2,7 +2,7 @@ use std::{ffi::{CString, c_void, c_char, CStr}, mem::size_of};
 use std::num::NonZeroU32;
 
 use dear_imgui_sys::*;
-use clipboard::{ClipboardProvider, ClipboardContext};
+use arboard::Clipboard;
 use anyhow::{Result, anyhow};
 use glow::HasContext;
 
@@ -54,7 +54,7 @@ impl Renderer {
                 ImGuiBackendFlags_::ImGuiBackendFlags_HasSetMousePos
             ).0 as ImGuiBackendFlags;
 
-            if let Ok(ctx) = ClipboardContext::new() {
+            if let Ok(ctx) = Clipboard::new() {
                 let clip = MyClipboard {
                     ctx,
                     text: CString::default(),
@@ -313,18 +313,18 @@ pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr:
 unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) {
     let clip = &mut *(user as *mut MyClipboard);
     if text.is_null() {
-        let _ = clip.ctx.set_contents(String::new());
+        let _ = clip.ctx.clear();
     } else {
         let cstr = CStr::from_ptr(text);
         let str = String::from_utf8_lossy(cstr.to_bytes()).to_string();
-        let _ = clip.ctx.set_contents(str);
+        let _ = clip.ctx.set_text(str);
     }
 }
 
 // The returned pointer should be valid for a while...
 unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
     let clip = &mut *(user as *mut MyClipboard);
-    let Ok(text) = clip.ctx.get_contents() else {
+    let Ok(text) = clip.ctx.get_text() else {
         return std::ptr::null();
     };
     let Ok(text) = CString::new(text) else {
@@ -335,7 +335,7 @@ unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
 }
 
 struct MyClipboard {
-    ctx: ClipboardContext,
+    ctx: Clipboard,
     text: CString,
 }
 

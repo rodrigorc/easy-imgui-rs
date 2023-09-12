@@ -19,8 +19,12 @@ fn main() {
     let mut bindings = bindgen::Builder::default()
         .clang_args(["-I", "imgui"])
         .clang_args(["-x", "c++"])
+        .clang_args(["-D", "IMGUI_DISABLE_SSE"]) // that is only for inline functions
         .header("imgui/imgui.h")
+        .header("imgui/imgui_internal.h")
         .allowlist_file(".*/imgui.h")
+        .allowlist_file(".*/imgui_internal.h") // many people use the internals, so better to expose
+                                               // thos, just do not use them lightly
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
         .newtype_enum(".*")

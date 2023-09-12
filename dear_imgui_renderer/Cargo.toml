@@ -15,5 +15,5 @@ glow = "*"
 glutin = "0.30"
 glutin-winit = "0.3"
 raw-window-handle = "0.5"
-clipboard = "0.5"
+arboard = { version = "*", default_features = false }
 winit = { version = "0.28", features = ["x11"] }

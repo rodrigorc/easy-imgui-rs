@@ -340,6 +340,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cc",
+ "mint",
  "pkg-config",
 ]
 
@@ -836,6 +837,12 @@ dependencies = [
  "adler",
  "simd-adler32",
 ]
+
+[[package]]
+name = "mint"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e53debba6bda7a793e5f99b8dacf19e626084f525f7829104ba9898f367d85ff"
 
 [[package]]
 name = "mio"
@@ -1776,6 +1783,7 @@ dependencies = [
  "instant",
  "libc",
  "log",
+ "mint",
  "mio",
  "ndk",
  "objc2",

@@ -164,6 +164,9 @@ impl<A: Application> MainWindowWithRenderer<A> {
     pub fn application(&mut self) -> &mut A {
         &mut self.app
     }
+    pub fn main_window(&mut self) -> &mut MainWindow {
+        &mut self.main_window
+    }
     pub fn ping_user_input(&mut self) {
         self.status.last_input_time = Instant::now();
         self.status.last_input_frame = 0;
@@ -250,6 +253,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             let size = self.main_window.to_logical_size::<_, f32>(*size);
+                            let size: Vector2 = size.into();
                             io.DisplaySize = size.into();
                         }
                     }

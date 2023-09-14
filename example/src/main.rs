@@ -68,11 +68,13 @@ impl UiBuilder for MyData {
     type Data = i32;
 
     fn do_custom_atlas(&mut self, atlas: &mut FontAtlas) {
-        self.f1 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
-        atlas.merge_font(imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac));
+        self.f1 = atlas.add_font_collection([
+            imgui::FontInfo::new(KARLA_TTF, 18.0),
+            imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac),
+        ]);
         self.f2 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
-        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, &[2.0, 0.0].into(),
+        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0].into(),
             |pixels| {
                 for (y, row) in pixels.iter_mut().enumerate() {
                     for (x, color) in row.iter_mut().enumerate() {
@@ -93,11 +95,11 @@ impl UiBuilder for MyData {
         {
             *ui.data() += 1;
             self.z += 1;
-            ui.set_next_window_size_constraints_callback(&[20.0, 20.0].into(), &[520.0, 520.0].into(), |_data, mut d| {
+            ui.set_next_window_size_constraints_callback([20.0, 20.0].into(), [520.0, 520.0].into(), |_data, mut d| {
                 let mut sz = d.desired_size();
                 sz.x = (sz.x / 100.0).round() * 100.0;
                 sz.y = (sz.y / 100.0).round() * 100.0;
-                d.set_desired_size(&sz);
+                d.set_desired_size(sz);
                 //self.z += 1;
                 //y += 1;
                 //let _ = *x;
@@ -106,8 +108,8 @@ impl UiBuilder for MyData {
             });
             //println!("<<<<<<<<< {X}");
         }
-        ui.set_next_window_size(&[300.0, 300.0].into(), imgui::Cond::Once);
-        ui.set_next_window_pos(&[0.0, 0.0].into(), imgui::Cond::Once, &[0.0, 0.0].into());
+        ui.set_next_window_size([300.0, 300.0].into(), imgui::Cond::Once);
+        ui.set_next_window_pos([0.0, 0.0].into(), imgui::Cond::Once, [0.0, 0.0].into());
         ui.do_window(cstr!("Yo"), Some(&mut true), imgui::WindowFlags::MenuBar)
             .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
             .with(|ui: &mut imgui::Ui<Self::Data>| {
@@ -120,7 +122,7 @@ impl UiBuilder for MyData {
                         }
                     });
                 });
-                ui.do_child("T", &[0.0, 0.0].into(), true, imgui::WindowFlags::None).with(|ui| {
+                ui.do_child("T", [0.0, 0.0].into(), true, imgui::WindowFlags::None).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -141,8 +143,8 @@ impl UiBuilder for MyData {
                         (
                             self.f2,
                             [
-                                (imgui::ColorId::Text, [0xff, 0x00, 0x00, 0xff]),
-                                (imgui::ColorId::WindowBg, [0x80, 0x00, 0x00, 0xff]),
+                                (imgui::ColorId::Text, imgui::Color::from([1.0, 0.0, 0.0, 1.0])),
+                                (imgui::ColorId::WindowBg, imgui::Color::from([0.5, 0.0, 0.0, 1.0])),
                             ],
                             [
                                 (imgui::StyleVar::Alpha, imgui::StyleValue::F32(0.25)),
@@ -176,8 +178,8 @@ impl UiBuilder for MyData {
                         .build();
                     ui.do_input_text_hint("Input", "Aquí", &mut self.input).build();
 
-                    ui.foreground_draw_list().add_circle(&[50.0, 50.0].into(), 25.0, [0xff, 0xff, 0, 0xff], 32, 2.0);
-                    ui.background_draw_list().add_circle(&[150.0, 150.0].into(), 25.0, [0xff, 0, 0, 0xff], 32, 2.0);
+                    ui.foreground_draw_list().add_circle([50.0, 50.0].into(), 25.0, [1.0, 1.0, 0.0, 1.0].into(), 32, 2.0);
+                    ui.background_draw_list().add_circle([150.0, 150.0].into(), 25.0, [1.0, 0.0, 0.0, 1.0].into(), 32, 2.0);
                 });
             });
         ui.show_demo_window(None);

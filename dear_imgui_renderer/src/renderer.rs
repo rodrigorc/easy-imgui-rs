@@ -112,7 +112,7 @@ impl Renderer {
         &mut self.imgui
     }
     /// size in logical units
-    pub fn set_size(&mut self, size: ImVec2, scale: f32) {
+    pub fn set_size(&mut self, size: Vector2, scale: f32) {
         unsafe {
             self.imgui.set_current();
             self.imgui.set_size(size, scale);
@@ -131,7 +131,6 @@ impl Renderer {
                 app,
                 |app| {
                     let io = &*ImGui_GetIO();
-
                     self.gl.viewport(
                         0, 0,
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,

@@ -19,4 +19,4 @@ glutin = "*"
 glutin-winit = "*"
 raw-window-handle = "*"
 arboard = { version = "*", optional = true, default_features = false }
-winit = { version = "*", features = ["x11"] }
+winit = { version = "*", features = ["x11", "mint"] }

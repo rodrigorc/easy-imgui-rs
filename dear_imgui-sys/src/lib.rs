@@ -7,16 +7,21 @@ use std::ops::{Index, Deref};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-impl<T: Into<[f32; 2]>> From<T> for ImVec2 {
-    fn from(a: T) -> Self {
-        let [x, y] = a.into();
-        ImVec2 { x, y }
-    }
-}
+pub type Vector2 = mint::Vector2<f32>;
+pub type Color = mint::Vector4<f32>;
 
 impl ImVec2 {
-    pub fn as_array(&self) -> [f32; 2] {
-        [self.x, self.y]
+    pub fn zero() -> ImVec2 {
+        ImVec2 {
+            x: 0.0,
+            y: 0.0,
+        }
+    }
+    pub fn new(x: f32, y: f32) -> ImVec2 {
+        ImVec2 { x, y }
+    }
+    pub fn as_vector2(self) -> Vector2 {
+        self.into()
     }
 }
 
@@ -40,6 +45,27 @@ impl<T> Index<usize> for ImVector<T> {
     }
 }
 
+impl From<ImVec2> for Vector2 {
+    #[inline]
+    fn from(v: ImVec2) -> Vector2 {
+        Vector2 {
+            x: v.x,
+            y: v.y,
+        }
+    }
+}
+impl From<Vector2> for ImVec2 {
+    #[inline]
+    fn from(v: Vector2) -> ImVec2 {
+        ImVec2 {
+            x: v.x,
+            y: v.y,
+        }
+    }
+}
+impl mint::IntoMint for ImVec2 {
+    type MintType = Vector2;
+}
 
 impl<T> Deref for ImVector<T> {
     type Target = [T];
@@ -58,6 +84,8 @@ impl<'a, T> IntoIterator for &'a ImVector<T> {
     }
 }
 
+
+/*
  /// Color is stored as [r, g, b, a]
 pub type Color = [u8; 4];
 
@@ -75,4 +103,4 @@ impl<T: Into<Color>> IntoColor for T {
     fn color(self) -> u32 {
         u32::from_ne_bytes(self.into())
     }
-}
+}*/

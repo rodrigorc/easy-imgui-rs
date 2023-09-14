@@ -6,7 +6,7 @@ use winit::event_loop::EventLoopBuilder;
 use glutin::display::{GetGlDisplay, GlDisplay};
 use glow::HasContext;
 use dear_imgui as imgui;
-use imgui::{FontId, UiBuilder, SelectableFlags, SliderFlags};
+use imgui::{FontId, UiBuilder, SelectableFlags, SliderFlags, FontAtlas};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
@@ -14,7 +14,7 @@ static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
 
 fn main() {
     let event_loop = EventLoopBuilder::new().build();
-    let mut window = MainWindow::new(&event_loop).unwrap();
+    let mut window = MainWindow::new(&event_loop, "Example").unwrap();
 
     let dsp = window.gl_context().display();
     let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
@@ -23,14 +23,14 @@ fn main() {
     let mut renderer = Renderer::new(gl.clone()).unwrap();
 
     let imgui = renderer.imgui();
-    let f1 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
-    imgui.merge_font(imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac));
-    let f2 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
+    //let f1 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
+    //imgui.merge_font(imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac));
+    //let f2 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
     let my = MyData {
         gl,
-        _f1: f1,
-        f2,
+        f1: FontId::default(),
+        f2: FontId::default(),
         z: 0,
         sel: 0,
         checked: false,
@@ -54,7 +54,7 @@ static mut X: i32 = 0;
 
 struct MyData {
     gl: Rc<glow::Context>,
-    _f1: FontId,
+    f1: FontId,
     f2: FontId,
     z: i32,
     checked: bool,
@@ -66,6 +66,28 @@ struct MyData {
 
 impl UiBuilder for MyData {
     type Data = i32;
+
+    fn do_custom_atlas(&mut self, atlas: &mut FontAtlas) {
+        self.f1 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
+        atlas.merge_font(imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac));
+        self.f2 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
+
+        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, &[2.0, 0.0].into(),
+            |pixels| {
+                for (y, row) in pixels.iter_mut().enumerate() {
+                    for (x, color) in row.iter_mut().enumerate() {
+                        *color = [
+                            (x * y) as u8,
+                            (x * x) as u8,
+                            (y * y) as u8,
+                            0xff,
+                        ];
+                    }
+                }
+            }
+        );
+    }
+
     fn do_ui<'s>(&'s mut self, ui: &mut imgui::Ui<Self::Data>) {
         let mut y = 0;
         {
@@ -115,7 +137,7 @@ impl UiBuilder for MyData {
                     ui.text("Test #1");
                     ui.separator();
                     ui.separator_text("Hala");
-                    ui.push(
+                    ui.with_push(
                         (
                             self.f2,
                             [
@@ -129,7 +151,7 @@ impl UiBuilder for MyData {
                         |ui| {
                             ui.text("Test #2");
                             ui.with_item_tooltip(|ui| {
-                                ui.push(self._f1, |ui| {
+                                ui.with_push(self.f1, |ui| {
                                     ui.text("ok...");
                                 });
                             })
@@ -164,14 +186,17 @@ impl UiBuilder for MyData {
         //my_frame(ui, self.f2, &mut self.z);
         self.z += 1;
     }
+
 }
 
 impl Application for MyData {
+
     fn do_background(&mut self) {
         unsafe {
             self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);
         }
     }
+
 }
 

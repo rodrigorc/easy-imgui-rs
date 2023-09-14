@@ -2,6 +2,8 @@
 name = "dear_imgui-sys"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+links = "imgui"
 
 [dependencies]
 

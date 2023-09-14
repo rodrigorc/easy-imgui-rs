@@ -14,7 +14,7 @@ fn main() {
     let proxy = event_loop.create_proxy();
     std::thread::spawn(move || run_input_events(proxy));
 
-    let window = MainWindow::new(&event_loop).unwrap();
+    let window = MainWindow::new(&event_loop, "Gamepad").unwrap();
 
     let dsp = window.gl_context().display();
     let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };

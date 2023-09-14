@@ -7,6 +7,10 @@ fn main() {
         "cargo:THIRD_PARTY={}",
         manifest_dir.join("imgui").display()
     );
+    eprintln!(
+        "cargo:THIRD_PARTY={}",
+        manifest_dir.join("imgui").display()
+    );
 
     println!("cargo:rerun-if-changed=wrapper.cpp");
 

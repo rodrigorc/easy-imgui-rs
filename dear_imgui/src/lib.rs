@@ -1,7 +1,7 @@
 use std::ffi::{CString, c_char, CStr, c_void};
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
-use std::mem::MaybeUninit;
+use std::mem::{MaybeUninit, size_of};
 use std::cell::UnsafeCell;
 use std::borrow::Cow;
 use cstr::cstr;
@@ -62,7 +62,6 @@ impl Context {
             let io = &mut *ImGui_GetIO();
             io.BackendLanguageUserData = backend.get() as *mut c_void;
             io.IniFilename = null();
-            //io.FontAllowUserScaling = true;
             //ImGui_StyleColorsDark(null_mut());
             imgui
         };
@@ -73,36 +72,34 @@ impl Context {
             fonts: Vec::new(),
         }
     }
+    pub fn set_allow_user_scaling(&mut self, val: bool) {
+        unsafe {
+            let io = &mut *ImGui_GetIO();
+            io.FontAllowUserScaling = val;
+        }
+    }
+    pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
+        unsafe {
+            let io = &mut *ImGui_GetIO();
+            io.ConfigFlags |= flags.bits();
+        }
+    }
     pub unsafe fn set_current(&mut self) {
         ImGui_SetCurrentContext(self.imgui);
     }
     pub unsafe fn set_size(&mut self, size: ImVec2, scale: f32) {
-        self.pending_atlas = true;
         let io = &mut *ImGui_GetIO();
         io.DisplaySize = size;
         io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
         io.FontGlobalScale = scale.recip();
+        self.invalidate_font_atlas();
     }
-    pub fn add_font(&mut self, mut font: FontInfo) -> FontId {
+    pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
-        let id = match self.fonts.last() {
-            None => 0,
-            Some(f) => f.id + 1,
-        };
-        font.id = id;
-
-        self.fonts.push(font);
-        FontId(id)
     }
-    pub fn merge_font(&mut self, mut font: FontInfo) {
-        self.pending_atlas = true;
-        font.merge = true;
-        font.id = self.fonts.last().expect("first font cannot be merge").id;
-        self.fonts.push(font);
-    }
-    pub unsafe fn update_atlas(&mut self) -> bool {
+    pub unsafe fn update_atlas(&mut self) -> Option<FontAtlas> {
         if !std::mem::take(&mut self.pending_atlas) {
-            return false;
+            return None;
         }
         let io = &mut *ImGui_GetIO();
         ImFontAtlas_Clear(io.Fonts);
@@ -131,7 +128,10 @@ impl Context {
                 glyph_ranges
             );
         }
-        true
+        Some(FontAtlas {
+            scale,
+            glyph_ranges: Vec::new(),
+        })
     }
     pub unsafe fn do_frame<'ctx, A: UiBuilder>(
         &'ctx mut self,
@@ -185,6 +185,7 @@ impl Drop for UiPtrToNullGuard<'_> {
 pub trait UiBuilder {
     type Data;
     fn do_ui(&mut self, ui: &mut Ui<Self::Data>);
+    fn do_custom_atlas(&mut self, _atlas: &mut FontAtlas) {}
 }
 
 pub struct FontInfo {
@@ -192,7 +193,6 @@ pub struct FontInfo {
     size: f32,
     char_ranges: Vec<[ImWchar; 2]>,
     merge: bool,
-    id: usize,
 }
 
 impl FontInfo {
@@ -202,7 +202,6 @@ impl FontInfo {
             size,
             char_ranges: vec![[0, 0]], //always a [0,0] at the end
             merge: false,
-            id: 0,
         }
     }
     pub fn char_range(mut self, char_from: ImWchar, char_to: ImWchar) -> Self {
@@ -262,6 +261,10 @@ pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     let io = &*ImGui_GetIO();
     let fonts = &*io.Fonts;
+    // If there is no fonts, create the default here
+    if fonts.Fonts.is_empty() {
+        ImFontAtlas_AddFontDefault(io.Fonts, null_mut());
+    }
     fonts.Fonts[font.0]
 }
 
@@ -493,6 +496,71 @@ decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
                 u: self,
                 label: label.into(),
                 active,
+            }
+        }
+    }
+}
+
+//ProgressBar
+
+decl_builder! { Image -> (), ImGui_Image () ()
+    (
+        user_texture_id (ImTextureID) () (user_texture_id),
+        size (ImVec2) () (&size),
+        uv0 (ImVec2) () (&uv0),
+        uv1 (ImVec2) () (&uv1),
+        tint_col (ImVec4) () (&tint_col),
+        border_col (ImVec4) () (&border_col),
+    )
+    {
+        decl_builder_setter!{uv0: ImVec2}
+        decl_builder_setter!{uv1: ImVec2}
+        decl_builder_setter!{tint_col: ImVec4}
+        decl_builder_setter!{border_col: ImVec4}
+    }
+    {
+        #[must_use]
+        pub fn do_image(&mut self, user_texture_id: ImTextureID, size: &ImVec2) -> Image<&mut Self> {
+            Image {
+                u: self,
+                user_texture_id,
+                size: *size,
+                uv0: [0.0, 0.0].into(),
+                uv1: [1.0, 1.0].into(),
+                tint_col: [1.0, 1.0, 1.0, 1.0].into(),
+                border_col: [0.0, 0.0, 0.0, 0.0].into(),
+            }
+        }
+    }
+}
+decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
+    (
+        str_id (S::Temp) (let str_id = str_id.into()) (str_id.as_ptr()),
+        user_texture_id (ImTextureID) () (user_texture_id),
+        size (ImVec2) () (&size),
+        uv0 (ImVec2) () (&uv0),
+        uv1 (ImVec2) () (&uv1),
+        bg_col (ImVec4) () (&bg_col),
+        tint_col (ImVec4) () (&tint_col),
+    )
+    {
+        decl_builder_setter!{uv0: ImVec2}
+        decl_builder_setter!{uv1: ImVec2}
+        decl_builder_setter!{bg_col: ImVec4}
+        decl_builder_setter!{tint_col: ImVec4}
+    }
+    {
+        #[must_use]
+        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: ImTextureID, size: &ImVec2) -> ImageButton<&mut Self, S> {
+            ImageButton {
+                u: self,
+                str_id: str_id.into(),
+                user_texture_id,
+                size: *size,
+                uv0: [0.0, 0.0].into(),
+                uv1: [1.0, 1.0].into(),
+                bg_col: [0.0, 0.0, 0.0, 0.0].into(),
+                tint_col: [1.0, 1.0, 1.0, 1.0].into(),
             }
         }
     }
@@ -934,6 +1002,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             );
         }
     }
+    // TODO: struct StyleSet? light, dark, classic?
     pub fn styles(&mut self) -> &ImGuiStyle {
         unsafe {
             &*ImGui_GetStyle()
@@ -969,7 +1038,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         intersect_with_current_clip_rect (bool) {} (intersect_with_current_clip_rect),
     ) }
 
-    pub fn push<R>(&mut self, style: impl Pushable, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub fn with_push<R>(&mut self, style: impl Pushable, f: impl FnOnce(&mut Self) -> R) -> R {
         let r;
         unsafe {
             style.push();
@@ -977,10 +1046,6 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             style.pop();
         }
         r
-    }
-    pub fn pushes<'a>(&mut self, styles: impl AsRef<[&'a dyn Pushable]>, f: impl FnOnce(&mut Self)) {
-        // &[&dyn Pushable] implements Pushable
-        self.push(styles.as_ref(), f);
     }
     pub fn show_demo_window(&mut self, show: Option<&mut bool>) {
         unsafe {
@@ -997,7 +1062,6 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_SetNextWindowSize(size, cond.bits());
         }
     }
-
     pub fn set_next_window_content_size(&mut self, size: &ImVec2) {
         unsafe {
             ImGui_SetNextWindowContentSize(size);
@@ -1123,7 +1187,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         self.do_combo(label, values[*selection]).with(|ui| {
             for (idx, value) in values.into_iter().enumerate() {
                 let selected = idx == *selection;
-                ui.push(ItemId(idx), |ui| {
+                ui.with_push(ItemId(idx), |ui| {
                     if ui.do_selectable(*value).selected(selected).build() {
                         *selection = idx;
                         changed = true;
@@ -1304,7 +1368,12 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_SetScrollFromPosY(local_y, center_y_ratio);
         }
     }
-    pub fn same_line(&mut self, offset_from_start_x: f32, spacing: f32) {
+    pub fn same_line(&mut self) {
+        unsafe {
+            ImGui_SameLine(0.0, -1.0);
+        }
+    }
+    pub fn same_line_ex(&mut self, offset_from_start_x: f32, spacing: f32) {
         unsafe {
             ImGui_SameLine(offset_from_start_x, spacing);
         }
@@ -1402,6 +1471,151 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     pub fn get_frame_height_with_spacing(&mut self) -> f32 {
         unsafe {
             ImGui_GetFrameHeightWithSpacing()
+        }
+    }
+    pub fn calc_text_size(&mut self, text: &str, hide_text_after_double_hash: bool, wrap_width: f32) -> ImVec2 {
+        unsafe {
+            let (start, end) = text_ptrs(text);
+            ImGui_CalcTextSize(start, end, hide_text_after_double_hash, wrap_width)
+        }
+    }
+    pub fn is_key_down(&mut self, key: Key) -> bool {
+        unsafe {
+            ImGui_IsKeyDown(ImGuiKey(key.bits()))
+        }
+    }
+    pub fn is_key_pressed(&mut self, key: Key) -> bool {
+        unsafe {
+            ImGui_IsKeyPressed(ImGuiKey(key.bits()), /*repeat*/ true)
+        }
+    }
+    pub fn is_key_pressed_no_repeat(&mut self, key: Key) -> bool {
+        unsafe {
+            ImGui_IsKeyPressed(ImGuiKey(key.bits()), /*repeat*/ false)
+        }
+    }
+    pub fn is_key_released(&mut self, key: Key) -> bool {
+        unsafe {
+            ImGui_IsKeyReleased(ImGuiKey(key.bits()))
+        }
+    }
+    pub fn get_key_pressed_amount(&mut self, key: Key, repeat_delay: f32, rate: f32) -> i32 {
+        unsafe {
+            ImGui_GetKeyPressedAmount(ImGuiKey(key.bits()), repeat_delay, rate)
+        }
+    }
+    //GetKeyName
+    //SetNextFrameWantCaptureKeyboard
+    pub fn get_font_size(&mut self) -> f32 {
+        unsafe {
+            ImGui_GetFontSize()
+        }
+    }
+    pub fn is_mouse_down(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseDown(button.bits())
+        }
+    }
+    pub fn is_mouse_clicked(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseClicked(button.bits(), /*repeat*/ false)
+        }
+    }
+    pub fn is_mouse_clicked_repeat(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseClicked(button.bits(), /*repeat*/ true)
+        }
+    }
+    pub fn is_mouse_released(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseReleased(button.bits())
+        }
+    }
+    pub fn is_mouse_double_clicked(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseDoubleClicked(button.bits())
+        }
+    }
+    pub fn get_mouse_clicked_count(&mut self, button: MouseButton) -> i32 {
+        unsafe {
+            ImGui_GetMouseClickedCount(button.bits())
+        }
+    }
+    /*
+    pub fn is_mouse_hovering_rect(&mut self) -> bool {
+        unsafe {
+            ImGui_IsMouseHoveringRect(const ImVec2& r_min, const ImVec2& r_max, bool clip = true);// is mouse hovering given bounding rect (in screen space). clipped by current clipping settings, but disregarding of other consideration of focus/window ordering/popup-block.
+        }
+    }
+    pub fn is_mouse_pos_valid(&mut self) -> bool {
+        unsafe {
+            ImGui_IsMousePosValid(const ImVec2* mouse_pos = NULL);                    // by convention we use (-FLT_MAX,-FLT_MAX) to denote that there is no mouse available
+        }
+    }*/
+    pub fn is_any_mouse_down(&mut self) -> bool {
+        unsafe {
+            ImGui_IsAnyMouseDown()                                                   // [WILL OBSOLETE] is any mouse button held? This was designed for backends, but prefer having backend maintain a mask of held mouse buttons, because upcoming input queue system will make this invalid.
+        }
+    }
+    pub fn get_mouse_pos(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetMousePos()                                                      // shortcut to ImGui::GetIO().MousePos provided by user, to be consistent with other calls
+        }
+    }
+    pub fn get_mouse_pos_on_opening_current_popup(&mut self) -> ImVec2 {
+        unsafe {
+            ImGui_GetMousePosOnOpeningCurrentPopup()
+        }
+    }
+    pub fn is_mouse_dragging(&mut self, button: MouseButton) -> bool {
+        unsafe {
+            ImGui_IsMouseDragging(button.bits(), /*lock_threshold*/ -1.0)
+        }
+    }
+    pub fn get_mouse_drag_delta(&mut self, button: MouseButton) -> ImVec2 {
+        unsafe {
+            ImGui_GetMouseDragDelta(button.bits(), /*lock_threshold*/ -1.0)
+        }
+    }
+    pub fn reset_mouse_drag_delta(&mut self, button: MouseButton) {
+        unsafe {
+            ImGui_ResetMouseDragDelta(button.bits());
+        }
+    }
+    pub fn get_mouse_cursor(&mut self) -> MouseCursor {
+        unsafe {
+            MouseCursor::from_bits(ImGui_GetMouseCursor())
+                .unwrap_or(MouseCursor::None)
+        }
+    }
+    pub fn set_mouse_cursor(&mut self, cursor_type: MouseCursor) {
+        unsafe {
+            ImGui_SetMouseCursor(cursor_type.bits());
+        }
+    }
+    
+    pub fn is_popup_open(&mut self, str_id: Option<&str>, flags: PopupFlags) -> bool {
+        let temp;
+        let str_id = match str_id {
+            Some(s) => {
+                temp = IntoCStr::into(s);
+                temp.as_ptr()
+            }
+            None => null()
+        };
+        unsafe {
+            ImGui_IsPopupOpen(str_id, flags.bits())
+        }
+    }
+    pub fn open_popup(&mut self, str_id: impl IntoCStr, flags: PopupFlags) {
+        let str_id = str_id.into();
+        unsafe {
+            ImGui_OpenPopup(str_id.as_ptr(), flags.bits());
+        }
+    }
+    pub fn io(&mut self) -> &ImGuiIO {
+        unsafe {
+            &*ImGui_GetIO()
         }
     }
 }
@@ -1511,6 +1725,86 @@ impl<U, S1: IntoCStr, S2: IntoCStr> Combo<U, S1, S2> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
+
+impl Default for FontId {
+    fn default() -> FontId {
+        FontId(0)
+    }
+}
+
+pub struct FontAtlas {
+    scale: f32,
+    // glyph_ranges pointers have to live until the atlas texture is built
+    glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
+}
+
+impl FontAtlas {
+    // TODO add_font_default()
+    pub fn add_font(&mut self, mut font: FontInfo) -> FontId {
+        unsafe {
+            let mut fc = ImFontConfig::new();
+            // This is ours, do not free()
+            fc.FontDataOwnedByAtlas = false;
+
+            fc.MergeMode = font.merge;
+
+            // glyph_ranges must be valid for the duration of the atlas, so do not modify the existing self.fonts.
+            // You can add new fonts however, but they will not show unless you call update_altas() again
+            let glyph_ranges = if font.char_ranges.len() > 1 {
+                // keep the ptr alive
+                let ptr = font.char_ranges[0].as_ptr();
+                self.glyph_ranges.push(std::mem::take(&mut font.char_ranges));
+                ptr
+            } else {
+                null()
+            };
+            let io = &mut *ImGui_GetIO();
+            ImFontAtlas_AddFontFromMemoryTTF(
+                io.Fonts,
+                font.ttf.as_ptr() as *mut _,
+                font.ttf.len() as i32,
+                font.size * self.scale,
+                &fc,
+                glyph_ranges
+            );
+            FontId((*io.Fonts).Fonts.len() - 1)
+        }
+    }
+    pub fn merge_font(&mut self, mut font: FontInfo) {
+        font.merge = true;
+        dbg!(&font.char_ranges);
+        self.add_font(font);
+    }
+    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: &ImVec2, draw: impl FnOnce(&mut [&mut [Color]])) -> i32 {
+        unsafe {
+            let io = &mut *ImGui_GetIO();
+
+            let font = font_ptr(font);
+            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, width, height, advance_x, offset);
+
+            let mut tex_data = std::ptr::null_mut();
+            let mut tex_width = 0;
+            let mut tex_height = 0;
+            let mut pixel_size = 0;
+            ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
+            let rect = &(*io.Fonts).CustomRects[idx as usize];
+            let pixel_size = pixel_size as usize;
+            assert!(pixel_size == size_of::<Color>());
+
+            let stride = tex_width as usize * pixel_size;
+
+            let rx = rect.X as usize * pixel_size;
+            let ry = rect.Y as usize;
+            let mut pixels = (ry .. ry + tex_height as usize).map(|y| {
+                let p = tex_data.add(y * stride + rx) as *mut Color;
+                std::slice::from_raw_parts_mut(p, rect.Width as usize)
+            }).collect::<Vec<_>>();
+            draw(&mut pixels);
+            idx
+        }
+    }
+    // TODO add_custom_rect_regular()
+}
 
 #[derive(Debug)]
 pub struct SizeCallbackData<'a> {
@@ -1796,6 +2090,8 @@ impl Pushable for FontId {
 //pub struct StyleColor(pub ColorId, pub Color);
 pub type StyleColor = (ColorId, Color);
 
+pub type TextureId = ImTextureID;
+
 impl Pushable for StyleColor {
     unsafe fn push(&self) {
         ImGui_PushStyleColor(self.0.bits(), self.1.color());
@@ -1817,6 +2113,38 @@ impl Pushable for [StyleColor] {
 }
 
 impl<const N: usize> Pushable for [StyleColor; N] {
+    unsafe fn push(&self) {
+        self.as_slice().push();
+    }
+    unsafe fn pop(&self) {
+        self.as_slice().pop();
+    }
+}
+
+// TODO: do colors in a saner way
+pub type StyleColorF = (ColorId, ImVec4);
+
+impl Pushable for StyleColorF {
+    unsafe fn push(&self) {
+        ImGui_PushStyleColor1(self.0.bits(), &self.1);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleColor(1);
+    }
+}
+
+impl Pushable for [StyleColorF] {
+    unsafe fn push(&self) {
+        for sc in self {
+            sc.push();
+        }
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopStyleColor(self.len() as i32);
+    }
+}
+
+impl<const N: usize> Pushable for [StyleColorF; N] {
     unsafe fn push(&self) {
         self.as_slice().push();
     }

@@ -48,7 +48,7 @@ pub struct MainWindowWithRenderer<A> {
 }
 
 impl MainWindow {
-    pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>) -> Result<MainWindow> {
+    pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
         let window_builder = WindowBuilder::new();
         let template = ConfigTemplateBuilder::new()
             .prefer_hardware_accelerated(Some(true))
@@ -74,7 +74,7 @@ impl MainWindow {
             })
             .map_err(|e| anyhow!("{:#?}", e))?;
         let window = window.unwrap();
-        window.set_title("Test ImGui 2");
+        window.set_title(title);
         window.set_ime_allowed(true);
         let raw_window_handle = Some(window.raw_window_handle());
         let gl_display = gl_config.display();
@@ -121,7 +121,9 @@ impl MainWindow {
     pub fn gl_context(&self) -> &glutin::context::PossiblyCurrentContext {
         &self.gl_context
     }
-
+    pub fn window(&self) -> &Window {
+        &self.window
+    }
     pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
         let scale = self.window.scale_factor();
         size.to_logical(scale)
@@ -201,7 +203,8 @@ impl<A: Application> MainWindowWithRenderer<A> {
             Event::RedrawRequested(_) => {
                 unsafe {
                     let io = &*ImGui_GetIO();
-                    if (ImGuiConfigFlags_(io.ConfigFlags as u32) & ImGuiConfigFlags_::ImGuiConfigFlags_NoMouseCursorChange) == ImGuiConfigFlags_(0) {
+					let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
+                    if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
                         let cursor = if io.MouseDrawCursor {
                             None
                         } else {
@@ -266,10 +269,10 @@ impl<A: Application> MainWindowWithRenderer<A> {
                     ModifiersChanged(mods) => {
                         unsafe {
                             let io = &mut *ImGui_GetIO();
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Ctrl.bits()), mods.ctrl());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Shift.bits()), mods.shift());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Alt.bits()), mods.alt());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::KeyMod::Super.bits()), mods.logo());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModCtrl.bits()), mods.ctrl());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModShift.bits()), mods.shift());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModAlt.bits()), mods.alt());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModSuper.bits()), mods.logo());
                         }
                     }
                     KeyboardInput {
@@ -288,13 +291,13 @@ impl<A: Application> MainWindowWithRenderer<A> {
 
                                 let kmod = match wkey {
                                     VirtualKeyCode::LControl |
-                                    VirtualKeyCode::RControl => Some(imgui::KeyMod::Ctrl),
+                                    VirtualKeyCode::RControl => Some(imgui::Key::ModCtrl),
                                     VirtualKeyCode::LShift |
-                                    VirtualKeyCode::RShift => Some(imgui::KeyMod::Shift),
+                                    VirtualKeyCode::RShift => Some(imgui::Key::ModShift),
                                     VirtualKeyCode::LAlt |
-                                    VirtualKeyCode::RAlt => Some(imgui::KeyMod::Alt),
+                                    VirtualKeyCode::RAlt => Some(imgui::Key::ModAlt),
                                     VirtualKeyCode::LWin |
-                                    VirtualKeyCode::RWin => Some(imgui::KeyMod::Super),
+                                    VirtualKeyCode::RWin => Some(imgui::Key::ModSuper),
                                     _ => None
                                 };
                                 if let Some(kmod) = kmod {

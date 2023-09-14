@@ -497,15 +497,12 @@ imgui_enum_ex!{
         MouseX2 = ImGuiKey_MouseX2,
         MouseWheelX = ImGuiKey_MouseWheelX,
         MouseWheelY = ImGuiKey_MouseWheelY,
-    }
-}
 
-imgui_flags_ex!{
-    pub KeyMod: ImGuiKey {
-        Ctrl = ImGuiMod_Ctrl,
-        Shift = ImGuiMod_Shift,
-        Alt = ImGuiMod_Alt,
-        Super = ImGuiMod_Super,
+        // Modifiers
+        ModCtrl = ImGuiMod_Ctrl,
+        ModShift = ImGuiMod_Shift,
+        ModAlt = ImGuiMod_Alt,
+        ModSuper = ImGuiMod_Super,
     }
 }
 
@@ -515,5 +512,35 @@ imgui_flags!{
         IsPlatformWindow,
         IsPlatformMonitor,
         OwnedByApp,
+    }
+}
+
+imgui_flags!{
+    pub PopupFlags: ImGuiPopupFlags_ {
+        None,
+        MouseButtonLeft,
+        MouseButtonRight,
+        MouseButtonMiddle,
+        MouseButtonMask_,
+        MouseButtonDefault_,
+        NoOpenOverExistingPopup,
+        NoOpenOverItems,
+        AnyPopupId,
+        AnyPopupLevel,
+        AnyPopup,
+    }
+}
+
+imgui_flags! {
+    pub ConfigFlags: ImGuiConfigFlags_ {
+		None,
+		NavEnableKeyboard,
+		NavEnableGamepad,
+		NavEnableSetMousePos,
+		NavNoCaptureKeyboard,
+		NoMouse,
+		NoMouseCursorChange,
+		IsSRGB,
+		IsTouchScreen,
     }
 }

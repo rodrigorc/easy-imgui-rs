@@ -28,6 +28,5 @@ out vec4 out_frag_color;
 uniform sampler2D tex;
 
 void main(void) {
-    float t = texture(tex, v_uv).r;
-    out_frag_color = vec4(v_color.rgb, v_color.a * t);
+    out_frag_color = v_color * texture(tex, v_uv);
 }

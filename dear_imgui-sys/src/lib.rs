@@ -14,6 +14,19 @@ impl<T: Into<[f32; 2]>> From<T> for ImVec2 {
     }
 }
 
+impl ImVec2 {
+    pub fn as_array(&self) -> [f32; 2] {
+        [self.x, self.y]
+    }
+}
+
+impl<T: Into<[f32; 4]>> From<T> for ImVec4 {
+    fn from(a: T) -> Self {
+        let [x, y, z, w] = a.into();
+        ImVec4 { x, y, z, w }
+    }
+}
+
 impl<T> Index<usize> for ImVector<T> {
     type Output = T;
 

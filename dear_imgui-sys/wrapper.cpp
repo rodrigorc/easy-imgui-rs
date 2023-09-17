@@ -1,7 +1,7 @@
 struct ImGuiContext;
 thread_local ImGuiContext* MyImGuiTLS;
 
-#define GImGui MyImGuiTLS
+//#define GImGui MyImGuiTLS
 
 #include "imgui/imgui.cpp"
 #include "imgui/imgui_widgets.cpp"

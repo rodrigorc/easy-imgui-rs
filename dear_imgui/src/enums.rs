@@ -544,3 +544,25 @@ imgui_flags! {
 		IsTouchScreen,
     }
 }
+
+imgui_flags! {
+    pub TreeNodeFlags: ImGuiTreeNodeFlags_ {
+        None,
+        Selected,
+        Framed,
+        AllowOverlap,
+        NoTreePushOnOpen,
+        NoAutoOpenOnLog,
+        DefaultOpen,
+        OpenOnDoubleClick,
+        OpenOnArrow,
+        Leaf,
+        Bullet,
+        FramePadding,
+        SpanAvailWidth,
+        SpanFullWidth,
+        NavLeftJumpsBackHere,
+        //NoScrollOnOpen,
+        CollapsingHeader,
+    }
+}

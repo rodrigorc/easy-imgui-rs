@@ -110,19 +110,21 @@ impl UiBuilder for MyData {
         }
         ui.set_next_window_size([300.0, 300.0].into(), imgui::Cond::Once);
         ui.set_next_window_pos([0.0, 0.0].into(), imgui::Cond::Once, [0.0, 0.0].into());
-        ui.do_window(cstr!("Yo"), Some(&mut true), imgui::WindowFlags::MenuBar)
+        ui.do_window(cstr!("Yo"))
+            .open(&mut true)
+            .flags(imgui::WindowFlags::MenuBar)
             .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
             .with(|ui: &mut imgui::Ui<Self::Data>| {
 
                 ui.with_menu_bar(|ui| {
-                    ui.with_menu("File", true, |ui| {
+                    ui.do_menu("File").with(|ui| {
                         if ui.do_menu_item("Exit").shortcut("Ctrl-X").build() {
-                            let st = ui.styles();
+                            let st = ui.style();
                             println!("{:#?}", st);
                         }
                     });
                 });
-                ui.do_child("T", [0.0, 0.0].into(), true, imgui::WindowFlags::None).with(|ui| {
+                ui.do_child("T").border(true).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -160,13 +162,16 @@ impl UiBuilder for MyData {
                         }
                     );
                     ui.checkbox("Click me!", &mut self.checked);
-                    ui.do_combo("Combo", "One").with(|ui| {
+                    ui.do_combo("Combo").preview_value("One").with(|ui| {
                         ui.text("ha");
                         ui.do_selectable("One").flags(SelectableFlags::DontClosePopups).build();
                         ui.do_selectable("Two").build();
                         ui.do_selectable("Three").build();
                     });
-                    ui.combo("Other", &["One", "Two", "Three", "Two"], &mut self.sel);
+                    let mut sel = (self.sel, "");
+                    if ui.combo("Other", ["One", "Two", "Three", "Two"].into_iter().enumerate(), |(_, n)| n, &mut sel) {
+                        self.sel = sel.0;
+                    }
                     ui.do_drag_float_2("Drag x 2##d1", (&mut self.drags[0..2]).try_into().unwrap())
                         .speed(0.01)
                         .range(0.0, 1.0)

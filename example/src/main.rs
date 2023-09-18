@@ -6,7 +6,7 @@ use winit::event_loop::EventLoopBuilder;
 use glutin::display::{GetGlDisplay, GlDisplay};
 use glow::HasContext;
 use dear_imgui as imgui;
-use imgui::{FontId, UiBuilder, SelectableFlags, SliderFlags, FontAtlas};
+use imgui::{FontId, CustomRectIndex, UiBuilder, SelectableFlags, SliderFlags, FontAtlasMut};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
@@ -31,6 +31,7 @@ fn main() {
         gl,
         f1: FontId::default(),
         f2: FontId::default(),
+        rr: CustomRectIndex::default(),
         z: 0,
         sel: 0,
         checked: false,
@@ -56,6 +57,7 @@ struct MyData {
     gl: Rc<glow::Context>,
     f1: FontId,
     f2: FontId,
+    rr: CustomRectIndex,
     z: i32,
     checked: bool,
     sel: usize,
@@ -67,13 +69,27 @@ struct MyData {
 impl UiBuilder for MyData {
     type Data = i32;
 
-    fn do_custom_atlas(&mut self, atlas: &mut FontAtlas) {
+    fn do_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>) {
         self.f1 = atlas.add_font_collection([
             imgui::FontInfo::new(KARLA_TTF, 18.0),
             imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac),
         ]);
         self.f2 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
+        self.rr = atlas.add_custom_rect_regular(42, 42,
+            |pixels| {
+                for (y, row) in pixels.iter_mut().enumerate() {
+                    for (x, color) in row.iter_mut().enumerate() {
+                        *color = [
+                            (x * y) as u8,
+                            (x * x) as u8,
+                            (y * y) as u8,
+                            0xff,
+                        ];
+                    }
+                }
+                dbg!(self.f2);
+            });
         atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0].into(),
             |pixels| {
                 for (y, row) in pixels.iter_mut().enumerate() {
@@ -88,6 +104,7 @@ impl UiBuilder for MyData {
                 }
             }
         );
+        atlas.get_custom_rect(self.rr);
     }
 
     fn do_ui<'s>(&'s mut self, ui: &mut imgui::Ui<Self::Data>) {
@@ -141,6 +158,9 @@ impl UiBuilder for MyData {
                     ui.text("Test #1");
                     ui.separator();
                     ui.separator_text("Hala");
+
+                    ui.do_image_button_with_custom_rect("Image", self.rr, 2.0)
+                        .build();
                     ui.with_push(
                         (
                             self.f2,

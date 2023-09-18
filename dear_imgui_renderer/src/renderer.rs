@@ -7,7 +7,6 @@ use anyhow::{Result, anyhow};
 use glow::HasContext;
 
 use dear_imgui as imgui;
-use imgui::FontAtlas;
 use crate::glr;
 
 pub trait Application: imgui::UiBuilder {
@@ -121,9 +120,11 @@ impl Renderer {
     pub fn do_frame<A: Application>(&mut self, data: &mut A::Data, app: &mut A) {
         unsafe {
             self.imgui.set_current();
+
             if let Some(mut atlas) = self.imgui.update_atlas() {
                 app.do_custom_atlas(&mut atlas);
-                self.update_atlas(atlas);
+                atlas.build_custom_rects();
+                Self::update_atlas(&mut self.gl, &self.objs.atlas);
             }
 
             self.imgui.do_frame(
@@ -144,7 +145,7 @@ impl Renderer {
             );
         }
     }
-    unsafe fn update_atlas(&mut self, _atlas: FontAtlas) {
+    unsafe fn update_atlas(gl: &mut glr::GlContext, atlas_tex: &glr::Texture) {
         let io = &mut *ImGui_GetIO();
         let mut data = std::ptr::null_mut();
         let mut width = 0;
@@ -152,22 +153,22 @@ impl Renderer {
         let mut pixel_size = 0;
         ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
 
-        self.gl.bind_texture(glow::TEXTURE_2D, Some(self.objs.atlas.id()));
+        gl.bind_texture(glow::TEXTURE_2D, Some(atlas_tex.id()));
 
-        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
-        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
-        self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
-        self.gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, //glow::RED as i32,
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
+        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, //glow::RED as i32,
                        width, height, 0,
                        glow::RGBA, glow::UNSIGNED_BYTE,
                        //glow::RED, glow::UNSIGNED_BYTE,
                        Some(std::slice::from_raw_parts(data, (width * height * pixel_size) as usize)));
-        self.gl.bind_texture(glow::TEXTURE_2D, None);
+        gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
-        (*io.Fonts).TexID = Self::map_tex(self.objs.atlas.id());
+        (*io.Fonts).TexID = Self::map_tex(atlas_tex.id());
 
         // We keep this, no need for imgui to hold a copy
         ImFontAtlas_ClearTexData(io.Fonts);

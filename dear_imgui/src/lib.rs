@@ -100,17 +100,20 @@ impl Context {
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
     }
-    pub unsafe fn update_atlas(&mut self) -> Option<FontAtlas> {
+    pub unsafe fn update_atlas<'a, 'ctx>(&'a mut self) -> Option<FontAtlasMut<'a, 'ctx>> {
         if !std::mem::take(&mut self.pending_atlas) {
             return None;
         }
         let io = &mut *ImGui_GetIO();
         ImFontAtlas_Clear(io.Fonts);
+        (*io.Fonts).TexPixelsUseColors = true;
 
         let scale = io.DisplayFramebufferScale.x;
-        Some(FontAtlas {
+        Some(FontAtlasMut {
+            ptr: FontAtlasPtr { ptr: &mut *io.Fonts },
             scale,
             glyph_ranges: Vec::new(),
+            custom_rects: Vec::new(),
         })
     }
     pub unsafe fn do_frame<'ctx, A: UiBuilder>(
@@ -165,7 +168,7 @@ impl Drop for UiPtrToNullGuard<'_> {
 pub trait UiBuilder {
     type Data;
     fn do_ui(&mut self, ui: &mut Ui<Self::Data>);
-    fn do_custom_atlas(&mut self, _atlas: &mut FontAtlas) {}
+    fn do_custom_atlas<'ctx>(&'ctx mut self, _atlas: &mut FontAtlasMut<'ctx, '_>) {}
 }
 
 enum TtfData {
@@ -664,6 +667,20 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
                 bg_col: Color::from([0.0, 0.0, 0.0, 0.0]).into(),
                 tint_col: Color::from([1.0, 1.0, 1.0, 1.0]).into(),
             }
+        }
+        pub fn do_image_button_with_custom_rect<S: IntoCStr>(&mut self, str_id: S, ridx: CustomRectIndex, scale: f32) -> ImageButton<&mut Self, S> {
+            let atlas = self.font_atlas();
+            let rect = atlas.get_custom_rect(ridx);
+            let tex_id = atlas.texture_id();
+            let tex_size = atlas.texture_size();
+            let inv_tex_w = 1.0 / tex_size[0] as f32;
+            let inv_tex_h = 1.0 / tex_size[1] as f32;
+            let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
+            let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
+
+            self.do_image_button(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32].into())
+                .uv0(uv0.into())
+                .uv1(uv1.into())
         }
     }
 }
@@ -1893,6 +1910,14 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             &*ImGui_GetIO()
         }
     }
+    pub fn font_atlas<'a>(&'a mut self) -> FontAtlas<'a> {
+        unsafe {
+            let io = &*ImGui_GetIO();
+            FontAtlas {
+                ptr: FontAtlasPtr { ptr: &mut *io.Fonts },
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1904,13 +1929,30 @@ impl Default for FontId {
     }
 }
 
-pub struct FontAtlas {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CustomRectIndex(i32);
+
+impl Default for CustomRectIndex {
+    fn default() -> Self {
+        // Always invalid, do not use!
+        CustomRectIndex(-1)
+    }
+}
+
+#[derive(Debug)]
+pub struct FontAtlasPtr<'a> {
+    ptr: &'a mut ImFontAtlas,
+}
+
+pub struct FontAtlasMut<'ctx, 'a> {
+    ptr: FontAtlasPtr<'a>,
     scale: f32,
     // glyph_ranges pointers have to live until the atlas texture is built
     glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
+    custom_rects: Vec<Option<Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx>>>,
 }
 
-impl FontAtlas {
+impl<'a, 'ctx> FontAtlasMut<'ctx, 'a> {
     pub fn add_font(&mut self, font: FontInfo) -> FontId {
         self.add_font_priv(font, false)
     }
@@ -1962,35 +2004,94 @@ impl FontAtlas {
             FontId((*io.Fonts).Fonts.len() - 1)
         }
     }
-    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: Vector2, draw: impl FnOnce(&mut [&mut [[u8; 4]]])) -> i32 {
+    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: Vector2, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx) -> CustomRectIndex {
         unsafe {
             let io = &mut *ImGui_GetIO();
 
             let font = font_ptr(font);
             let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, width, height, advance_x, &offset.into());
-
-            let mut tex_data = std::ptr::null_mut();
-            let mut tex_width = 0;
-            let mut tex_height = 0;
-            let mut pixel_size = 0;
-            ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
-            let rect = &(*io.Fonts).CustomRects[idx as usize];
-            let pixel_size = pixel_size as usize;
-            assert!(pixel_size == 4);
-
-            let stride = tex_width as usize * pixel_size;
-
-            let rx = rect.X as usize * pixel_size;
-            let ry = rect.Y as usize;
-            let mut pixels = (ry .. ry + height as usize).map(|y| {
-                let p = tex_data.add(y * stride + rx) as *mut [u8; 4];
-                std::slice::from_raw_parts_mut(p, rect.Width as usize)
-            }).collect::<Vec<_>>();
-            draw(&mut pixels);
-            idx
+            self.add_custom_rect_at(idx as usize, Box::new(draw));
+            CustomRectIndex(idx)
         }
     }
-    // TODO add_custom_rect_regular()
+    pub fn add_custom_rect_regular(&mut self, width: i32, height: i32, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx) -> CustomRectIndex {
+        unsafe {
+            let io = &mut *ImGui_GetIO();
+
+            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, width, height);
+            self.add_custom_rect_at(idx as usize, Box::new(draw));
+            CustomRectIndex(idx)
+        }
+    }
+    fn add_custom_rect_at(&mut self, idx: usize, f: Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx>) {
+        if idx >= self.custom_rects.len() {
+            self.custom_rects.resize_with(idx + 1, || None);
+        }
+        self.custom_rects[idx] = Some(f);
+    }
+    pub fn build_custom_rects(self) {
+        let mut tex_data = std::ptr::null_mut();
+        let mut tex_width = 0;
+        let mut tex_height = 0;
+        let mut pixel_size = 0;
+        let io;
+        unsafe {
+            io = &mut *ImGui_GetIO();
+            ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
+        }
+        let pixel_size = pixel_size as usize;
+        assert!(pixel_size == 4);
+
+        for (idx, f) in self.custom_rects.into_iter().enumerate() {
+            if let Some(f) = f {
+                unsafe {
+                    let rect = &(*io.Fonts).CustomRects[idx as usize];
+                    let pixel_size = pixel_size as usize;
+                    assert!(pixel_size == 4);
+
+                    let stride = tex_width as usize * pixel_size;
+
+                    let rx = rect.X as usize * pixel_size;
+                    let ry = rect.Y as usize;
+                    let mut pixels = (ry .. ry + rect.Height as usize).map(|y| {
+                        let p = tex_data.add(y * stride + rx) as *mut [u8; 4];
+                        std::slice::from_raw_parts_mut(p, rect.Width as usize)
+                    }).collect::<Vec<_>>();
+                    f(&mut pixels);
+                }
+            }
+        }
+    }
+}
+
+impl<'a> Deref for FontAtlasMut<'_, 'a> {
+    type Target = FontAtlasPtr<'a>;
+    fn deref(&self) -> &FontAtlasPtr<'a> {
+        &self.ptr
+    }
+}
+
+pub struct FontAtlas<'a> {
+    ptr: FontAtlasPtr<'a>,
+}
+
+impl<'a> Deref for FontAtlas<'a> {
+    type Target = FontAtlasPtr<'a>;
+    fn deref(&self) -> &FontAtlasPtr<'a> {
+        &self.ptr
+    }
+}
+
+impl FontAtlasPtr<'_> {
+    pub fn texture_id(&self) -> ImTextureID {
+        self.ptr.TexID
+    }
+    pub fn texture_size(&self) -> [i32; 2] {
+        [self.ptr.TexWidth, self.ptr.TexHeight]
+    }
+    pub fn get_custom_rect(&self, index: CustomRectIndex) -> ImFontAtlasCustomRect {
+        self.ptr.CustomRects[index.0 as usize]
+    }
 }
 
 #[derive(Debug)]

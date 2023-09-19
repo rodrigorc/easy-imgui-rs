@@ -12,6 +12,7 @@ mint = "*"
 bindgen = "*"
 cc = "*"
 pkg-config = "*"
+xshell = "*"
 
 [features]
 freetype = []

@@ -3,11 +3,11 @@ thread_local ImGuiContext* MyImGuiTLS;
 
 //#define GImGui MyImGuiTLS
 
-#include "imgui/imgui.cpp"
-#include "imgui/imgui_widgets.cpp"
-#include "imgui/imgui_draw.cpp"
-#include "imgui/imgui_tables.cpp"
-#include "imgui/imgui_demo.cpp"
+#include "imgui.cpp"
+#include "imgui_widgets.cpp"
+#include "imgui_draw.cpp"
+#include "imgui_tables.cpp"
+#include "imgui_demo.cpp"
 #ifdef IMGUI_ENABLE_FREETYPE
-    #include "imgui/misc/freetype/imgui_freetype.cpp"
+    #include "misc/freetype/imgui_freetype.cpp"
 #endif

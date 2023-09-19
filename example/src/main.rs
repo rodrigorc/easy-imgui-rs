@@ -90,7 +90,7 @@ impl UiBuilder for MyData {
                 }
                 dbg!(self.f2);
             });
-        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0].into(),
+        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0],
             |pixels| {
                 for (y, row) in pixels.iter_mut().enumerate() {
                     for (x, color) in row.iter_mut().enumerate() {
@@ -112,7 +112,7 @@ impl UiBuilder for MyData {
         {
             *ui.data() += 1;
             self.z += 1;
-            ui.set_next_window_size_constraints_callback([20.0, 20.0].into(), [520.0, 520.0].into(), |_data, mut d| {
+            ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |_data, mut d| {
                 let mut sz = d.desired_size();
                 sz.x = (sz.x / 100.0).round() * 100.0;
                 sz.y = (sz.y / 100.0).round() * 100.0;
@@ -125,8 +125,8 @@ impl UiBuilder for MyData {
             });
             //println!("<<<<<<<<< {X}");
         }
-        ui.set_next_window_size([300.0, 300.0].into(), imgui::Cond::Once);
-        ui.set_next_window_pos([0.0, 0.0].into(), imgui::Cond::Once, [0.0, 0.0].into());
+        ui.set_next_window_size([300.0, 300.0], imgui::Cond::Once);
+        ui.set_next_window_pos([0.0, 0.0], imgui::Cond::Once, [0.0, 0.0]);
         ui.do_window(cstr!("Yo"))
             .open(&mut true)
             .flags(imgui::WindowFlags::MenuBar)
@@ -141,7 +141,7 @@ impl UiBuilder for MyData {
                         }
                     });
                 });
-                ui.do_child("T").border(true).with(|ui| {
+                ui.do_child("T").border(true).size([0.0, 0.0]).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -203,8 +203,8 @@ impl UiBuilder for MyData {
                         .build();
                     ui.do_input_text_hint("Input", "Aquí", &mut self.input).build();
 
-                    ui.foreground_draw_list().add_circle([50.0, 50.0].into(), 25.0, [1.0, 1.0, 0.0, 1.0].into(), 32, 2.0);
-                    ui.background_draw_list().add_circle([150.0, 150.0].into(), 25.0, [1.0, 0.0, 0.0, 1.0].into(), 32, 2.0);
+                    ui.foreground_draw_list().add_circle([50.0, 50.0], 25.0, [1.0, 1.0, 0.0, 1.0], 32, 2.0);
+                    ui.background_draw_list().add_circle([150.0, 150.0], 25.0, [1.0, 0.0, 0.0, 1.0], 32, 2.0);
                 });
             });
         ui.show_demo_window(None);

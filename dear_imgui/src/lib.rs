@@ -90,9 +90,9 @@ impl Context {
     pub unsafe fn set_current(&mut self) {
         ImGui_SetCurrentContext(self.imgui);
     }
-    pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
+    pub unsafe fn set_size(&mut self, size: impl Into<Vector2>, scale: f32) {
         let io = &mut *ImGui_GetIO();
-        io.DisplaySize = size.into();
+        io.DisplaySize = size.into().into();
         io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
         io.FontGlobalScale = scale.recip();
         self.invalidate_font_atlas();
@@ -328,13 +328,21 @@ macro_rules! decl_builder {
     };
 }
 
-macro_rules! decl_builder_setter {
-    ($name:ident: $ty:ty) => {
+macro_rules! decl_builder_setter_ex {
+    ($name:ident: $ty:ty = $expr:expr) => {
         pub fn $name(mut self, $name: $ty) -> Self {
-            self.$name = $name.into();
+            self.$name = $expr;
             self
         }
     };
+}
+
+macro_rules! decl_builder_setter {
+    ($name:ident: $ty:ty) => { decl_builder_setter_ex!{ $name: $ty = $name.into() } };
+}
+
+macro_rules! decl_builder_setter_into {
+    ($name:ident: $ty:ty) => { decl_builder_setter_ex!{ $name: impl Into<$ty> = $name.into().into() } };
 }
 
 macro_rules! decl_builder_with_maybe_opt {
@@ -415,7 +423,7 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
         flags (WindowFlags) (flags.bits()),
     )
     {
-        decl_builder_setter!{size: Vector2}
+        decl_builder_setter_into!{size: Vector2}
         decl_builder_setter!{border: bool}
         decl_builder_setter!{flags: WindowFlags}
     }
@@ -498,7 +506,7 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
         size (ImVec2) (&size),
     )
     {
-        decl_builder_setter!{size: Vector2}
+        decl_builder_setter_into!{size: Vector2}
     }
     {
         pub fn do_button<S: IntoCStr>(&mut self, label: S) -> Button<&mut Self, S> {
@@ -536,7 +544,7 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
         flags (ButtonFlags) (flags.bits()),
     )
     {
-        decl_builder_setter!{size: Vector2}
+        decl_builder_setter_into!{size: Vector2}
         decl_builder_setter!{flags: ButtonFlags}
     }
     {
@@ -620,17 +628,17 @@ decl_builder! { Image -> (), ImGui_Image () ()
         border_col (ImVec4) (&border_col),
     )
     {
-        decl_builder_setter!{uv0: Vector2}
-        decl_builder_setter!{uv1: Vector2}
-        decl_builder_setter!{tint_col: Color}
-        decl_builder_setter!{border_col: Color}
+        decl_builder_setter_into!{uv0: Vector2}
+        decl_builder_setter_into!{uv1: Vector2}
+        decl_builder_setter_into!{tint_col: Color}
+        decl_builder_setter_into!{border_col: Color}
     }
     {
-        pub fn do_image(&mut self, user_texture_id: ImTextureID, size: Vector2) -> Image<&mut Self> {
+        pub fn do_image(&mut self, user_texture_id: ImTextureID, size: impl Into<Vector2>) -> Image<&mut Self> {
             Image {
                 u: self,
                 user_texture_id,
-                size: size.into(),
+                size: size.into().into(),
                 uv0: ImVec2::new(0.0, 0.0),
                 uv1: ImVec2::new(1.0, 1.0),
                 tint_col: Color::from([1.0, 1.0, 1.0, 1.0]).into(),
@@ -650,18 +658,18 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         tint_col (ImVec4) (&tint_col),
     )
     {
-        decl_builder_setter!{uv0: Vector2}
-        decl_builder_setter!{uv1: Vector2}
-        decl_builder_setter!{bg_col: Color}
-        decl_builder_setter!{tint_col: Color}
+        decl_builder_setter_into!{uv0: Vector2}
+        decl_builder_setter_into!{uv1: Vector2}
+        decl_builder_setter_into!{bg_col: Color}
+        decl_builder_setter_into!{tint_col: Color}
     }
     {
-        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: ImTextureID, size: Vector2) -> ImageButton<&mut Self, S> {
+        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: ImTextureID, size: impl Into<Vector2>) -> ImageButton<&mut Self, S> {
             ImageButton {
                 u: self,
                 str_id: str_id.into(),
                 user_texture_id,
-                size: size.into(),
+                size: size.into().into(),
                 uv0: ImVec2::new(0.0, 0.0),
                 uv1: ImVec2::new(1.0, 1.0),
                 bg_col: Color::from([0.0, 0.0, 0.0, 0.0]).into(),
@@ -678,9 +686,9 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
             let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
             let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
 
-            self.do_image_button(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32].into())
-                .uv0(uv0.into())
-                .uv1(uv1.into())
+            self.do_image_button(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+                .uv0(uv0)
+                .uv1(uv1)
         }
     }
 }
@@ -695,7 +703,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
     {
         decl_builder_setter!{selected: bool}
         decl_builder_setter!{flags: SelectableFlags}
-        decl_builder_setter!{size: Vector2}
+        decl_builder_setter_into!{size: Vector2}
     }
     {
         pub fn do_selectable<S: IntoCStr>(&mut self, label: S) -> Selectable<&mut Self, S> {
@@ -918,7 +926,7 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
     )
     {
         decl_builder_setter!{flags: InputTextFlags}
-        decl_builder_setter!{size: Vector2}
+        decl_builder_setter_into!{size: Vector2}
     }
     {
         pub fn do_input_text_multiline<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputTextMultiline<'v, &mut Self, S> {
@@ -1297,30 +1305,30 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         self.data
     }
     pub fn set_next_window_size_constraints_callback(&mut self,
-        size_min: Vector2,
-        size_max: Vector2,
+        size_min: impl Into<Vector2>,
+        size_max: impl Into<Vector2>,
         cb: impl FnMut(&'ctx mut D, SizeCallbackData<'_>) + 'ctx,
     )
     {
         unsafe {
             let id = self.push_callback(cb);
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into(),
-                &size_max.into(),
+                &size_min.into().into(),
+                &size_max.into().into(),
                 Some(call_size_callback::<D>),
                 id as *mut c_void,
             );
         }
     }
     pub fn set_next_window_size_constraints(&mut self,
-        size_min: Vector2,
-        size_max: Vector2,
+        size_min: impl Into<Vector2>,
+        size_max: impl Into<Vector2>,
     )
     {
         unsafe {
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into(),
-                &size_max.into(),
+                &size_min.into().into(),
+                &size_max.into().into(),
                 None,
                 null_mut(),
             );
@@ -1361,19 +1369,19 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_ShowDemoWindow(show.map(|b| b as *mut bool).unwrap_or(null_mut()));
         }
     }
-    pub fn set_next_window_pos(&mut self, pos: Vector2, cond: Cond, pivot: Vector2) {
+    pub fn set_next_window_pos(&mut self, pos: impl Into<Vector2>, cond: Cond, pivot: impl Into<Vector2>) {
         unsafe {
-            ImGui_SetNextWindowPos(&pos.into(), cond.bits(), &pivot.into());
+            ImGui_SetNextWindowPos(&pos.into().into(), cond.bits(), &pivot.into().into());
         }
     }
-    pub fn set_next_window_size(&mut self, size: Vector2, cond: Cond) {
+    pub fn set_next_window_size(&mut self, size: impl Into<Vector2>, cond: Cond) {
         unsafe {
-            ImGui_SetNextWindowSize(&size.into(), cond.bits());
+            ImGui_SetNextWindowSize(&size.into().into(), cond.bits());
         }
     }
-    pub fn set_next_window_content_size(&mut self, size: Vector2) {
+    pub fn set_next_window_content_size(&mut self, size: impl Into<Vector2>) {
         unsafe {
-            ImGui_SetNextWindowContentSize(&size.into());
+            ImGui_SetNextWindowContentSize(&size.into().into());
         }
     }
 
@@ -1389,9 +1397,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         }
     }
 
-    pub fn set_next_window_scroll(&mut self, scroll: Vector2) {
+    pub fn set_next_window_scroll(&mut self, scroll: impl Into<Vector2>) {
         unsafe {
-            ImGui_SetNextWindowScroll(&scroll.into());
+            ImGui_SetNextWindowScroll(&scroll.into().into());
         }
     }
 
@@ -1434,10 +1442,10 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         }
 
     }
-    pub fn text_colored(&mut self, color: Color, text: impl IntoCStr) {
+    pub fn text_colored(&mut self, color: impl Into<Color>, text: impl IntoCStr) {
         let text = text.into();
         unsafe {
-            ImGui_TextColored(&color.into(), cstr!("%s").as_ptr(), text.as_ptr())
+            ImGui_TextColored(&color.into().into(), cstr!("%s").as_ptr(), text.as_ptr())
         }
     }
     pub fn text_disabled(&mut self, text: impl IntoCStr) {
@@ -1669,9 +1677,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_Spacing();
         }
     }
-    pub fn dummy(&mut self, size: Vector2) {
+    pub fn dummy(&mut self, size: impl Into<Vector2>) {
         unsafe {
-            ImGui_Dummy(&size.into());
+            ImGui_Dummy(&size.into().into());
         }
     }
     pub fn indent(&mut self, indent_w: f32) {
@@ -1699,9 +1707,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_GetCursorPosY()
         }
     }
-    pub fn set_cursor_pos(&mut self, local_pos: Vector2) {
+    pub fn set_cursor_pos(&mut self, local_pos: impl Into<Vector2>) {
         unsafe {
-            ImGui_SetCursorPos(&local_pos.into());
+            ImGui_SetCursorPos(&local_pos.into().into());
         }
     }
     pub fn set_cursor_pos_x(&mut self, local_x: f32) {
@@ -1724,9 +1732,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_GetCursorScreenPos().into()
         }
     }
-    pub fn set_cursor_screen_pos(&mut self, pos: Vector2) {
+    pub fn set_cursor_screen_pos(&mut self, pos: impl Into<Vector2>) {
         unsafe {
-            ImGui_SetCursorScreenPos(&pos.into());
+            ImGui_SetCursorScreenPos(&pos.into().into());
         }
     }
     pub fn align_text_to_frame_padding(&mut self) {
@@ -2004,12 +2012,12 @@ impl<'a, 'ctx> FontAtlasMut<'ctx, 'a> {
             FontId((*io.Fonts).Fonts.len() - 1)
         }
     }
-    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: Vector2, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx) -> CustomRectIndex {
+    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: impl Into<Vector2>, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'ctx) -> CustomRectIndex {
         unsafe {
             let io = &mut *ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, width, height, advance_x, &offset.into());
+            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, width, height, advance_x, &offset.into().into());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -2109,8 +2117,8 @@ impl SizeCallbackData<'_> {
     pub fn desired_size(&self) -> Vector2 {
         self.ptr.DesiredSize.into()
     }
-    pub fn set_desired_size(&mut self, sz: Vector2) {
-        self.ptr.DesiredSize = sz.into();
+    pub fn set_desired_size(&mut self, sz: impl Into<Vector2>) {
+        self.ptr.DesiredSize = sz.into().into();
     }
 }
 
@@ -2128,121 +2136,121 @@ pub struct WindowDrawList<'a, 'ctx, D> {
     ptr: &'a mut ImDrawList,
 }
 
-pub fn color_to_u32(c: Color) -> u32 {
+pub fn color_to_u32(c: impl Into<Color>) -> u32 {
     unsafe {
-        ImGui_ColorConvertFloat4ToU32(&c.into())
+        ImGui_ColorConvertFloat4ToU32(&c.into().into())
     }
 }
 
 impl<'a, 'ctx, D> WindowDrawList<'a, 'ctx, D> {
-    pub fn add_line(&mut self, p1: Vector2, p2: Vector2, color: Color, thickness: f32) {
+    pub fn add_line(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, color: impl Into<Color>, thickness: f32) {
         unsafe {
-            ImDrawList_AddLine(self.ptr, &p1.into(), &p2.into(), color_to_u32(color), thickness);
+            ImDrawList_AddLine(self.ptr, &p1.into().into(), &p2.into().into(), color_to_u32(color), thickness);
         }
     }
-    pub fn add_rect(&mut self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags, thickness: f32) {
+    pub fn add_rect(&mut self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, color: impl Into<Color>, rounding: f32, flags: DrawFlags, thickness: f32) {
         unsafe {
-            ImDrawList_AddRect(self.ptr, &p_min.into(), &p_max.into(), color_to_u32(color), rounding, flags.bits(), thickness);
+            ImDrawList_AddRect(self.ptr, &p_min.into().into(), &p_max.into().into(), color_to_u32(color), rounding, flags.bits(), thickness);
         }
     }
-    pub fn add_rect_filled(&mut self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_rect_filled(&mut self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, color: impl Into<Color>, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddRectFilled(self.ptr, &p_min.into(), &p_max.into(), color_to_u32(color), rounding, flags.bits());
+            ImDrawList_AddRectFilled(self.ptr, &p_min.into().into(), &p_max.into().into(), color_to_u32(color), rounding, flags.bits());
         }
     }
-    pub fn add_rect_filled_multicolor(&mut self, p_min: Vector2, p_max: Vector2, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
+    pub fn add_rect_filled_multicolor(&mut self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, col_upr_left: impl Into<Color>, col_upr_right: impl Into<Color>, col_bot_right: impl Into<Color>, col_bot_left: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddRectFilledMultiColor(self.ptr, &p_min.into(), &p_max.into(), color_to_u32(col_upr_left), color_to_u32(col_upr_right), color_to_u32(col_bot_right), color_to_u32(col_bot_left));
+            ImDrawList_AddRectFilledMultiColor(self.ptr, &p_min.into().into(), &p_max.into().into(), color_to_u32(col_upr_left), color_to_u32(col_upr_right), color_to_u32(col_bot_right), color_to_u32(col_bot_left));
         }
     }
-    pub fn add_quad(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32) {
+    pub fn add_quad(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: impl Into<Color>, thickness: f32) {
         unsafe {
-            ImDrawList_AddQuad(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color_to_u32(color), thickness);
+            ImDrawList_AddQuad(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color_to_u32(color), thickness);
         }
     }
-    pub fn add_quad_filled(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color) {
+    pub fn add_quad_filled(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddQuadFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color_to_u32(color));
+            ImDrawList_AddQuadFilled(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_triangle(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32) {
+    pub fn add_triangle(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: impl Into<Color>, thickness: f32) {
         unsafe {
-            ImDrawList_AddTriangle(self.ptr, &p1.into(), &p2.into(), &p3.into(), color_to_u32(color), thickness);
+            ImDrawList_AddTriangle(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color_to_u32(color), thickness);
         }
     }
-    pub fn add_triangle_filled(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color) {
+    pub fn add_triangle_filled(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddTriangleFilled(self.ptr, &p1.into(), &p2.into(), &p3.into(), color_to_u32(color));
+            ImDrawList_AddTriangleFilled(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_circle(&mut self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_circle(&mut self, center: impl Into<Vector2>, radius: f32, color: impl Into<Color>, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddCircle(self.ptr, &center.into(), radius, color_to_u32(color), num_segments, thickness);
+            ImDrawList_AddCircle(self.ptr, &center.into().into(), radius, color_to_u32(color), num_segments, thickness);
         }
     }
-    pub fn add_circle_filled(&mut self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
+    pub fn add_circle_filled(&mut self, center: impl Into<Vector2>, radius: f32, color: impl Into<Color>, num_segments: i32) {
         unsafe {
-            ImDrawList_AddCircleFilled(self.ptr, &center.into(), radius, color_to_u32(color), num_segments);
+            ImDrawList_AddCircleFilled(self.ptr, &center.into().into(), radius, color_to_u32(color), num_segments);
         }
     }
-    pub fn add_ngon(&mut self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_ngon(&mut self, center: impl Into<Vector2>, radius: f32, color: impl Into<Color>, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddNgon(self.ptr, &center.into(), radius, color_to_u32(color), num_segments, thickness);
+            ImDrawList_AddNgon(self.ptr, &center.into().into(), radius, color_to_u32(color), num_segments, thickness);
         }
     }
-    pub fn add_ngon_filled(&mut self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
+    pub fn add_ngon_filled(&mut self, center: impl Into<Vector2>, radius: f32, color: impl Into<Color>, num_segments: i32) {
         unsafe {
-            ImDrawList_AddNgonFilled(self.ptr, &center.into(), radius, color_to_u32(color), num_segments);
+            ImDrawList_AddNgonFilled(self.ptr, &center.into().into(), radius, color_to_u32(color), num_segments);
         }
     }
-    pub fn add_text(&mut self, pos: Vector2, color: Color, text: &str) {
+    pub fn add_text(&mut self, pos: impl Into<Vector2>, color: impl Into<Color>, text: &str) {
         unsafe {
             let (start, end) = text_ptrs(text);
-            ImDrawList_AddText(self.ptr, &pos.into(), color_to_u32(color), start, end);
+            ImDrawList_AddText(self.ptr, &pos.into().into(), color_to_u32(color), start, end);
         }
     }
-    pub fn add_text_ex(&mut self, font: FontId, font_size: f32, pos: Vector2, color: Color, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
+    pub fn add_text_ex(&mut self, font: FontId, font_size: f32, pos: impl Into<Vector2>, color: impl Into<Color>, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
         unsafe {
             let (start, end) = text_ptrs(text);
             ImDrawList_AddText1(
-                self.ptr, font_ptr(font), font_size, &pos.into(), color_to_u32(color), start, end,
+                self.ptr, font_ptr(font), font_size, &pos.into().into(), color_to_u32(color), start, end,
                 wrap_width, cpu_fine_clip_rect.as_ref().map(|x| x as *const _).unwrap_or(null())
             );
         }
     }
-    pub fn add_polyline(&mut self, points: &[ImVec2], color: Color, flags: DrawFlags, thickness: f32) {
+    pub fn add_polyline(&mut self, points: &[ImVec2], color: impl Into<Color>, flags: DrawFlags, thickness: f32) {
         unsafe {
             ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color_to_u32(color), flags.bits(), thickness);
         }
     }
-    pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: Color) {
+    pub fn add_convex_poly_filled(&mut self, points: &[ImVec2], color: impl Into<Color>) {
         unsafe {
             ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color_to_u32(color));
         }
     }
-    pub fn add_bezier_cubic(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_cubic(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: impl Into<Color>, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierCubic(self.ptr, &p1.into(), &p2.into(), &p3.into(), &p4.into(), color_to_u32(color), thickness, num_segments);
+            ImDrawList_AddBezierCubic(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color_to_u32(color), thickness, num_segments);
         }
     }
-    pub fn add_bezier_quadratic(&mut self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_quadratic(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: impl Into<Color>, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierQuadratic(self.ptr, &p1.into(), &p2.into(), &p3.into(), color_to_u32(color), thickness, num_segments);
+            ImDrawList_AddBezierQuadratic(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color_to_u32(color), thickness, num_segments);
         }
     }
-    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color) {
+    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddImage(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color_to_u32(color));
+            ImDrawList_AddImage(self.ptr, user_texture_id, &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, uv1: Vector2, uv2: Vector2, uv3: Vector2, uv4: Vector2, color: Color) {
+    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, uv1: impl Into<Vector2>, uv2: impl Into<Vector2>, uv3: impl Into<Vector2>, uv4: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddImageQuad(self.ptr, user_texture_id, &p1.into(), &p2.into(), &p3.into(), &p4.into(), &uv1.into(), &uv2.into(), &uv3.into(), &uv4.into(), color_to_u32(color));
+            ImDrawList_AddImageQuad(self.ptr, user_texture_id, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), &uv1.into().into(), &uv2.into().into(), &uv3.into().into(), &uv4.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id, &p_min.into(), &p_max.into(), &uv_min.into(), &uv_max.into(), color_to_u32(color), rounding, flags.bits());
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id, &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color), rounding, flags.bits());
         }
     }
 

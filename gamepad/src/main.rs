@@ -129,7 +129,7 @@ impl UiBuilder for MyApp {
             ui.show_demo_window(Some(&mut self.demo));
         }
 
-        ui.set_next_window_size([400.0, 300.0].into(), Cond::Always);
+        ui.set_next_window_size([400.0, 300.0], Cond::Always);
         ui.do_window("Gamepad")
             .flags(WindowFlags::AlwaysAutoResize)
             .with(|ui| {
@@ -146,11 +146,11 @@ impl UiBuilder for MyApp {
 
                 let p0 = ui.get_cursor_screen_pos();
                 let sz = ui.get_content_region_avail();
-                let p1 = [p0.x + sz.x, p0.y + sz.y].into();
+                let p1 = [p0.x + sz.x, p0.y + sz.y];
 
                 let mut dr = ui.window_draw_list();
-                dr.add_rect_filled(p0, p1, [1.0, 1.0, 1.0, 1.0].into(), 0.0, DrawFlags::None);
-                dr.add_rect(p0, p1, [0.5, 0.5, 0.5, 1.0].into(), 0.0, DrawFlags::None, 4.0);
+                dr.add_rect_filled(p0, p1, [1.0, 1.0, 1.0, 1.0], 0.0, DrawFlags::None);
+                dr.add_rect(p0, p1, [0.5, 0.5, 0.5, 1.0], 0.0, DrawFlags::None, 4.0);
 
                 static BUTTONS: &[[f32; 2]] = &[
                     [300.0, 150.0],
@@ -160,9 +160,9 @@ impl UiBuilder for MyApp {
                 ];
                     for (idx, pos) in BUTTONS.iter().enumerate() {
                         if self.btn[idx] {
-                            dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]].into(), 20.0, [0.0, 0.0, 0.0, 1.0].into(), 0);
+                            dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], 20.0, [0.0, 0.0, 0.0, 1.0], 0);
                         }
-                        dr.add_circle([p0.x + pos[0], p0.y + pos[1]].into(), 20.0, [1.0, 0.0, 0.0, 1.0].into(), 0, 4.0);
+                        dr.add_circle([p0.x + pos[0], p0.y + pos[1]], 20.0, [1.0, 0.0, 0.0, 1.0], 0, 4.0);
                     }
             });
     }

@@ -47,7 +47,6 @@ fn remove_generation(id: usize, gen: usize) -> Option<usize> {
     }
 }
 
-
 pub struct Context {
     imgui: *mut ImGuiContext,
     backend: Box<UnsafeCell<BackendData>>,
@@ -77,6 +76,24 @@ impl Context {
         unsafe {
             let io = &mut *ImGui_GetIO();
             io.FontAllowUserScaling = val;
+        }
+    }
+    pub fn want_capture_mouse(&self) -> bool {
+        unsafe {
+            let io = &*ImGui_GetIO();
+            io.WantCaptureMouse
+        }
+    }
+    pub fn want_capture_keyboard(&self) -> bool {
+        unsafe {
+            let io = &*ImGui_GetIO();
+            io.WantCaptureKeyboard
+        }
+    }
+    pub fn want_text_input(&self) -> bool {
+        unsafe {
+            let io = &*ImGui_GetIO();
+            io.WantTextInput
         }
     }
     // This is unsafe because you could break thing setting weird flags
@@ -1192,19 +1209,22 @@ decl_builder_with_opt!{Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
 decl_builder_with_opt!{PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
-        close_button (bool) (if close_button { &mut true } else { null_mut() }),
+        opened (Option<bool>) (optional_mut_bool(&mut opened.as_mut())),
         flags (WindowFlags) (flags.bits()),
     )
     {
         decl_builder_setter!{flags: WindowFlags}
-        decl_builder_setter!{close_button: bool}
+        pub fn close_button(mut self, close_button: bool) -> Self {
+            self.opened = if close_button { Some(true) } else { None };
+            self
+        }
     }
     {
         pub fn do_popup_modal<S: IntoCStr>(&mut self, name: S) -> PopupModal<&mut Self, S> {
             PopupModal {
                 u: self,
                 name: name.into(),
-                close_button: false,
+                opened: None,
                 flags: WindowFlags::None,
                 push: (),
             }

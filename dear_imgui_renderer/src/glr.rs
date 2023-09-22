@@ -48,6 +48,7 @@ impl Drop for Texture {
 }
 
 impl Texture {
+    pub fn gl(&self) -> &GlContext { &self.gl }
     pub fn generate(gl: &GlContext) -> Result<Texture> {
         unsafe {
             let id = gl.create_texture()
@@ -231,7 +232,7 @@ impl Program {
             self.gl.use_program(Some(self.id));
 
             for u in &self.uniforms {
-                uniforms.apply(u);
+                uniforms.apply(&self.gl, u);
             }
 
             let _bufs = attribs.bind(self);
@@ -330,7 +331,7 @@ impl Attribute {
 }
 
 pub trait UniformProvider {
-    fn apply(&self, u: &Uniform);
+    fn apply(&self, gl: &GlContext, u: &Uniform);
 }
 
 /// # Safety
@@ -338,7 +339,7 @@ pub trait UniformProvider {
 /// This trait returns offsets from Self that will be used to index the raw memory of a
 /// VertexAttribBuffer. Better implemented using the `attrib!` macro.
 pub unsafe trait AttribProvider: Copy {
-    fn apply(a: &Attribute) -> Option<(usize, u32, usize)>;
+    fn apply(gl: &GlContext, a: &Attribute) -> Option<(usize, u32, usize)>;
 }
 
 pub trait AttribProviderList {
@@ -440,136 +441,99 @@ unsafe impl<F: AttribField> AttribField for cgmath::Vector3<F> {
     }
 }
 
-#[macro_export]
-macro_rules! attrib {
-    (
-        $(
-            $(#[$a:meta])* $v:vis struct $name:ident {
-                $(
-                    $fv:vis $f:ident : $ft:ty
-                ),*
-                $(,)?
-            }
-        )*
-    ) => {
-        $(
-            $(#[$a])* $v struct $name {
-                $(
-                    $fv $f: $ft ,
-                )*
-            }
-            unsafe impl $crate::glr::AttribProvider for $name {
-                fn apply(a: &$crate::glr::Attribute) -> Option<(usize, glow::types::u32, usize)> {
-                    let name = a.name();
-                    $(
-                        if name == stringify!($f) {
-                            let (n, t) = <$ft as $crate::glr::AttribField>::detail();
-                            return Some((n, t, memoffset::offset_of!($name, $f)));
-                        }
-                    )*
-                    None
-                }
-            }
-        )*
-    }
-}
-
 /// # Safety
 ///
 /// This trait returns pointers and size information to OpenGL, if it is wrong it will read out of bounds
 pub unsafe trait UniformField {
-    fn apply(&self, gl: &GlContext, count: i32, location: UniformLocation);
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
+        unsafe {
+            self.apply_array(gl, 1, location);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation);
 }
 
 unsafe impl UniformField for cgmath::Matrix4<f32> {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
         unsafe {
-            gl.uniform_matrix_4_f32_slice(Some(&location), false, self.as_ref() as &[f32; 16]);
+            let slice: &[f32; 16] = self.as_ref();
+            let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
+            gl.uniform_matrix_4_f32_slice(Some(&location), false, slice);
         }
     }
 }
 
 unsafe impl UniformField for cgmath::Matrix3<f32> {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
         unsafe {
-            gl.uniform_matrix_3_f32_slice(Some(&location), false, self.as_ref() as &[f32; 9]);
+            let slice: &[f32; 9] = self.as_ref();
+            let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
+            gl.uniform_matrix_3_f32_slice(Some(&location), false, slice);
         }
     }
 }
 
 unsafe impl UniformField for cgmath::Vector3<f32> {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
         unsafe {
-            gl.uniform_3_f32_slice(Some(&location), self.as_ref() as &[f32; 3]);
+            gl.uniform_3_f32(Some(&location), self.x, self.y, self.z);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice: &[f32; 3] = self.as_ref();
+            let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
+            gl.uniform_3_f32_slice(Some(&location), slice);
         }
     }
 }
 
 unsafe impl UniformField for i32 {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
         unsafe {
             gl.uniform_1_i32(Some(&location), *self);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice = std::slice::from_raw_parts(self, count);
+            gl.uniform_1_i32_slice(Some(&location), slice);
         }
     }
 }
 
 unsafe impl UniformField for f32 {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
         unsafe {
             gl.uniform_1_f32(Some(&location), *self);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice = std::slice::from_raw_parts(self, count);
+            gl.uniform_1_f32_slice(Some(&location), slice);
         }
     }
 }
 
 unsafe impl UniformField for Rgba {
-    fn apply(&self, gl: &GlContext, _count: i32, location: UniformLocation) {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
         unsafe {
             gl.uniform_4_f32(Some(&location), self.r, self.g, self.b, self.a);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice = std::slice::from_raw_parts(&self.r, 4 * count);
+            gl.uniform_4_f32_slice(Some(&location), slice);
         }
     }
 }
 
 unsafe impl<T: UniformField, const N: usize> UniformField for [T; N] {
-    fn apply(&self, _gl: &GlContext, _count: i32, _location: UniformLocation) {
-        //T::apply(&self[0], count * N as i32, location);
-        todo!()
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        self[0].apply_array(gl, N * count, location);
     }
-}
-
-
-#[macro_export]
-macro_rules! uniform {
-    (
-        $(
-            $(#[$a:meta])* $v:vis struct $name:ident {
-                $(
-                    $fv:vis $f:ident : $ft:tt
-                ),*
-                $(,)?
-            }
-        )*
-    ) => {
-        $(
-            $(#[$a])* $v struct $name {
-                $(
-                    $fv $f: $ft ,
-                )*
-            }
-            impl $crate::glr::UniformProvider for $name {
-                fn apply(&self, u: &$crate::glr::Uniform) {
-                    let name = u.name();
-                    $(
-                        if name == $crate::uniform!{ @NAME $f: $ft }  {
-                            <$ft as $crate::glr::UniformField>::apply(&self.$f, 1, u.location());
-                            return;
-                        }
-                    )*
-                }
-            }
-        )*
-    };
-    (@NAME $f:ident : [ $ft:ty; $n:literal ]) => { concat!(stringify!($f), "[0]") };
-    (@NAME $f:ident : $ft:ty) => { stringify!($f) };
 }
 
 impl<A0: AttribProviderList, A1: AttribProviderList> AttribProviderList for (A0, A1) {
@@ -671,7 +635,7 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
         unsafe {
             self.bind_buffer();
             for a in &p.attribs {
-                if let Some((size, ty, offs)) = A::apply(a) {
+                if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location() as u32;
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
@@ -699,7 +663,7 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
         unsafe {
             self.array.bind_buffer();
             for a in &p.attribs {
-                if let Some((size, ty, offs)) = A::apply(a) {
+                if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location() as u32;
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     let offs = offs + std::mem::size_of::<A>() * self.range.start;
@@ -922,21 +886,6 @@ impl BinderFBOTarget for BinderFBORead {
 }
 
 pub type BinderReadFramebuffer = BinderFramebuffer<BinderFBORead>;
-
-pub fn try_renderbuffer_storage_multisample(gl: &GlContext, target: u32, internalformat: u32, width: i32, height: i32) -> Option<i32> {
-    let all_samples = [16, 8, 4, 2];
-    unsafe {
-        for samples in all_samples {
-            // purge the gl error
-            gl.get_error();
-            gl.renderbuffer_storage_multisample(target, samples, internalformat, width, height);
-            if gl.get_error() == 0 {
-                return Some(samples);
-            }
-        }
-    }
-    None
-}
 
 pub unsafe fn as_u8_slice<T>(data: &[T]) -> &[u8] {
     std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))

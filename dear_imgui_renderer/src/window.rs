@@ -285,6 +285,8 @@ impl<A: Application> MainWindowWithRenderer<A> {
                             state,
                             ..
                         },
+                        // ImGuiIO_AddFocusEvent handles losing and gaining focus, so synthetic keys are redundant
+                        is_synthetic: false,
                         ..
                     } => {
                         if let Some(key) = to_imgui_key(*wkey) {

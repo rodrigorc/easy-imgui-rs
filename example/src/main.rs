@@ -76,7 +76,7 @@ impl UiBuilder for MyData {
         ]);
         self.f2 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
-        self.rr = atlas.add_custom_rect_regular(42, 42,
+        self.rr = atlas.add_custom_rect_regular([42, 42].into(),
             |pixels| {
                 for (y, row) in pixels.iter_mut().enumerate() {
                     for (x, color) in row.iter_mut().enumerate() {
@@ -89,7 +89,7 @@ impl UiBuilder for MyData {
                     }
                 }
             });
-        atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0],
+        atlas.add_custom_rect_font_glyph(self.f1, '💩', [16, 16].into(), 20.0, [2.0, 0.0],
             |pixels| {
                 for (y, row) in pixels.iter_mut().enumerate() {
                     for (x, color) in row.iter_mut().enumerate() {
@@ -106,7 +106,7 @@ impl UiBuilder for MyData {
         atlas.get_custom_rect(self.rr);
     }
 
-    fn do_ui<'s>(&'s mut self, ui: &mut imgui::Ui<Self::Data>) {
+    fn do_ui(&mut self, ui: &mut imgui::Ui<Self::Data>) {
         let mut y = 0;
         {
             *ui.data() += 1;

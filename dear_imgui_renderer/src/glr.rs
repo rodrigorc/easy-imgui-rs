@@ -1,4 +1,5 @@
-#![allow(dead_code)]
+// Too many unsafes ahead
+#![allow(dead_code, clippy::missing_safety_doc)]
 
 use std::num::NonZeroU32;
 use std::{cell::Cell, marker::PhantomData};
@@ -182,7 +183,7 @@ impl Program {
             let nu = gl.get_active_uniforms(prg.id);
             prg.uniforms = Vec::with_capacity(nu as usize);
             for u in 0..nu {
-                let Some(ac) = gl.get_active_uniform(prg.id, u as u32) else { continue; };
+                let Some(ac) = gl.get_active_uniform(prg.id, u) else { continue; };
                 let Some(location) = gl.get_uniform_location(prg.id, &ac.name) else { continue; };
 
                 let u = Uniform {
@@ -196,7 +197,7 @@ impl Program {
             let na = gl.get_active_attributes(prg.id);
             prg.attribs = Vec::with_capacity(na as usize);
             for a in 0..na {
-                let Some(aa) = gl.get_active_attribute(prg.id, a as u32) else { continue; };
+                let Some(aa) = gl.get_active_attribute(prg.id, a) else { continue; };
                 let Some(location) = gl.get_attrib_location(prg.id, &aa.name) else { continue; };
 
                 let a = Attribute {
@@ -567,6 +568,9 @@ impl<A: AttribProvider> DynamicVertexArray<A> {
             dirty: Cell::new(true),
         })
     }
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -636,7 +640,7 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
             self.bind_buffer();
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
-                    let loc = a.location() as u32;
+                    let loc = a.location();
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
                 }
@@ -664,7 +668,7 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
             self.array.bind_buffer();
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
-                    let loc = a.location() as u32;
+                    let loc = a.location();
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     let offs = offs + std::mem::size_of::<A>() * self.range.start;
                     p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
@@ -837,7 +841,7 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
         };
         BinderFramebuffer {
             gl: gl.clone(),
-            id: NonZeroU32::new(id).map(|n| glow::NativeFramebuffer(n)),
+            id: NonZeroU32::new(id).map(glow::NativeFramebuffer),
             _pd: PhantomData
         }
     }

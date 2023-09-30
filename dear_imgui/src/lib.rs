@@ -1,3 +1,6 @@
+// Too many unsafes ahead
+#![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
+
 use std::ffi::{CString, c_char, CStr, c_void};
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
@@ -127,6 +130,7 @@ impl Context {
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
     }
+    #[allow(clippy::needless_lifetimes)]
     pub unsafe fn update_atlas<'ui, 'app>(&'ui mut self) -> Option<FontAtlasMut<'ui, 'app>> {
         if !std::mem::take(&mut self.pending_atlas) {
             return None;
@@ -150,7 +154,7 @@ impl Context {
         do_render: impl FnOnce(&mut A),
     )
     {
-        let ref mut gen = self.backend.get_mut().generation;
+        let gen = &mut self.backend.get_mut().generation;
         *gen = gen.wrapping_add(1);
 
         let mut ui = UnsafeCell::new(Ui {
@@ -187,7 +191,7 @@ impl Drop for UiPtrToNullGuard<'_> {
         self.0.backend.get_mut().ui_ptr = null_mut();
 
         // change the generation to avoid trying to call stale callbacks
-        let ref mut gen = self.0.backend.get_mut().generation;
+        let gen = &mut self.0.backend.get_mut().generation;
         *gen = gen.wrapping_add(1);
     }
 }
@@ -634,7 +638,7 @@ decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
                 value,
             }
         }
-        pub fn checkbox<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut bool) -> bool {
+        pub fn checkbox<S: IntoCStr>(&mut self, label: S, value: &mut bool) -> bool {
             self.do_checkbox(label, value).build()
         }
     }
@@ -688,7 +692,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
 
 decl_builder! { Image -> (), ImGui_Image () ()
     (
-        user_texture_id (ImTextureID) (user_texture_id),
+        user_texture_id (TextureId) (user_texture_id.id()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
@@ -702,7 +706,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
         decl_builder_setter_into!{border_col: Color}
     }
     {
-        pub fn do_image(&mut self, user_texture_id: ImTextureID, size: impl Into<Vector2>) -> Image<&mut Self> {
+        pub fn do_image(&mut self, user_texture_id: TextureId, size: impl Into<Vector2>) -> Image<&mut Self> {
             Image {
                 u: self,
                 user_texture_id,
@@ -718,7 +722,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
 decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
-        user_texture_id (ImTextureID) (user_texture_id),
+        user_texture_id (TextureId) (user_texture_id.id()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
@@ -732,7 +736,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         decl_builder_setter_into!{tint_col: Color}
     }
     {
-        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: ImTextureID, size: impl Into<Vector2>) -> ImageButton<&mut Self, S> {
+        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: TextureId, size: impl Into<Vector2>) -> ImageButton<&mut Self, S> {
             ImageButton {
                 u: self,
                 str_id: str_id.into(),
@@ -1349,7 +1353,7 @@ enum LabelId<'a, S: IntoCStr, H: Hashable> {
     LabelId(&'a str, H),
 }
 
-unsafe fn tree_node_ex_helper<'a, S: IntoCStr, H: Hashable>(label_id: LabelId<'a, S, H>, flags: TreeNodeFlags) -> bool {
+unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(label_id: LabelId<'_, S, H>, flags: TreeNodeFlags) -> bool {
     match label_id {
         LabelId::Label(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
         LabelId::LabelId(lbl, id) => {
@@ -1503,12 +1507,12 @@ decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr,
             }
         }
         // Helper function for simple use cases
-        pub fn combo<'a, V: Copy + PartialEq, S2: IntoCStr>(
+        pub fn combo<V: Copy + PartialEq, S2: IntoCStr>(
             &mut self,
             label: impl IntoCStr,
             values: impl IntoIterator<Item=V>,
             f_name: impl Fn(V) -> S2,
-            current: &'a mut V
+            current: &mut V
         ) -> bool
         {
             let mut changed = false;
@@ -1548,13 +1552,13 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
             }
         }
         // Helper function for simple use cases
-        pub fn list_box<'a, V: Copy + PartialEq, S2: IntoCStr>(
+        pub fn list_box<V: Copy + PartialEq, S2: IntoCStr>(
             &mut self,
             label: impl IntoCStr,
             mut height_in_items: i32,
             values: impl IntoIterator<Item=V>,
             f_name: impl Fn(V) -> S2,
-            current: &'a mut V
+            current: &mut V
         ) -> bool
         {
             // Calculate size from "height_in_items"
@@ -1981,7 +1985,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_GetItemRectSize().into()
         }
     }
-    pub fn get_main_viewport<'s>(&'s mut self) -> Viewport<'s> {
+    pub fn get_main_viewport(&mut self) -> Viewport<'_> {
         unsafe {
             Viewport {
                 ptr: &*ImGui_GetMainViewport()
@@ -2398,7 +2402,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             &*ImGui_GetIO()
         }
     }
-    pub fn font_atlas<'ui>(&'ui mut self) -> FontAtlas<'ui> {
+    pub fn font_atlas(&mut self) -> FontAtlas<'_> {
         unsafe {
             let io = &*ImGui_GetIO();
             FontAtlas {
@@ -2408,14 +2412,9 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+// Default fount will be the index 0
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
-
-impl Default for FontId {
-    fn default() -> FontId {
-        FontId(0)
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CustomRectIndex(i32);
@@ -2432,12 +2431,15 @@ pub struct FontAtlasPtr<'ui> {
     ptr: &'ui mut ImFontAtlas,
 }
 
+//TODO: Use image crate for images?
+type FuncCustomRect<'app> = Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'app>;
+
 pub struct FontAtlasMut<'app, 'ui> {
     ptr: FontAtlasPtr<'ui>,
     scale: f32,
     // glyph_ranges pointers have to live until the atlas texture is built
     glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
-    custom_rects: Vec<Option<Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'app>>>,
+    custom_rects: Vec<Option<FuncCustomRect<'app>>>,
 }
 
 impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
@@ -2448,7 +2450,7 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
         let mut fonts = fonts.into_iter();
         let first = fonts.next().expect("empty font collection");
         let id = self.add_font_priv(first, false);
-        while let Some(font) = fonts.next() {
+        for font in fonts {
             self.add_font_priv(font, true);
         }
         id
@@ -2492,26 +2494,40 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
             FontId((*io.Fonts).Fonts.len() - 1)
         }
     }
-    pub fn add_custom_rect_font_glyph(&mut self, font: FontId, id: char, width: i32, height: i32, advance_x: f32, offset: impl Into<Vector2>, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app) -> CustomRectIndex {
+    pub fn add_custom_rect_font_glyph(
+        &mut self,
+        font: FontId,
+        id: char,
+        size: mint::Vector2<i32>,
+        advance_x: f32,
+        offset: impl Into<Vector2>,
+        draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app
+    ) -> CustomRectIndex
+    {
         unsafe {
             let io = &mut *ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, width, height, advance_x, &offset.into().into());
+            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, size.x, size.y, advance_x, &offset.into().into());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
     }
-    pub fn add_custom_rect_regular(&mut self, width: i32, height: i32, draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app) -> CustomRectIndex {
+    pub fn add_custom_rect_regular(
+        &mut self,
+        size: mint::Vector2<i32>,
+        draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app
+    ) -> CustomRectIndex
+    {
         unsafe {
             let io = &mut *ImGui_GetIO();
 
-            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, width, height);
+            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, size.x, size.y);
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
     }
-    fn add_custom_rect_at(&mut self, idx: usize, f: Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'app>) {
+    fn add_custom_rect_at(&mut self, idx: usize, f: FuncCustomRect<'app>) {
         if idx >= self.custom_rects.len() {
             self.custom_rects.resize_with(idx + 1, || None);
         }
@@ -2533,8 +2549,7 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
                 unsafe {
-                    let rect = &(*io.Fonts).CustomRects[idx as usize];
-                    let pixel_size = pixel_size as usize;
+                    let rect = &(*io.Fonts).CustomRects[idx];
                     assert!(pixel_size == 4);
 
                     let stride = tex_width as usize * pixel_size;
@@ -2571,8 +2586,8 @@ impl<'ui> Deref for FontAtlas<'ui> {
 }
 
 impl FontAtlasPtr<'_> {
-    pub fn texture_id(&self) -> ImTextureID {
-        self.ptr.TexID
+    pub fn texture_id(&self) -> TextureId {
+        unsafe { TextureId::from_id(self.ptr.TexID) }
     }
     pub fn texture_size(&self) -> [i32; 2] {
         [self.ptr.TexWidth, self.ptr.TexHeight]
@@ -2718,19 +2733,19 @@ impl<'ui, 'ctx, D> WindowDrawList<'ui, 'ctx, D> {
             ImDrawList_AddBezierQuadratic(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color_to_u32(color), thickness, num_segments);
         }
     }
-    pub fn add_image(&mut self, user_texture_id: ImTextureID, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>) {
+    pub fn add_image(&mut self, user_texture_id: TextureId, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddImage(self.ptr, user_texture_id, &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color));
+            ImDrawList_AddImage(self.ptr, user_texture_id.id(), &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_image_quad(&mut self, user_texture_id: ImTextureID, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, uv1: impl Into<Vector2>, uv2: impl Into<Vector2>, uv3: impl Into<Vector2>, uv4: impl Into<Vector2>, color: impl Into<Color>) {
+    pub fn add_image_quad(&mut self, user_texture_id: TextureId, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, uv1: impl Into<Vector2>, uv2: impl Into<Vector2>, uv3: impl Into<Vector2>, uv4: impl Into<Vector2>, color: impl Into<Color>) {
         unsafe {
-            ImDrawList_AddImageQuad(self.ptr, user_texture_id, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), &uv1.into().into(), &uv2.into().into(), &uv3.into().into(), &uv4.into().into(), color_to_u32(color));
+            ImDrawList_AddImageQuad(self.ptr, user_texture_id.id(), &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), &uv1.into().into(), &uv2.into().into(), &uv3.into().into(), &uv4.into().into(), color_to_u32(color));
         }
     }
-    pub fn add_image_rounded(&mut self, user_texture_id: ImTextureID, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>, rounding: f32, flags: DrawFlags) {
+    pub fn add_image_rounded(&mut self, user_texture_id: TextureId, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: impl Into<Color>, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id, &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color), rounding, flags.bits());
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id.id(), &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color_to_u32(color), rounding, flags.bits());
         }
     }
 
@@ -2871,7 +2886,17 @@ impl Pushable for FontId {
 
 pub type StyleColor = (ColorId, Color);
 
-pub type TextureId = ImTextureID;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct TextureId(ImTextureID);
+
+impl TextureId {
+    pub fn id(&self) -> ImTextureID {
+        self.0
+    }
+    pub unsafe fn from_id(id: ImTextureID) -> Self {
+        Self(id)
+    }
+}
 
 impl Pushable for StyleColor {
     unsafe fn push(&self) {

@@ -7,6 +7,7 @@ use anyhow::{Result, anyhow};
 use glow::HasContext;
 
 use dear_imgui as imgui;
+use imgui::TextureId;
 use crate::glr;
 
 pub trait Application: imgui::UiBuilder {
@@ -71,15 +72,15 @@ impl Renderer {
 
             let a_pos = program.attrib_by_name("pos").unwrap();
             a_pos_location = a_pos.location();
-            gl.enable_vertex_attrib_array(a_pos_location as u32);
+            gl.enable_vertex_attrib_array(a_pos_location);
 
             let a_uv = program.attrib_by_name("uv").unwrap();
             a_uv_location = a_uv.location();
-            gl.enable_vertex_attrib_array(a_uv_location as u32);
+            gl.enable_vertex_attrib_array(a_uv_location);
 
             let a_color = program.attrib_by_name("color").unwrap();
             a_color_location = a_color.location();
-            gl.enable_vertex_attrib_array(a_color_location as u32);
+            gl.enable_vertex_attrib_array(a_color_location);
 
             let u_matrix = program.uniform_by_name("matrix").unwrap();
             u_matrix_location = u_matrix.location();
@@ -124,7 +125,7 @@ impl Renderer {
             if let Some(mut atlas) = self.imgui.update_atlas() {
                 app.do_custom_atlas(&mut atlas);
                 atlas.build_custom_rects();
-                Self::update_atlas(&mut self.gl, &self.objs.atlas);
+                Self::update_atlas(&self.gl, &self.objs.atlas);
             }
 
             self.imgui.do_frame(
@@ -145,7 +146,7 @@ impl Renderer {
             );
         }
     }
-    unsafe fn update_atlas(gl: &mut glr::GlContext, atlas_tex: &glr::Texture) {
+    unsafe fn update_atlas(gl: &glr::GlContext, atlas_tex: &glr::Texture) {
         let io = &mut *ImGui_GetIO();
         let mut data = std::ptr::null_mut();
         let mut width = 0;
@@ -168,7 +169,7 @@ impl Renderer {
         gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
-        (*io.Fonts).TexID = Self::map_tex(atlas_tex.id());
+        (*io.Fonts).TexID = Self::map_tex(atlas_tex.id()).id();
 
         // We keep this, no need for imgui to hold a copy
         ImFontAtlas_ClearTexData(io.Fonts);
@@ -224,7 +225,7 @@ impl Renderer {
                 0
             );
             gl.vertex_attrib_pointer_f32(
-                objs.a_uv_location as u32,
+                objs.a_uv_location,
                 2 /*xy*/,
                 glow::FLOAT,
                 false,
@@ -232,7 +233,7 @@ impl Renderer {
                 8,
             );
             gl.vertex_attrib_pointer_f32(
-                objs.a_color_location as u32,
+                objs.a_color_location,
                 4 /*rgba*/,
                 glow::UNSIGNED_BYTE,
                 true,
@@ -258,7 +259,7 @@ impl Renderer {
                         cb(cmd_list, cmd);
                     }
                     None => {
-                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(cmd.TextureId));
+                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(TextureId::from_id(cmd.TextureId)));
 
                         gl.draw_elements_base_vertex(
                             glow::TRIANGLES,
@@ -276,11 +277,11 @@ impl Renderer {
         gl.bind_vertex_array(None);
         gl.disable(glow::SCISSOR_TEST);
     }
-    pub fn map_tex(ntex: glow::Texture) -> ImTextureID {
-        ntex.0.get() as ImTextureID
+    pub fn map_tex(ntex: glow::Texture) -> TextureId {
+        unsafe { TextureId::from_id(ntex.0.get() as ImTextureID) }
     }
-    pub fn unmap_tex(tex: ImTextureID) -> Option<glow::Texture> {
-        Some(glow::NativeTexture(NonZeroU32::new(tex as u32)?))
+    pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
+        Some(glow::NativeTexture(NonZeroU32::new(tex.id() as u32)?))
     }
 }
 

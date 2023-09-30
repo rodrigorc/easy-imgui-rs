@@ -26,6 +26,7 @@ fn main() {
     let mut window = MainWindowWithRenderer::new(window, renderer, app);
 
     event_loop.run(move |event, _w, control_flow| {
+        #[allow(clippy::single_match)]
         match &event {
             winit::event::Event::UserEvent(e) => {
                 //println!("{e:?}");

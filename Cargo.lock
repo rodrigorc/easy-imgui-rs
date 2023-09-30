@@ -331,6 +331,7 @@ dependencies = [
  "bitflags 2.4.0",
  "cstr",
  "dear_imgui-sys",
+ "mint",
  "paste",
 ]
 

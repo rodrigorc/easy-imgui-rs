@@ -1,7 +1,7 @@
 use super::*;
 
 impl Context {
-    pub fn style<'a>(&'a mut self) -> StyleMut<'a> {
+    pub fn style(&mut self) -> StyleMut<'_> {
         let ptr = unsafe {
             &mut *ImGui_GetStyle()
         };
@@ -12,7 +12,7 @@ impl Context {
 }
 
 impl<'ctx, D: 'ctx> Ui<'ctx, D> {
-    pub fn style<'a>(&'a mut self) -> Style<'a> {
+    pub fn style(&mut self) -> Style<'_> {
         let ptr = unsafe {
             &mut *ImGui_GetStyle()
         };

@@ -10,6 +10,7 @@ dear_imgui-sys = { path = "../dear_imgui-sys" }
 paste = "*"
 bitflags = "*"
 cstr = "*"
+mint = "*"
 
 [features]
 freetype = ["dear_imgui-sys/freetype"]

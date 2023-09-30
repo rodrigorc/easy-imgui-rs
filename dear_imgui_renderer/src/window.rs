@@ -374,7 +374,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
 }
 
 impl<A: Application<Data=()>> MainWindowWithRenderer<A> {
-    pub fn do_event<'ctx, EventUserType>(&'ctx mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow) {
+    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow) {
         static mut DUMMY: () = ();
         self.do_event_with_data(event, control_flow, unsafe { &mut DUMMY })
     }

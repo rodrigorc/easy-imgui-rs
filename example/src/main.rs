@@ -88,7 +88,6 @@ impl UiBuilder for MyData {
                         ];
                     }
                 }
-                dbg!(self.f2);
             });
         atlas.add_custom_rect_font_glyph(self.f1, '💩', 16, 16, 20.0, [2.0, 0.0],
             |pixels| {
@@ -132,6 +131,12 @@ impl UiBuilder for MyData {
             .flags(imgui::WindowFlags::MenuBar)
             .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
             .with(|ui: &mut imgui::Ui<Self::Data>| {
+
+                ui.do_progress_bar(self.x / 6.0).overlay("hola").build();
+                ui.do_slider_angle("Angle", &mut self.x).display_format(imgui::FloatFormat::F(1)).build();
+
+                let mut s = 1;
+                ui.list_box("List", 3, [1, 2, 3, 4, 5, 6], |i| format!("{i}"), &mut s);
 
                 ui.with_menu_bar(|ui| {
                     ui.do_menu("File").with(|ui| {
@@ -182,6 +187,9 @@ impl UiBuilder for MyData {
                         }
                     );
                     ui.checkbox("Click me!", &mut self.checked);
+                    ui.do_popup_context_void().with(|ui| {
+                        ui.do_selectable("hala!").build();
+                    });
                     ui.do_combo("Combo").preview_value("One").with(|ui| {
                         ui.text("ha");
                         ui.do_selectable("One").flags(SelectableFlags::DontClosePopups).build();

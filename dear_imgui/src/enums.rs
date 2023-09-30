@@ -566,3 +566,75 @@ imgui_flags! {
         CollapsingHeader,
     }
 }
+
+imgui_flags! {
+    pub FocusedFlags: ImGuiFocusedFlags_ {
+        None,
+        ChildWindows,
+        RootWindow,
+        AnyWindow,
+        NoPopupHierarchy,
+        //DockHierarchy,
+        RootAndChildWindows,
+    }
+}
+
+imgui_flags! {
+    pub ColorEditFlags: ImGuiColorEditFlags_ {
+        None,
+        NoAlpha,
+        NoPicker,
+        NoOptions,
+        NoSmallPreview,
+        NoInputs,
+        NoTooltip,
+        NoLabel,
+        NoSidePreview,
+        NoDragDrop,
+        NoBorder,
+        AlphaBar,
+        AlphaPreview,
+        AlphaPreviewHalf,
+        HDR,
+        DisplayRGB,
+        DisplayHSV,
+        DisplayHex,
+        Uint8,
+        Float,
+        PickerHueBar,
+        PickerHueWheel,
+        InputRGB,
+        InputHSV,
+        DefaultOptions_,
+    }
+}
+
+imgui_flags! {
+    pub TabBarFlags: ImGuiTabBarFlags_ {
+        None,
+        Reorderable,
+        AutoSelectNewTabs,
+        TabListPopupButton,
+        NoCloseWithMiddleMouseButton,
+        NoTabListScrollingButtons,
+        NoTooltip,
+        FittingPolicyResizeDown,
+        FittingPolicyScroll,
+        FittingPolicyMask_,
+        FittingPolicyDefault_,
+    }
+}
+
+imgui_flags! {
+    pub TabItemFlags: ImGuiTabItemFlags_ {
+        None,
+        UnsavedDocument,
+        SetSelected,
+        NoCloseWithMiddleMouseButton,
+        NoPushId,
+        NoTooltip,
+        NoReorder,
+        Leading,
+        Trailing,
+    }
+}

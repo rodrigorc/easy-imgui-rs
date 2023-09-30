@@ -70,7 +70,34 @@ impl<'a> StylePtr<'a> {
     pub fn color(&self, id: ColorId) -> Color {
         self.ptr.Colors[id.bits() as usize].into()
     }
+    pub fn alpha(&self) -> f32 {
+        self.ptr.Alpha
+    }
     pub fn set_color(&mut self, id: ColorId, color: Color) {
         self.ptr.Colors[id.bits() as usize] = color.into();
+    }
+    pub fn set_alpha(&mut self, alpha: f32) {
+        self.ptr.Alpha = alpha;
+    }
+    pub fn color_alpha(&self, id: ColorId, alpha_mul: f32) -> Color {
+        let mut c = self.color(id);
+        let a = self.alpha();
+        c.w *= a * alpha_mul;
+        c
+    }
+    pub fn frame_padding(&self) -> Vector2 {
+        self.ptr.FramePadding.into()
+    }
+    pub fn frame_rounding(&self) -> f32 {
+        self.ptr.FrameRounding
+    }
+    pub fn frame_border_size(&self) -> f32 {
+        self.ptr.FrameBorderSize
+    }
+    pub fn item_spacing(&self) -> Vector2 {
+        self.ptr.ItemSpacing.into()
+    }
+    pub fn item_inner_spacing(&self) -> Vector2 {
+        self.ptr.ItemInnerSpacing.into()
     }
 }

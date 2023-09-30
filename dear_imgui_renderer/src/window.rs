@@ -49,6 +49,20 @@ pub struct MainWindowWithRenderer<A> {
 
 impl MainWindow {
     pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
+        Self::with_gl_chooser(
+            event_loop,
+            title,
+            |cfg1, cfg2| {
+                // For standard UI, we'll as few fancy things as available
+                let t = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
+                if t(&cfg2) < t(&cfg1) {
+                    cfg2
+                } else {
+                    cfg1
+                }
+            })
+    }
+    pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
         let window_builder = WindowBuilder::new();
         let template = ConfigTemplateBuilder::new()
             .prefer_hardware_accelerated(Some(true))
@@ -61,16 +75,7 @@ impl MainWindow {
 
         let (window, gl_config) = display_builder
             .build(event_loop, template, |configs| {
-                configs
-                    .reduce(|cfg1, cfg2| {
-                        let t = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
-                        if t(&cfg2) < t(&cfg1) {
-                            cfg2
-                        } else {
-                            cfg1
-                        }
-                    })
-                    .unwrap()
+                configs.reduce(f_choose_cfg).unwrap()
             })
             .map_err(|e| anyhow!("{:#?}", e))?;
         let window = window.unwrap();

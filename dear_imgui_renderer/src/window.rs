@@ -335,12 +335,19 @@ impl<A: Application> MainWindowWithRenderer<A> {
                         phase: winit::event::TouchPhase::Moved,
                         ..
                     } => {
+                        let io = unsafe {
+                            &mut *ImGui_GetIO()
+                        };
                         let (h, v) = match delta {
                             winit::event::MouseScrollDelta::LineDelta(h, v) => (*h, *v),
-                            winit::event::MouseScrollDelta::PixelDelta(d) => (d.x as f32, d.y as f32), //scale?
+                            winit::event::MouseScrollDelta::PixelDelta(d) => {
+                                let scale = io.DisplayFramebufferScale.x;
+                                let f_scale = unsafe { ImGui_GetFontSize() };
+                                let scale = scale * f_scale;
+                                (d.x as f32 / scale, d.y as f32 / scale)
+                            }
                         };
                         unsafe {
-                            let io = &mut *ImGui_GetIO();
                             ImGuiIO_AddMouseWheelEvent(io, h, v);
                         }
                     }

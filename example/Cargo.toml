@@ -17,3 +17,4 @@ glow = "*"
 glutin = "*"
 glutin-winit = "*"
 winit = { version = "*", features = ["x11"] }
+image = { version = "*", default_features = false, features = ["png"] }

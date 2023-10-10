@@ -15,6 +15,7 @@ mod style;
 
 pub use enums::*;
 pub use dear_imgui_sys::{Vector2, Color, ImGuiID};
+use image::GenericImage;
 
 struct BackendData {
     generation: usize,
@@ -717,6 +718,21 @@ decl_builder! { Image -> (), ImGui_Image () ()
                 border_col: Color::from([0.0, 0.0, 0.0, 0.0]).into(),
             }
         }
+        pub fn do_image_with_custom_rect(&mut self, ridx: CustomRectIndex, scale: f32) -> Image<&mut Self> {
+            let atlas = self.font_atlas();
+            let rect = atlas.get_custom_rect(ridx);
+            let tex_id = atlas.texture_id();
+            let tex_size = atlas.texture_size();
+            let inv_tex_w = 1.0 / tex_size[0] as f32;
+            let inv_tex_h = 1.0 / tex_size[1] as f32;
+            let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
+            let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
+
+            self.do_image(tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+                .uv0(uv0)
+                .uv1(uv1)
+        }
+
     }
 }
 decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
@@ -2431,8 +2447,12 @@ pub struct FontAtlasPtr<'ui> {
     ptr: &'ui mut ImFontAtlas,
 }
 
-//TODO: Use image crate for images?
-type FuncCustomRect<'app> = Box<dyn FnOnce(&mut [&mut [[u8; 4]]]) + 'app>;
+pub use image;
+
+type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
+type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
+
+type FuncCustomRect<'app> = Box<dyn FnOnce(&mut SubPixelImage<'_, '_>) + 'app>;
 
 pub struct FontAtlasMut<'app, 'ui> {
     ptr: FontAtlasPtr<'ui>,
@@ -2498,31 +2518,33 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
         &mut self,
         font: FontId,
         id: char,
-        size: mint::Vector2<i32>,
+        size: impl Into<mint::Vector2<u32>>,
         advance_x: f32,
         offset: impl Into<Vector2>,
-        draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app
+        draw: impl FnOnce(&mut SubPixelImage<'_, '_>) + 'app
     ) -> CustomRectIndex
     {
+        let size = size.into();
         unsafe {
             let io = &mut *ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, size.x, size.y, advance_x, &offset.into().into());
+            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &offset.into().into());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
     }
     pub fn add_custom_rect_regular(
         &mut self,
-        size: mint::Vector2<i32>,
-        draw: impl FnOnce(&mut [&mut [[u8; 4]]]) + 'app
+        size: impl Into<mint::Vector2<u32>>,
+        draw: impl FnOnce(&mut SubPixelImage<'_, '_>) + 'app
     ) -> CustomRectIndex
     {
+        let size = size.into();
         unsafe {
             let io = &mut *ImGui_GetIO();
 
-            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, size.x, size.y);
+            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -2545,13 +2567,16 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
         }
         let pixel_size = pixel_size as usize;
         assert!(pixel_size == 4);
+        let tex_data = unsafe { std::slice::from_raw_parts_mut(tex_data, tex_width as usize * tex_height as usize * pixel_size) };
+        let mut pixel_image = PixelImage::from_raw(tex_width as u32, tex_height as u32, tex_data).unwrap();
 
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
                 unsafe {
                     let rect = &(*io.Fonts).CustomRects[idx];
-                    assert!(pixel_size == 4);
-
+                    let mut sub_image = pixel_image.sub_image(rect.X as u32, rect.Y as u32, rect.Width as u32, rect.Height as u32);
+                    f(&mut sub_image);
+                    /*
                     let stride = tex_width as usize * pixel_size;
 
                     let rx = rect.X as usize * pixel_size;
@@ -2561,6 +2586,7 @@ impl<'ui, 'app> FontAtlasMut<'app, 'ui> {
                         std::slice::from_raw_parts_mut(p, rect.Width as usize)
                     }).collect::<Vec<_>>();
                     f(&mut pixels);
+                    */
                 }
             }
         }
@@ -3008,6 +3034,18 @@ impl Pushable for ItemWidth {
     }
     unsafe fn pop(&self) {
         ImGui_PopItemWidth();
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Indent(pub f32);
+
+impl Pushable for Indent {
+    unsafe fn push(&self) {
+        ImGui_Indent(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_Unindent(self.0);
     }
 }
 

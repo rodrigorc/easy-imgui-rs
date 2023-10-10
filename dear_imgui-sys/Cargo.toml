@@ -6,13 +6,13 @@ build = "build.rs"
 links = "imgui"
 
 [dependencies]
-mint = "*"
+mint = "0.5"
 
 [build-dependencies]
-bindgen = "*"
-cc = "*"
-pkg-config = "*"
-xshell = "*"
+bindgen = "0.68"
+cc = "1"
+pkg-config = "0.3"
+xshell = "0.2"
 
 [features]
 freetype = []

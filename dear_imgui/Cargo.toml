@@ -7,10 +7,11 @@ edition = "2021"
 
 [dependencies]
 dear_imgui-sys = { path = "../dear_imgui-sys" }
-paste = "*"
-bitflags = "*"
-cstr = "*"
-mint = "*"
+paste = "1"
+bitflags = "2"
+cstr = "0.2"
+mint = "0.5"
+image = { version = "0.24", default_features = false }
 
 [features]
 freetype = ["dear_imgui-sys/freetype"]

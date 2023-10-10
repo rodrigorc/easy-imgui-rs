@@ -8,6 +8,7 @@ use glow::HasContext;
 use dear_imgui as imgui;
 use imgui::{FontId, CustomRectIndex, UiBuilder, SelectableFlags, SliderFlags, FontAtlasMut};
 use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
+use imgui::image::GenericImage;
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
 static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
@@ -76,34 +77,18 @@ impl UiBuilder for MyData {
         ]);
         self.f2 = atlas.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
 
-        self.rr = atlas.add_custom_rect_regular([42, 42].into(),
-            |pixels| {
-                for (y, row) in pixels.iter_mut().enumerate() {
-                    for (x, color) in row.iter_mut().enumerate() {
-                        *color = [
-                            (x * y) as u8,
-                            (x * x) as u8,
-                            (y * y) as u8,
-                            0xff,
-                        ];
-                    }
-                }
-            });
-        atlas.add_custom_rect_font_glyph(self.f1, '💩', [16, 16].into(), 20.0, [2.0, 0.0],
-            |pixels| {
-                for (y, row) in pixels.iter_mut().enumerate() {
-                    for (x, color) in row.iter_mut().enumerate() {
-                        *color = [
-                            (x * y) as u8,
-                            (x * x) as u8,
-                            (y * y) as u8,
-                            0xff,
-                        ];
-                    }
-                }
-            }
+        static POO: &[u8] = include_bytes!("poo.png");
+        let poo = image::load_from_memory_with_format(POO, image::ImageFormat::Png).unwrap();
+        let poo = Rc::new(poo);
+
+        self.rr = atlas.add_custom_rect_regular([poo.width(), poo.height()],
+            { let poo = Rc::clone(&poo); move |pixels| pixels.copy_from(&*poo, 0, 0).unwrap() }
         );
-        atlas.get_custom_rect(self.rr);
+
+        atlas.add_custom_rect_font_glyph(self.f1, '💩', [poo.width(), poo.height()], 20.0, [2.0, 2.0],
+            move |pixels| pixels.copy_from(&*poo, 0, 0).unwrap()
+        );
+        let rr = atlas.get_custom_rect(self.rr);
     }
 
     fn do_ui(&mut self, ui: &mut imgui::Ui<Self::Data>) {

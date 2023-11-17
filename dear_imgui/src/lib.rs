@@ -14,7 +14,7 @@ mod enums;
 mod style;
 
 pub use enums::*;
-pub use dear_imgui_sys::{Vector2, Color, ImGuiID};
+pub use dear_imgui_sys::{self, Vector2, Color, ImGuiID};
 use image::GenericImage;
 
 struct BackendData {

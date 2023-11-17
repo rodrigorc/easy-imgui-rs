@@ -4,6 +4,8 @@ members = [
     "dear_imgui-sys",
     "dear_imgui",
     "dear_imgui_renderer",
+    "dear_imgui_window",
     "example",
     "gamepad",
+    "web",
 ]

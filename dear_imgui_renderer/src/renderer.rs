@@ -1,8 +1,6 @@
-use std::{ffi::{CString, c_void, c_char, CStr}, mem::size_of};
-use std::num::NonZeroU32;
+use std::mem::size_of;
 
 use dear_imgui_sys::*;
-use arboard::Clipboard;
 use anyhow::{Result, anyhow};
 use glow::HasContext;
 
@@ -48,25 +46,21 @@ impl Renderer {
         let imgui = unsafe { imgui::Context::new() };
 
         unsafe {
-            let io = &mut *ImGui_GetIO();
-            io.BackendFlags |= (
-                ImGuiBackendFlags_::ImGuiBackendFlags_RendererHasVtxOffset |
-                ImGuiBackendFlags_::ImGuiBackendFlags_HasMouseCursors |
-                ImGuiBackendFlags_::ImGuiBackendFlags_HasSetMousePos
-            ).0 as ImGuiBackendFlags;
-
-            if let Ok(ctx) = Clipboard::new() {
-                let clip = MyClipboard {
-                    ctx,
-                    text: CString::default(),
-                };
-                io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
-                io.SetClipboardTextFn = Some(set_clipboard_text);
-                io.GetClipboardTextFn = Some(get_clipboard_text);
+            if !cfg!(target_arch="wasm32") {
+                let io = &mut *ImGui_GetIO();
+                io.BackendFlags |= (
+                    imgui::BackendFlags::HasMouseCursors |
+                    imgui::BackendFlags::HasSetMousePos |
+                    imgui::BackendFlags::RendererHasVtxOffset
+                    ).bits();
             }
 
             atlas = glr::Texture::generate(&gl)?;
-            program = gl_program_from_source(&gl, include_str!("shader.glsl"))?;
+            #[cfg(not(target_arch="wasm32"))]
+            let shader_source = include_str!("shader.glsl");
+            #[cfg(target_arch="wasm32")]
+            let shader_source = include_str!("shader_es.glsl");
+            program = gl_program_from_source(&gl, shader_source)?;
             vao = glr::VertexArray::generate(&gl)?;
             gl.bind_vertex_array(Some(vao.id()));
 
@@ -261,13 +255,22 @@ impl Renderer {
                     None => {
                         gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(TextureId::from_id(cmd.TextureId)));
 
-                        gl.draw_elements_base_vertex(
-                            glow::TRIANGLES,
-                            cmd.ElemCount as i32,
-                            if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
-                            (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
-                            cmd.VtxOffset as i32,
-                        );
+                        if cfg!(target_arch="wasm32") {
+                            gl.draw_elements(
+                                glow::TRIANGLES,
+                                cmd.ElemCount as i32,
+                                if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
+                                (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
+                            );
+                        } else {
+                            gl.draw_elements_base_vertex(
+                                glow::TRIANGLES,
+                                cmd.ElemCount as i32,
+                                if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
+                                (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
+                                cmd.VtxOffset as i32,
+                            );
+                        }
                     }
                 }
             }
@@ -277,13 +280,34 @@ impl Renderer {
         gl.bind_vertex_array(None);
         gl.disable(glow::SCISSOR_TEST);
     }
+}
+
+#[cfg(not(target_arch="wasm32"))]
+impl Renderer {
     pub fn map_tex(ntex: glow::Texture) -> TextureId {
         unsafe { TextureId::from_id(ntex.0.get() as ImTextureID) }
     }
     pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
-        Some(glow::NativeTexture(NonZeroU32::new(tex.id() as u32)?))
+        Some(glow::NativeTexture(std::num::NonZeroU32::new(tex.id() as u32)?))
     }
 }
+
+#[cfg(target_arch="wasm32")]
+impl Renderer {
+    pub fn map_tex(ntex: glow::Texture) -> TextureId {
+        let mut tex_map = WASM_TEX_MAP.lock().unwrap();
+        let id = tex_map.len();
+        tex_map.push(ntex);
+        unsafe { TextureId::from_id(id as *mut std::ffi::c_void) }
+    }
+    pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
+        let tex_map = WASM_TEX_MAP.lock().unwrap();
+        let id = tex.id() as usize;
+        tex_map.get(id).cloned()
+    }
+}
+#[cfg(target_arch="wasm32")]
+static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::new(Vec::new());
 
 impl Drop for Renderer {
     fn drop(&mut self) {
@@ -300,47 +324,18 @@ pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr:
     let frag = &shaders[split ..];
     let split_2 = frag.find('\n').ok_or_else(|| anyhow!("shader marker not valid"))?;
 
-    let mut frag = &frag[split_2 ..];
+    let mut frag = &frag[split_2 + 1 ..];
 
     let geom = if let Some(split) = frag.find("###") {
         let geom = &frag[split ..];
         frag = &frag[.. split];
         let split_2 = geom.find('\n').ok_or_else(|| anyhow!("shader marker not valid"))?;
-        Some(&geom[split_2 ..])
+        Some(&geom[split_2 + 1 ..])
     } else {
         None
     };
 
     let prg = glr::Program::from_source(gl, vertex, frag, geom)?;
     Ok(prg)
-}
-
-unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) {
-    let clip = &mut *(user as *mut MyClipboard);
-    if text.is_null() {
-        let _ = clip.ctx.clear();
-    } else {
-        let cstr = CStr::from_ptr(text);
-        let str = String::from_utf8_lossy(cstr.to_bytes()).to_string();
-        let _ = clip.ctx.set_text(str);
-    }
-}
-
-// The returned pointer should be valid for a while...
-unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
-    let clip = &mut *(user as *mut MyClipboard);
-    let Ok(text) = clip.ctx.get_text() else {
-        return std::ptr::null();
-    };
-    let Ok(text) = CString::new(text) else {
-        return std::ptr::null();
-    };
-    clip.text = text;
-    clip.text.as_ptr()
-}
-
-struct MyClipboard {
-    ctx: Clipboard,
-    text: CString,
 }
 

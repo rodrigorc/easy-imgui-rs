@@ -1,7 +1,8 @@
 use std::{rc::Rc, time::Duration};
 
 use dear_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
-use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}, glr::GlContext};
+use dear_imgui_window::{MainWindow, MainWindowWithRenderer};
+use dear_imgui_renderer::{Renderer, Application, glr::GlContext};
 use glow::HasContext;
 use glutin::{display::GetGlDisplay, prelude::GlDisplay};
 use winit::event_loop::{EventLoopBuilder, EventLoopProxy};

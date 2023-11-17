@@ -5,9 +5,8 @@ use cstr::cstr;
 use winit::event_loop::EventLoopBuilder;
 use glutin::display::{GetGlDisplay, GlDisplay};
 use glow::HasContext;
-use dear_imgui as imgui;
 use imgui::{FontId, CustomRectIndex, UiBuilder, SelectableFlags, SliderFlags, FontAtlasMut};
-use dear_imgui_renderer::{window::{MainWindow, MainWindowWithRenderer}, renderer::{Renderer, Application}};
+use dear_imgui_window::{MainWindow, MainWindowWithRenderer, dear_imgui as imgui, dear_imgui_renderer::{Renderer, Application}};
 use imgui::image::GenericImage;
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");

@@ -1,6 +1,5 @@
 use std::num::NonZeroU32;
 use std::time::{Instant, Duration};
-
 use glutin_winit::DisplayBuilder;
 use winit::{window::{Window, CursorIcon, WindowBuilder}, event::{Event, VirtualKeyCode}, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::{EventLoopWindowTarget, ControlFlow}};
 use dear_imgui_sys::*;
@@ -8,7 +7,7 @@ use dear_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
-use crate::renderer::{Renderer, Application};
+use dear_imgui_renderer::{Renderer, Application};
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
 struct MainWindowStatus {
@@ -155,6 +154,8 @@ impl<A: Application> MainWindowWithRenderer<A> {
         let scale = main_window.window.scale_factor();
         let l_size = size.to_logical::<f32>(scale);
         renderer.set_size(l_size.into(), scale as f32);
+
+        clipboard::maybe_setup_clipboard();
 
         MainWindowWithRenderer {
             main_window,
@@ -387,3 +388,54 @@ impl<A: Application<Data=()>> MainWindowWithRenderer<A> {
     }
 }
 
+#[cfg(not(feature="clipboard"))]
+mod clipboard {
+    pub fn maybe_setup_clipboard() { }
+}
+#[cfg(feature="clipboard")]
+mod clipboard {
+    use std::ffi::{CString, CStr, c_void, c_char};
+
+    pub fn maybe_setup_clipboard() {
+        if let Ok(ctx) = arboard::Clipboard::new() {
+            let clip = MyClipboard {
+                ctx,
+                text: CString::default(),
+            };
+            unsafe {
+                let io = &mut *dear_imgui_sys::ImGui_GetIO();
+                io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
+                io.SetClipboardTextFn = Some(set_clipboard_text);
+                io.GetClipboardTextFn = Some(get_clipboard_text);
+            }
+        }
+    }
+    unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) {
+        let clip = &mut *(user as *mut MyClipboard);
+        if text.is_null() {
+            let _ = clip.ctx.clear();
+        } else {
+            let cstr = CStr::from_ptr(text);
+            let str = String::from_utf8_lossy(cstr.to_bytes()).to_string();
+            let _ = clip.ctx.set_text(str);
+        }
+    }
+
+    // The returned pointer should be valid for a while...
+    unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
+        let clip = &mut *(user as *mut MyClipboard);
+        let Ok(text) = clip.ctx.get_text() else {
+            return std::ptr::null();
+        };
+        let Ok(text) = CString::new(text) else {
+            return std::ptr::null();
+        };
+        clip.text = text;
+        clip.text.as_ptr()
+    }
+
+    struct MyClipboard {
+        ctx: arboard::Clipboard,
+        text: CString,
+    }
+}

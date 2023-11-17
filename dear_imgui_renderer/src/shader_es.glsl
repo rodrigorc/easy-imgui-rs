@@ -1,4 +1,4 @@
-#version 150
+#version 300 es
 
 precision highp float;
 
@@ -18,7 +18,7 @@ void main(void) {
 }
 
 ###
-#version 150
+#version 300 es
 
 precision highp float;
 

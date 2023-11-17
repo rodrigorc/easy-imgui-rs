@@ -1,8 +1,10 @@
+mod renderer;
 pub mod glr;
-pub mod window;
-pub mod conv;
-pub mod renderer;
 pub use glow;
+pub use dear_imgui;
+pub use dear_imgui_sys;
+
+pub use renderer::*;
 
 // These macros should be in glr, but hey...
 

@@ -638,3 +638,13 @@ imgui_flags! {
         Trailing,
     }
 }
+
+imgui_flags! {
+    pub BackendFlags: ImGuiBackendFlags_ {
+        None,
+        HasGamepad,
+        HasMouseCursors,
+        HasSetMousePos,
+        RendererHasVtxOffset,
+    }
+}

@@ -3,21 +3,14 @@ name = "dear_imgui_renderer"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["clipboard"]
-clipboard = ["dep:arboard"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 dear_imgui-sys = { path = "../dear_imgui-sys" }
 dear_imgui = { path = "../dear_imgui" }
 
 anyhow = "1"
-smallvec = "1"
 cgmath = "0.18"
-
+smallvec = "1"
 glow = "0.12"
-glutin = "0.30"
-glutin-winit = "0.3"
-raw-window-handle = "0.5"
-arboard = { version = "3", optional = true, default_features = false }
-winit = { version = "0.28", features = ["x11", "mint"] }
+log = "*"

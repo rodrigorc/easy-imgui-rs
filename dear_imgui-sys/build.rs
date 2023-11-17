@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use xshell::Shell;
 
 fn main() {
+    //simple_logger::SimpleLogger::new().init().unwrap();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
     // imgui_ori is a sumbodule of the upstream imgui repository, and as such does not have a
     // proper imconfig.h for this projects. Changing that file in the submodule is inconvenient
@@ -66,15 +68,16 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         None
     };
 
-    let mut bindings = bindgen::Builder::default()
+    let mut bindings = bindgen::Builder::default();
+    bindings = bindings
         .clang_args(["-I", &imgui_src.to_string_lossy()])
         .clang_args(["-x", "c++"])
         .clang_args(["-D", "IMGUI_DISABLE_SSE"]) // that is only for inline functions
         .header(imgui_src.join("imgui.h").to_string_lossy())
         .header(imgui_src.join("imgui_internal.h").to_string_lossy())
         .allowlist_file(".*/imgui.h")
-        .allowlist_file(".*/imgui_internal.h") // many people use the internals, so better to expose
-                                               // thos, just do not use them lightly
+        // many people use the internals, so better to expose those, just do not use them lightly
+        .allowlist_file(".*/imgui_internal.h")
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
         .newtype_enum(".*");
@@ -94,8 +97,11 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .expect("Couldn't write bindings!");
 
     let mut build = cc::Build::new();
+    if target_arch != "wasm32" {
+        build
+            .cpp(true);
+    }
     build
-        .cpp(true)
         .file("wrapper.cpp")
         .include(&imgui_src);
     if let Some(freetype) = &freetype {

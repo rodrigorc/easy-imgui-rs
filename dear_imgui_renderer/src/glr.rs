@@ -1,7 +1,6 @@
 // Too many unsafes ahead
 #![allow(dead_code, clippy::missing_safety_doc)]
 
-use std::num::NonZeroU32;
 use std::{cell::Cell, marker::PhantomData};
 use std::rc::Rc;
 
@@ -176,7 +175,7 @@ impl Program {
             let st = gl.get_program_link_status(prg.id);
             if !st {
                 let msg = gl.get_program_info_log(prg.id);
-                eprintln!("{msg}");
+                log::error!("{msg}");
                 return Err(GLError(gl.get_error()));
             }
 
@@ -239,7 +238,7 @@ impl Program {
             let _bufs = attribs.bind(self);
             self.gl.draw_arrays(primitive, 0, attribs.len() as i32);
             if let Err(e) = check_gl(&self.gl) {
-                eprintln!("Error {e:?}");
+                log::error!("Error {e:?}");
             }
         }
     }
@@ -274,7 +273,7 @@ impl Shader {
             if !st {
                 //TODO: get errors
                 let msg = gl.get_shader_info_log(sh.id);
-                eprintln!("{msg}");
+                log::error!("{msg}");
                 return Err(GLError(gl.get_error()));
             }
             Ok(sh)
@@ -310,7 +309,7 @@ impl Uniform {
         &self.name
     }
     pub fn location(&self) -> glow::UniformLocation {
-        self.location
+        self.location.clone()
     }
 }
 
@@ -836,12 +835,16 @@ pub struct BinderFramebuffer<TGT: BinderFBOTarget> {
 
 impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
     pub fn new(gl: &GlContext) -> Self {
+        #[cfg(not(target_arch="wasm32"))]
         let id = unsafe {
-            gl.get_parameter_i32(TGT::GET_BINDING) as u32
+            let id = gl.get_parameter_i32(TGT::GET_BINDING) as u32;
+            std::num::NonZeroU32::new(id).map(glow::NativeFramebuffer)
         };
+        #[cfg(target_arch="wasm32")]
+        let id = None;
         BinderFramebuffer {
             gl: gl.clone(),
-            id: NonZeroU32::new(id).map(glow::NativeFramebuffer),
+            id,
             _pd: PhantomData
         }
     }

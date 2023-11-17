@@ -364,15 +364,27 @@ name = "dear_imgui_renderer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arboard",
  "cgmath",
  "dear_imgui",
  "dear_imgui-sys",
  "glow",
+ "log",
+ "smallvec",
+]
+
+[[package]]
+name = "dear_imgui_window"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "dear_imgui",
+ "dear_imgui-sys",
+ "dear_imgui_renderer",
+ "glow",
  "glutin",
  "glutin-winit",
  "raw-window-handle",
- "smallvec",
  "winit",
 ]
 
@@ -436,9 +448,7 @@ dependencies = [
  "anyhow",
  "cgmath",
  "cstr",
- "dear_imgui",
- "dear_imgui-sys",
- "dear_imgui_renderer",
+ "dear_imgui_window",
  "glow",
  "glutin",
  "glutin-winit",
@@ -495,6 +505,7 @@ dependencies = [
  "dear_imgui",
  "dear_imgui-sys",
  "dear_imgui_renderer",
+ "dear_imgui_window",
  "gilrs",
  "glow",
  "glutin",
@@ -1602,6 +1613,15 @@ dependencies = [
  "lazy_static",
  "log",
  "pkg-config",
+]
+
+[[package]]
+name = "web"
+version = "0.1.0"
+dependencies = [
+ "dear_imgui",
+ "dear_imgui-sys",
+ "glow",
 ]
 
 [[package]]

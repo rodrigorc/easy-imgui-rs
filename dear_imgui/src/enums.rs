@@ -201,7 +201,6 @@ imgui_flags!{
         NoBringToFrontOnFocus,
         AlwaysVerticalScrollbar,
         AlwaysHorizontalScrollbar,
-        AlwaysUseWindowPadding,
         NoNavInputs,
         NoNavFocus,
         UnsavedDocument,
@@ -211,6 +210,19 @@ imgui_flags!{
     }
 }
 
+imgui_flags!{
+    pub ChildFlags: ImGuiChildFlags_ {
+        None,
+        Border,
+        AlwaysUseWindowPadding,
+        ResizeX,
+        ResizeY,
+        AutoResizeX,
+        AutoResizeY,
+        AlwaysAutoResize,
+        FrameStyle,
+    }
+}
 imgui_flags!{
     pub ButtonFlags: ImGuiButtonFlags_ {
         None,

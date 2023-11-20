@@ -130,7 +130,7 @@ impl UiBuilder for MyData {
                         }
                     });
                 });
-                ui.do_child("T").border(true).size([0.0, 0.0]).with(|ui| {
+                ui.do_child("T").child_flags(imgui::ChildFlags::Border).size([0.0, 0.0]).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {

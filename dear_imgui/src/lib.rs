@@ -465,13 +465,13 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         size (ImVec2) (&size),
-        border (bool) (border),
-        flags (WindowFlags) (flags.bits()),
+        child_flags (ChildFlags) (child_flags.bits()),
+        window_flags (WindowFlags) (window_flags.bits()),
     )
     {
         decl_builder_setter_into!{size: Vector2}
-        decl_builder_setter!{border: bool}
-        decl_builder_setter!{flags: WindowFlags}
+        decl_builder_setter!{child_flags: ChildFlags}
+        decl_builder_setter!{window_flags: WindowFlags}
     }
     {
         pub fn do_child<S: IntoCStr>(&mut self, name: S) -> Child<&mut Self, S> {
@@ -479,8 +479,8 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
                 u: self,
                 name: name.into(),
                 size: ImVec2::zero(),
-                border: false,
-                flags: WindowFlags::None,
+                child_flags: ChildFlags::None,
+                window_flags: WindowFlags::None,
                 push: (),
             }
         }

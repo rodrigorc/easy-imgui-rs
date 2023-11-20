@@ -1,11 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "dear_imgui-sys",
-    "dear_imgui",
-    "dear_imgui_renderer",
-    "dear_imgui_window",
-    "example",
-    "gamepad",
+    "easy-imgui-sys",
+    "easy-imgui",
+    "easy-imgui-renderer",
+    "easy-imgui-window",
     "web",
 ]

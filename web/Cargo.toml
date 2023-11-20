@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-dear_imgui-sys = { path = "../dear_imgui-sys" }
-dear_imgui = { path = "../dear_imgui" }
-#dear_imgui_renderer = { path = "../dear_imgui_renderer" }
-#glutin = { version = "*", default_features = false, features = ["egl"] }
+easy-imgui-sys = { path = "../easy-imgui-sys" }
+easy-imgui = { path = "../easy-imgui" }
 glow = "*"
 

@@ -1,8 +1,8 @@
 use std::{rc::Rc, time::Duration};
 
-use dear_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
-use dear_imgui_window::{MainWindow, MainWindowWithRenderer};
-use dear_imgui_renderer::{Renderer, Application, glr::GlContext};
+use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
+use easy_imgui_window::{MainWindow, MainWindowWithRenderer};
+use easy_imgui_renderer::{Renderer, Application, glr::GlContext};
 use glow::HasContext;
 use glutin::{display::GetGlDisplay, prelude::GlDisplay};
 use winit::event_loop::{EventLoopBuilder, EventLoopProxy};
@@ -126,7 +126,7 @@ impl MyApp {
 impl UiBuilder for MyApp {
     type Data = ();
 
-    fn do_ui(&mut self, ui: &mut dear_imgui::Ui<Self::Data>) {
+    fn do_ui(&mut self, ui: &mut easy_imgui::Ui<Self::Data>) {
         if self.demo {
             ui.show_demo_window(Some(&mut self.demo));
         }

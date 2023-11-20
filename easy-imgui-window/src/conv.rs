@@ -1,6 +1,6 @@
 use winit::{window::CursorIcon, event::{VirtualKeyCode, MouseButton}};
-use dear_imgui_sys::*;
-use dear_imgui as imgui;
+use easy_imgui_sys::*;
+use easy_imgui as imgui;
 
 pub fn to_imgui_button(btncode: MouseButton) -> Option<imgui::MouseButton> {
     let btn = match btncode {

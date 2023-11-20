@@ -2,12 +2,12 @@ use std::num::NonZeroU32;
 use std::time::{Instant, Duration};
 use glutin_winit::DisplayBuilder;
 use winit::{window::{Window, CursorIcon, WindowBuilder}, event::{Event, VirtualKeyCode}, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::{EventLoopWindowTarget, ControlFlow}};
-use dear_imgui_sys::*;
-use dear_imgui as imgui;
+use easy_imgui_sys::*;
+use easy_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
-use dear_imgui_renderer::{Renderer, Application};
+use easy_imgui_renderer::{Renderer, Application};
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
 struct MainWindowStatus {
@@ -403,7 +403,7 @@ mod clipboard {
                 text: CString::default(),
             };
             unsafe {
-                let io = &mut *dear_imgui_sys::ImGui_GetIO();
+                let io = &mut *easy_imgui_sys::ImGui_GetIO();
                 io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
                 io.SetClipboardTextFn = Some(set_clipboard_text);
                 io.GetClipboardTextFn = Some(get_clipboard_text);

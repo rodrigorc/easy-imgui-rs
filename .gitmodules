@@ -1,3 +1,3 @@
 [submodule "imgui"]
-	path = dear_imgui-sys/imgui
+	path = easy-imgui-sys/imgui
 	url = https://github.com/ocornut/imgui

@@ -309,6 +309,8 @@ impl Uniform {
         &self.name
     }
     pub fn location(&self) -> glow::UniformLocation {
+        // UniformLocation is usually Copy, but not for WebAssembly, for some reason
+        #[allow(clippy::clone_on_copy)]
         self.location.clone()
     }
 }

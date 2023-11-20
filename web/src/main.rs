@@ -1,5 +1,5 @@
-use dear_imgui as imgui;
-use dear_imgui_sys::*;
+use easy_imgui as imgui;
+use easy_imgui_sys::*;
 
 fn main() {
     println!("Hello, world!");

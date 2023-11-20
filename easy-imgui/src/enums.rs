@@ -1,5 +1,5 @@
 #![allow(non_upper_case_globals)]
-use dear_imgui_sys::*;
+use easy_imgui_sys::*;
 
 macro_rules! imgui_enum_ex {
     ($vis:vis $name:ident: $native_name:ident { $($field:ident = $value:ident),* $(,)? }) => {

@@ -8,13 +8,13 @@ use std::mem::MaybeUninit;
 use std::cell::UnsafeCell;
 use std::borrow::Cow;
 use cstr::cstr;
-use dear_imgui_sys::*;
+use easy_imgui_sys::*;
 
 mod enums;
 mod style;
 
 pub use enums::*;
-pub use dear_imgui_sys::{self, Vector2, Color, ImGuiID};
+pub use easy_imgui_sys::{self, Vector2, Color, ImGuiID};
 use image::GenericImage;
 
 struct BackendData {

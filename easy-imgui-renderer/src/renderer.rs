@@ -1,10 +1,10 @@
 use std::mem::size_of;
 
-use dear_imgui_sys::*;
+use easy_imgui_sys::*;
 use anyhow::{Result, anyhow};
 use glow::HasContext;
 
-use dear_imgui as imgui;
+use easy_imgui as imgui;
 use imgui::TextureId;
 use crate::glr;
 

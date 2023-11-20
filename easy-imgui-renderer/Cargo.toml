@@ -1,13 +1,13 @@
 [package]
-name = "dear_imgui_renderer"
+name = "easy-imgui-renderer"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dear_imgui-sys = { path = "../dear_imgui-sys" }
-dear_imgui = { path = "../dear_imgui" }
+easy-imgui-sys = { path = "../easy-imgui-sys" }
+easy-imgui = { path = "../easy-imgui" }
 
 anyhow = "1"
 cgmath = "0.18"

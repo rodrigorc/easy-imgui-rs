@@ -1,8 +1,8 @@
 mod renderer;
 pub mod glr;
 pub use glow;
-pub use dear_imgui;
-pub use dear_imgui_sys;
+pub use easy_imgui;
+pub use easy_imgui_sys;
 
 pub use renderer::*;
 

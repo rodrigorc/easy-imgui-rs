@@ -110,27 +110,27 @@ impl UiBuilder for MyData {
         }
         ui.set_next_window_size([300.0, 300.0], imgui::Cond::Once);
         ui.set_next_window_pos([0.0, 0.0], imgui::Cond::Once, [0.0, 0.0]);
-        ui.do_window(cstr!("Yo"))
+        ui.window_config(cstr!("Yo"))
             .open(&mut true)
             .flags(imgui::WindowFlags::MenuBar)
             .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
             .with(|ui: &mut imgui::Ui<Self::Data>| {
 
-                ui.do_progress_bar(self.x / 6.0).overlay("hola").build();
-                ui.do_slider_angle("Angle", &mut self.x).display_format(imgui::FloatFormat::F(1)).build();
+                ui.progress_bar_config(self.x / 6.0).overlay("hola").build();
+                ui.slider_angle_config("Angle", &mut self.x).display_format(imgui::FloatFormat::F(1)).build();
 
                 let mut s = 1;
                 ui.list_box("List", 3, [1, 2, 3, 4, 5, 6], |i| format!("{i}"), &mut s);
 
                 ui.with_menu_bar(|ui| {
-                    ui.do_menu("File").with(|ui| {
-                        if ui.do_menu_item("Exit").shortcut("Ctrl-X").build() {
+                    ui.menu_config("File").with(|ui| {
+                        if ui.menu_item_config("Exit").shortcut("Ctrl-X").build() {
                             let st = ui.style();
                             println!("{:#?}", st);
                         }
                     });
                 });
-                ui.do_child("T").child_flags(imgui::ChildFlags::Border).size([0.0, 0.0]).with(|ui| {
+                ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 0.0]).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -148,7 +148,7 @@ impl UiBuilder for MyData {
                     ui.separator();
                     ui.separator_text("Hala");
 
-                    ui.do_image_button_with_custom_rect("Image", self.rr, 2.0)
+                    ui.image_button_with_custom_rect_config("Image", self.rr, 2.0)
                         .build();
                     ui.with_push(
                         (
@@ -171,29 +171,29 @@ impl UiBuilder for MyData {
                         }
                     );
                     ui.checkbox("Click me!", &mut self.checked);
-                    ui.do_popup_context_void().with(|ui| {
-                        ui.do_selectable("hala!").build();
+                    ui.popup_context_void_config().with(|ui| {
+                        ui.selectable_config("hala!").build();
                     });
-                    ui.do_combo("Combo").preview_value("One").with(|ui| {
+                    ui.combo_config("Combo").preview_value("One").with(|ui| {
                         ui.text("ha");
-                        ui.do_selectable("One").flags(SelectableFlags::DontClosePopups).build();
-                        ui.do_selectable("Two").build();
-                        ui.do_selectable("Three").build();
+                        ui.selectable_config("One").flags(SelectableFlags::DontClosePopups).build();
+                        ui.selectable_config("Two").build();
+                        ui.selectable_config("Three").build();
                     });
                     let mut sel = (self.sel, "");
                     if ui.combo("Other", ["One", "Two", "Three", "Two"].into_iter().enumerate(), |(_, n)| n, &mut sel) {
                         self.sel = sel.0;
                     }
-                    ui.do_drag_float_2("Drag x 2##d1", (&mut self.drags[0..2]).try_into().unwrap())
+                    ui.drag_float_2_config("Drag x 2##d1", (&mut self.drags[0..2]).try_into().unwrap())
                         .speed(0.01)
                         .range(0.0, 1.0)
                         .flags(SliderFlags::AlwaysClamp)
                         .build();
-                    ui.do_input_float("Float", &mut self.x)
+                    ui.input_float_config("Float", &mut self.x)
                         .step(1.0)
                         .step_fast(10.0)
                         .build();
-                    ui.do_input_text_hint("Input", "Aquí", &mut self.input).build();
+                    ui.input_text_hint_config("Input", "Aquí", &mut self.input).build();
 
                     ui.foreground_draw_list().add_circle([50.0, 50.0], 25.0, [1.0, 1.0, 0.0, 1.0], 32, 2.0);
                     ui.background_draw_list().add_circle([150.0, 150.0], 25.0, [1.0, 0.0, 0.0, 1.0], 32, 2.0);

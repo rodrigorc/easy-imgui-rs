@@ -132,7 +132,7 @@ impl UiBuilder for MyApp {
         }
 
         ui.set_next_window_size([400.0, 300.0], Cond::Always);
-        ui.do_window("Gamepad")
+        ui.window_config("Gamepad")
             .flags(WindowFlags::AlwaysAutoResize)
             .with(|ui| {
                 /*
@@ -142,8 +142,8 @@ impl UiBuilder for MyApp {
                    ui.checkbox("X", &mut { self.btn[3] });
                    ui.checkbox("LB", &mut { self.btn[4] });
                    ui.checkbox("RT", &mut { self.btn[5] });
-                   ui.do_slider_float("LT2", &mut { self.abtn[0] }).build();
-                   ui.do_slider_float("RT2", &mut { self.abtn[1] }).build();
+                   uislider_float_config("LT2", &mut { self.abtn[0] }).build();
+                   ui.slider_float_config("RT2", &mut { self.abtn[1] }).build();
                    */
 
                 let p0 = ui.get_cursor_screen_pos();

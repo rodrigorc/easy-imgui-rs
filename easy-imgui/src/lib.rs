@@ -11,7 +11,7 @@ use cstr::cstr;
 use easy_imgui_sys::*;
 
 mod enums;
-mod style;
+pub mod style;
 
 pub use enums::*;
 pub use easy_imgui_sys::{self, Vector2, Color, ImGuiID};
@@ -311,6 +311,10 @@ pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
 
 unsafe fn no_op() {}
 
+/// `Ui` represents an ImGui frame that is being built.
+///
+/// Usually you will get a `&mut Ui` when you are expected to build a user interface,
+/// as in [`UiBuilder::do_ui`].
 pub struct Ui<'ctx, D> {
     data: &'ctx mut D,
     generation: usize,
@@ -318,7 +322,9 @@ pub struct Ui<'ctx, D> {
 }
 
 macro_rules! with_begin_end {
-    ( $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
+    ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
+        //$(#[$attr])*
+        /// See $begin
         pub fn $name<R>(&mut self, $($arg: $($type)*,)* f: impl FnOnce(&mut Self) -> R) -> R {
             unsafe { $begin( $( $pass, )* ) }
             let r = f(self);
@@ -474,7 +480,7 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
         decl_builder_setter!{window_flags: WindowFlags}
     }
     {
-        pub fn do_child<S: IntoCStr>(&mut self, name: S) -> Child<&mut Self, S> {
+        pub fn child_config<S: IntoCStr>(&mut self, name: S) -> Child<&mut Self, S> {
             Child {
                 u: self,
                 name: name.into(),
@@ -498,7 +504,7 @@ decl_builder_with!{Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
         decl_builder_setter!{flags: WindowFlags}
     }
     {
-        pub fn do_window<S: IntoCStr>(&mut self, name: S) -> Window<&mut Self, S> {
+        pub fn window_config<S: IntoCStr>(&mut self, name: S) -> Window<&mut Self, S> {
             Window {
                 u: self,
                 name: name.into(),
@@ -534,7 +540,7 @@ decl_builder!{ MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
         decl_builder_setter!{enabled: bool}
     }
     {
-        pub fn do_menu_item<S: IntoCStr>(&mut self, label: S) -> MenuItem<&mut Self, S, &str> {
+        pub fn menu_item_config<S: IntoCStr>(&mut self, label: S) -> MenuItem<&mut Self, S, &str> {
             MenuItem {
                 u: self,
                 label: label.into(),
@@ -555,7 +561,7 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
         decl_builder_setter_into!{size: Vector2}
     }
     {
-        pub fn do_button<S: IntoCStr>(&mut self, label: S) -> Button<&mut Self, S> {
+        pub fn button_config<S: IntoCStr>(&mut self, label: S) -> Button<&mut Self, S> {
             Button {
                 u: self,
                 label: label.into(),
@@ -571,14 +577,14 @@ decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn do_small_button<S: IntoCStr>(&mut self, label: S) -> SmallButton<&mut Self, S> {
+        pub fn small_button_config<S: IntoCStr>(&mut self, label: S) -> SmallButton<&mut Self, S> {
             SmallButton {
                 u: self,
                 label: label.into(),
             }
         }
         pub fn small_button<S: IntoCStr>(&mut self, label: S) -> bool {
-            self.do_small_button(label).build()
+            self.small_button_config(label).build()
         }
     }
 }
@@ -594,7 +600,7 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
         decl_builder_setter!{flags: ButtonFlags}
     }
     {
-        pub fn do_invisible_button<S: IntoCStr>(&mut self, id: S) -> InvisibleButton<&mut Self, S> {
+        pub fn invisible_button_config<S: IntoCStr>(&mut self, id: S) -> InvisibleButton<&mut Self, S> {
             InvisibleButton {
                 u: self,
                 id: id.into(),
@@ -612,7 +618,7 @@ decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn do_arrow_button<S: IntoCStr>(&mut self, id: S, dir: Dir) -> ArrowButton<&mut Self, S> {
+        pub fn arrow_button_config<S: IntoCStr>(&mut self, id: S, dir: Dir) -> ArrowButton<&mut Self, S> {
             ArrowButton {
                 u: self,
                 id: id.into(),
@@ -620,7 +626,7 @@ decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
             }
         }
         pub fn arrow_button<S: IntoCStr>(&mut self, id: S, dir: Dir) -> bool {
-            self.do_arrow_button(id, dir).build()
+            self.arrow_button_config(id, dir).build()
         }
     }
 }
@@ -632,7 +638,7 @@ decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
     )
     {}
     {
-        pub fn do_checkbox<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut bool) -> Checkbox<'v, &mut Self, S> {
+        pub fn checkbox_config<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut bool) -> Checkbox<'v, &mut Self, S> {
             Checkbox {
                 u: self,
                 label: label.into(),
@@ -640,7 +646,7 @@ decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
             }
         }
         pub fn checkbox<S: IntoCStr>(&mut self, label: S, value: &mut bool) -> bool {
-            self.do_checkbox(label, value).build()
+            self.checkbox_config(label, value).build()
         }
     }
 }
@@ -652,7 +658,7 @@ decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn do_radio_button<S: IntoCStr>(&mut self, label: S, active: bool) -> RadioButton<&mut Self, S> {
+        pub fn radio_button_config<S: IntoCStr>(&mut self, label: S, active: bool) -> RadioButton<&mut Self, S> {
             RadioButton {
                 u: self,
                 label: label.into(),
@@ -680,7 +686,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
         }
     }
     {
-        pub fn do_progress_bar<'a>(&mut self, fraction: f32) -> ProgressBar<&mut Self, &'a str> {
+        pub fn progress_bar_config<'a>(&mut self, fraction: f32) -> ProgressBar<&mut Self, &'a str> {
             ProgressBar {
                 u: self,
                 fraction,
@@ -707,7 +713,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
         decl_builder_setter_into!{border_col: Color}
     }
     {
-        pub fn do_image(&mut self, user_texture_id: TextureId, size: impl Into<Vector2>) -> Image<&mut Self> {
+        pub fn image_config(&mut self, user_texture_id: TextureId, size: impl Into<Vector2>) -> Image<&mut Self> {
             Image {
                 u: self,
                 user_texture_id,
@@ -718,7 +724,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
                 border_col: Color::from([0.0, 0.0, 0.0, 0.0]).into(),
             }
         }
-        pub fn do_image_with_custom_rect(&mut self, ridx: CustomRectIndex, scale: f32) -> Image<&mut Self> {
+        pub fn image_with_custom_rect_config(&mut self, ridx: CustomRectIndex, scale: f32) -> Image<&mut Self> {
             let atlas = self.font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
@@ -728,7 +734,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
             let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
             let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
 
-            self.do_image(tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+            self.image_config(tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
                 .uv0(uv0)
                 .uv1(uv1)
         }
@@ -752,7 +758,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         decl_builder_setter_into!{tint_col: Color}
     }
     {
-        pub fn do_image_button<S: IntoCStr>(&mut self, str_id: S, user_texture_id: TextureId, size: impl Into<Vector2>) -> ImageButton<&mut Self, S> {
+        pub fn image_button_config<S: IntoCStr>(&mut self, str_id: S, user_texture_id: TextureId, size: impl Into<Vector2>) -> ImageButton<&mut Self, S> {
             ImageButton {
                 u: self,
                 str_id: str_id.into(),
@@ -764,7 +770,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
                 tint_col: Color::from([1.0, 1.0, 1.0, 1.0]).into(),
             }
         }
-        pub fn do_image_button_with_custom_rect<S: IntoCStr>(&mut self, str_id: S, ridx: CustomRectIndex, scale: f32) -> ImageButton<&mut Self, S> {
+        pub fn image_button_with_custom_rect_config<S: IntoCStr>(&mut self, str_id: S, ridx: CustomRectIndex, scale: f32) -> ImageButton<&mut Self, S> {
             let atlas = self.font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
@@ -774,7 +780,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
             let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
             let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
 
-            self.do_image_button(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+            self.image_button_config(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
                 .uv0(uv0)
                 .uv1(uv1)
         }
@@ -794,7 +800,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
         decl_builder_setter_into!{size: Vector2}
     }
     {
-        pub fn do_selectable<S: IntoCStr>(&mut self, label: S) -> Selectable<&mut Self, S> {
+        pub fn selectable_config<S: IntoCStr>(&mut self, label: S) -> Selectable<&mut Self, S> {
             Selectable {
                 u: self,
                 label: label.into(),
@@ -804,7 +810,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
             }
         }
         pub fn selectable<S: IntoCStr>(&mut self, label: S) -> bool {
-            self.do_selectable(label).build()
+            self.selectable_config(label).build()
         }
     }
 }
@@ -867,20 +873,20 @@ macro_rules! impl_float_format {
     };
 }
 
-decl_builder_drag!{ DragFloat do_drag_float ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_drag!{ DragFloat2 do_drag_float_2 ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag!{ DragFloat3 do_drag_float_3 ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag!{ DragFloat4 do_drag_float_4 ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat drag_float_config ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_drag!{ DragFloat2 drag_float_2_config ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat3 drag_float_3_config ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag!{ DragFloat4 drag_float_4_config ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
 impl_float_format!{ DragFloat }
 impl_float_format!{ DragFloat2 }
 impl_float_format!{ DragFloat3 }
 impl_float_format!{ DragFloat4 }
 
-decl_builder_drag!{ DragInt do_drag_int ImGui_DragInt 'v (i32) (&'v mut i32) (std::convert::identity)}
-decl_builder_drag!{ DragInt2 do_drag_int_2 ImGui_DragInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
-decl_builder_drag!{ DragInt3 do_drag_int_3 ImGui_DragInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
-decl_builder_drag!{ DragInt4 do_drag_int_4 ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag!{ DragInt drag_int_config ImGui_DragInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_drag!{ DragInt2 drag_int_2_config ImGui_DragInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag!{ DragInt3 drag_int_3_config ImGui_DragInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag!{ DragInt4 drag_int_4_config ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
 macro_rules! decl_builder_slider {
     ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
@@ -918,20 +924,20 @@ macro_rules! decl_builder_slider {
     };
 }
 
-decl_builder_slider!{ SliderFloat do_slider_float ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_slider!{ SliderFloat2 do_slider_float_2 ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderFloat3 do_slider_float_3 ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderFloat4 do_slider_float_4 ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderFloat slider_float_config ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_slider!{ SliderFloat2 slider_float_2_config ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderFloat3 slider_float_3_config ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderFloat4 slider_float_4_config ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
 impl_float_format!{ SliderFloat }
 impl_float_format!{ SliderFloat2 }
 impl_float_format!{ SliderFloat3 }
 impl_float_format!{ SliderFloat4 }
 
-decl_builder_slider!{ SliderInt do_slider_int ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
-decl_builder_slider!{ SliderInt2 do_slider_int_2 ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderInt3 do_slider_int_3 ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderInt4 do_slider_int_4 ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderInt slider_int_config ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_slider!{ SliderInt2 slider_int_2_config ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderInt3 slider_int_3_config ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider!{ SliderInt4 slider_int_4_config ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
 decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
     (
@@ -948,7 +954,7 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
         decl_builder_setter!{flags: SliderFlags}
     }
     {
-        pub fn do_slider_angle<'v, S: IntoCStr>(&mut self, label: S, v_rad: &'v mut f32) -> SliderAngle<'v, &mut Self, S> {
+        pub fn slider_angle_config<'v, S: IntoCStr>(&mut self, label: S, v_rad: &'v mut f32) -> SliderAngle<'v, &mut Self, S> {
             SliderAngle {
                 u: self,
                 label: label.into(),
@@ -974,7 +980,7 @@ decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn do_color_edit_3<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 3]) -> ColorEdit3<'v, &mut Self, S> {
+        pub fn color_edit_3_config<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 3]) -> ColorEdit3<'v, &mut Self, S> {
             ColorEdit3 {
                 u: self,
                 label: label.into(),
@@ -995,7 +1001,7 @@ decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn do_color_edit_4<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 4]) -> ColorEdit4<'v, &mut Self, S> {
+        pub fn color_edit_4_config<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 4]) -> ColorEdit4<'v, &mut Self, S> {
             ColorEdit4 {
                 u: self,
                 label: label.into(),
@@ -1016,7 +1022,7 @@ decl_builder! { ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn do_color_picker_3<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 3]) -> ColorPicker3<'v, &mut Self, S> {
+        pub fn color_picker_3_config<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 3]) -> ColorPicker3<'v, &mut Self, S> {
             ColorPicker3 {
                 u: self,
                 label: label.into(),
@@ -1042,7 +1048,7 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
         }
     }
     {
-        pub fn do_color_picker_4<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 4]) -> ColorPicker4<'v, &mut Self, S> {
+        pub fn color_picker_4_config<'v, S: IntoCStr>(&mut self, label: S, color: &'v mut [f32; 4]) -> ColorPicker4<'v, &mut Self, S> {
             ColorPicker4 {
                 u: self,
                 label: label.into(),
@@ -1105,7 +1111,7 @@ decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn do_input_text<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputText<'v, &mut Self, S> {
+        pub fn input_text_config<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputText<'v, &mut Self, S> {
             InputText {
                 u: self,
                 label:label.into(),
@@ -1144,7 +1150,7 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
         decl_builder_setter_into!{size: Vector2}
     }
     {
-        pub fn do_input_text_multiline<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputTextMultiline<'v, &mut Self, S> {
+        pub fn input_text_multiline_config<'v, S: IntoCStr>(&mut self, label: S, text: &'v mut String) -> InputTextMultiline<'v, &mut Self, S> {
             InputTextMultiline {
                 u: self,
                 label:label.into(),
@@ -1183,7 +1189,7 @@ decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCSt
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn do_input_text_hint<'v, S1: IntoCStr, S2: IntoCStr>(&mut self, label: S1, hint: S2, text: &'v mut String) -> InputTextHint<'v, &mut Self, S1, S2> {
+        pub fn input_text_hint_config<'v, S1: IntoCStr, S2: IntoCStr>(&mut self, label: S1, hint: S2, text: &'v mut String) -> InputTextHint<'v, &mut Self, S1, S2> {
             InputTextHint {
                 u: self,
                 label:label.into(),
@@ -1215,7 +1221,7 @@ decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: f32}
     }
     {
-        pub fn do_input_float<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut f32) -> InputFloat<'v, &mut Self, S> {
+        pub fn input_float_config<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut f32) -> InputFloat<'v, &mut Self, S> {
             InputFloat {
                 u: self,
                 label:label.into(),
@@ -1243,7 +1249,7 @@ decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: i32}
     }
     {
-        pub fn do_input_int<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut i32) -> InputInt<'v, &mut Self, S> {
+        pub fn input_int_config<'v, S: IntoCStr>(&mut self, label: S, value: &'v mut i32) -> InputInt<'v, &mut Self, S> {
             InputInt {
                 u: self,
                 label:label.into(),
@@ -1284,9 +1290,9 @@ macro_rules! decl_builder_input_f {
     };
 }
 
-decl_builder_input_f!{ InputFloat2 do_input_float_2 ImGui_InputFloat2 2}
-decl_builder_input_f!{ InputFloat3 do_input_float_3 ImGui_InputFloat3 3}
-decl_builder_input_f!{ InputFloat4 do_input_float_4 ImGui_InputFloat4 4}
+decl_builder_input_f!{ InputFloat2 input_float_2_config ImGui_InputFloat2 2}
+decl_builder_input_f!{ InputFloat3 input_float_3_config ImGui_InputFloat3 3}
+decl_builder_input_f!{ InputFloat4 input_float_4_config ImGui_InputFloat4 4}
 
 impl_float_format!{ InputFloat }
 impl_float_format!{ InputFloat2 }
@@ -1320,9 +1326,9 @@ macro_rules! decl_builder_input_i {
     };
 }
 
-decl_builder_input_i!{ InputInt2 do_input_int_2 ImGui_InputInt2 2}
-decl_builder_input_i!{ InputInt3 do_input_int_3 ImGui_InputInt3 3}
-decl_builder_input_i!{ InputInt4 do_input_int_4 ImGui_InputInt4 4}
+decl_builder_input_i!{ InputInt2 input_int_2_config ImGui_InputInt2 2}
+decl_builder_input_i!{ InputInt3 input_int_3_config ImGui_InputInt3 3}
+decl_builder_input_i!{ InputInt4 input_int_4_config ImGui_InputInt4 4}
 
 decl_builder_with_opt!{Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
     (
@@ -1333,7 +1339,7 @@ decl_builder_with_opt!{Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
         decl_builder_setter!{enabled: bool}
     }
     {
-        pub fn do_menu<S: IntoCStr>(&mut self, name: S) -> Menu<&mut Self, S> {
+        pub fn menu_config<S: IntoCStr>(&mut self, name: S) -> Menu<&mut Self, S> {
             Menu {
                 u: self,
                 name: name.into(),
@@ -1353,7 +1359,7 @@ decl_builder_with_opt!{CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: In
         decl_builder_setter!{flags: TreeNodeFlags}
     }
     {
-        pub fn do_collapsing_header<S: IntoCStr>(&mut self, label: S) -> CollapsingHeader<&mut Self, S> {
+        pub fn collapsing_header_config<S: IntoCStr>(&mut self, label: S) -> CollapsingHeader<&mut Self, S> {
             CollapsingHeader {
                 u: self,
                 label: label.into(),
@@ -1389,7 +1395,7 @@ decl_builder_with_opt!{TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: Int
         decl_builder_setter!{flags: TreeNodeFlags}
     }
     {
-        pub fn do_tree_node<S: IntoCStr>(&mut self, label: S) -> TreeNode<&mut Self, S, usize> {
+        pub fn tree_node_config<S: IntoCStr>(&mut self, label: S) -> TreeNode<&mut Self, S, usize> {
             TreeNode {
                 u: self,
                 label: LabelId::Label(label),
@@ -1397,7 +1403,7 @@ decl_builder_with_opt!{TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: Int
                 push: (),
             }
         }
-        pub fn do_tree_node_ex<'s, 'a: 's, H: Hashable>(&'s mut self, id: H, label: &'a str) -> TreeNode<&'s mut Self, &'a str, H> {
+        pub fn tree_node_ex_config<'s, 'a: 's, H: Hashable>(&'s mut self, id: H, label: &'a str) -> TreeNode<&'s mut Self, &'a str, H> {
             TreeNode {
                 u: self,
                 label: LabelId::LabelId(label, id),
@@ -1417,7 +1423,7 @@ decl_builder_with_opt!{Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
         decl_builder_setter!{flags: WindowFlags}
     }
     {
-        pub fn do_popup<S: IntoCStr>(&mut self, str_id: S) -> Popup<&mut Self, S> {
+        pub fn popup_config<S: IntoCStr>(&mut self, str_id: S) -> Popup<&mut Self, S> {
             Popup {
                 u: self,
                 str_id: str_id.into(),
@@ -1442,7 +1448,7 @@ decl_builder_with_opt!{PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: 
         }
     }
     {
-        pub fn do_popup_modal<S: IntoCStr>(&mut self, name: S) -> PopupModal<&mut Self, S> {
+        pub fn popup_modal_config<S: IntoCStr>(&mut self, name: S) -> PopupModal<&mut Self, S> {
             PopupModal {
                 u: self,
                 name: name.into(),
@@ -1487,9 +1493,9 @@ macro_rules! decl_builder_popup_context {
     };
 }
 
-decl_builder_popup_context!{PopupContextItem ImGui_BeginPopupContextItem do_popup_context_item}
-decl_builder_popup_context!{PopupContextWindow ImGui_BeginPopupContextWindow do_popup_context_window}
-decl_builder_popup_context!{PopupContextVoid ImGui_BeginPopupContextVoid do_popup_context_void}
+decl_builder_popup_context!{PopupContextItem ImGui_BeginPopupContextItem popup_context_item_config}
+decl_builder_popup_context!{PopupContextWindow ImGui_BeginPopupContextWindow popup_context_window_config}
+decl_builder_popup_context!{PopupContextVoid ImGui_BeginPopupContextVoid popup_context_void_config}
 
 decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr, S2: IntoCStr)
     (
@@ -1513,7 +1519,7 @@ decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr,
         }
     }
     {
-        pub fn do_combo<'a, S: IntoCStr>(&mut self, label: S) -> Combo<&mut Self, S, &'a str> {
+        pub fn combo_config<'a, S: IntoCStr>(&mut self, label: S) -> Combo<&mut Self, S, &'a str> {
             Combo {
                 u: self,
                 label: label.into(),
@@ -1532,11 +1538,11 @@ decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr,
         ) -> bool
         {
             let mut changed = false;
-            self.do_combo(label)
+            self.combo_config(label)
                 .preview_value(f_name(*current))
                 .with(|ui| {
                     for val in values {
-                        if ui.do_selectable(f_name(val))
+                        if ui.selectable_config(f_name(val))
                             .selected(*current == val)
                             .build()
                         {
@@ -1559,7 +1565,7 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
         decl_builder_setter_into!{size: Vector2}
     }
     {
-        pub fn do_list_box<S: IntoCStr>(&mut self, label: S) -> ListBox<&mut Self, S> {
+        pub fn list_box_config<S: IntoCStr>(&mut self, label: S) -> ListBox<&mut Self, S> {
             ListBox {
                 u: self,
                 label: label.into(),
@@ -1586,11 +1592,11 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
             let height_in_pixels = self.get_text_line_height_with_spacing() * height_in_items_f + self.style().frame_padding().y * 2.0;
 
             let mut changed = false;
-            self.do_list_box(label)
+            self.list_box_config(label)
                 .size([0.0, height_in_pixels.floor()])
                 .with(|ui| {
                     for val in values {
-                        if ui.do_selectable(f_name(val))
+                        if ui.selectable_config(f_name(val))
                             .selected(*current == val)
                             .build()
                         {
@@ -1613,7 +1619,7 @@ decl_builder_with_opt!{TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCSt
         decl_builder_setter!{flags: TabBarFlags}
     }
     {
-        pub fn do_tab_bar<S: IntoCStr>(&mut self, std_id: S) -> TabBar<&mut Self, S> {
+        pub fn tab_bar_config<S: IntoCStr>(&mut self, std_id: S) -> TabBar<&mut Self, S> {
             TabBar {
                 u: self,
                 std_id: std_id.into(),
@@ -1636,7 +1642,7 @@ decl_builder_with_opt!{TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: In
         decl_builder_setter!{opened: &'o mut bool}
     }
     {
-        pub fn do_tab_item<S: IntoCStr>(&mut self, std_id: S) -> TabItem<&mut Self, S> {
+        pub fn tab_item_config<S: IntoCStr>(&mut self, std_id: S) -> TabItem<&mut Self, S> {
             TabItem {
                 u: self,
                 std_id: std_id.into(),
@@ -1738,20 +1744,37 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         }
     }
 
-    with_begin_end!{with_group ImGui_BeginGroup ImGui_EndGroup ()}
-    with_begin_end!{with_disabled ImGui_BeginDisabled ImGui_EndDisabled (
-        disabled (bool) (disabled),
-    ) }
-    with_begin_end!{with_clip_rect ImGui_PushClipRect ImGui_PopClipRect (
-        clip_rect_min (Vector2) (&clip_rect_min.into()),
-        clip_rect_max (Vector2) (&clip_rect_max.into()),
-        intersect_with_current_clip_rect (bool) (intersect_with_current_clip_rect),
-    ) }
+    with_begin_end!{
+        /// See [ImGui_BeginGroup].
+        with_group ImGui_BeginGroup ImGui_EndGroup ()
+    }
+    with_begin_end!{
+        /// See [ImGui_BeginDisabled].
+        with_disabled ImGui_BeginDisabled ImGui_EndDisabled (
+            disabled (bool) (disabled),
+        )
+    }
+    with_begin_end!{
+        /// See [ImGui_PushClipRect].
+        with_clip_rect ImGui_PushClipRect ImGui_PopClipRect (
+            clip_rect_min (Vector2) (&clip_rect_min.into()),
+            clip_rect_max (Vector2) (&clip_rect_max.into()),
+            intersect_with_current_clip_rect (bool) (intersect_with_current_clip_rect),
+        )
+    }
 
-    with_begin_end_opt!{with_main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()}
-    with_begin_end_opt!{with_menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar () }
-    with_begin_end_opt!{with_tooltip ImGui_BeginTooltip ImGui_EndTooltip () }
-    with_begin_end_opt!{with_item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip () }
+    with_begin_end_opt!{
+        with_main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()
+    }
+    with_begin_end_opt!{
+        with_menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar ()
+    }
+    with_begin_end_opt!{
+        with_tooltip ImGui_BeginTooltip ImGui_EndTooltip ()
+    }
+    with_begin_end_opt!{
+        with_item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip ()
+    }
 
     pub fn with_push<R>(&mut self, style: impl Pushable, f: impl FnOnce(&mut Self) -> R) -> R {
         let r;

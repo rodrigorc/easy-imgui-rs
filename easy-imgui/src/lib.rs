@@ -1651,6 +1651,16 @@ decl_builder_with_opt!{TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: In
                 push: (),
             }
         }
+        pub fn tab_item_button(label: impl IntoCStr, flags: TabItemFlags) -> bool {
+            unsafe {
+                ImGui_TabItemButton(label.into().as_ptr(), flags.bits())
+            }
+        }
+        pub fn set_tab_item_closed(tab_or_docked_window_label: impl IntoCStr) {
+            unsafe {
+                ImGui_SetTabItemClosed(tab_or_docked_window_label.into().as_ptr());
+            }
+        }
     }
 }
 
@@ -3141,3 +3151,99 @@ impl Viewport<'_> {
         self.ptr.WorkSize.into()
     }
 }
+
+decl_builder_with!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
+    (
+        str_id (S::Temp) (str_id.as_ptr()),
+        column (i32) (column),
+        flags (TableFlags) (flags.bits()),
+        outer_size (ImVec2) (&outer_size),
+        inner_width (f32) (inner_width),
+    )
+    {
+        decl_builder_setter!{flags: TableFlags}
+        decl_builder_setter_into!{outer_size: Vector2}
+        decl_builder_setter!{inner_width: f32}
+    }
+    {
+        pub fn table_config<S: IntoCStr>(&mut self, str_id: S, column: i32) -> TableConfig<&mut Self, S> {
+            TableConfig {
+                u: self,
+                str_id: str_id.into(),
+                column,
+                flags: TableFlags::None,
+                outer_size: ImVec2::zero(),
+                inner_width: 0.0,
+                push: (),
+            }
+        }
+        pub fn table_next_row(&mut self, flags: TableRowFlags, min_row_height: f32) {
+            unsafe {
+                ImGui_TableNextRow(flags.bits(), min_row_height);
+            }
+        }
+        pub fn table_next_column(&mut self) -> bool {
+            unsafe {
+                ImGui_TableNextColumn()
+            }
+        }
+        pub fn table_set_column_index(&mut self, column_n: i32) -> bool {
+            unsafe {
+                ImGui_TableSetColumnIndex(column_n)
+            }
+        }
+        pub fn table_setup_column(&mut self, label: impl IntoCStr, flags: TableColumnFlags, init_width_or_weight: f32, user_id: ImGuiID) {
+            unsafe {
+                ImGui_TableSetupColumn(label.into().as_ptr(), flags.bits(), init_width_or_weight, user_id);
+            }
+        }
+        pub fn table_setup_scroll_freeze(&mut self, cols: i32, rows: i32) {
+            unsafe {
+                ImGui_TableSetupScrollFreeze(cols, rows);
+            }
+        }
+        pub fn table_headers_row(&mut self) {
+            unsafe {
+                ImGui_TableHeadersRow();
+            }
+        }
+        pub fn table_angle_headers_row(&mut self) {
+            unsafe {
+                ImGui_TableAngledHeadersRow();
+            }
+        }
+        pub fn table_get_columns_count(&mut self) -> i32 {
+            unsafe {
+                ImGui_TableGetColumnCount()
+            }
+        }
+        pub fn table_get_column_index(&mut self) -> i32 {
+            unsafe {
+                ImGui_TableGetColumnIndex()
+            }
+        }
+        pub fn table_get_row_index(&mut self) -> i32 {
+            unsafe {
+                ImGui_TableGetRowIndex()
+            }
+        }
+        pub fn table_get_column_flags(&mut self, column_n: Option<i32>) -> TableColumnFlags {
+            let bits = unsafe {
+                ImGui_TableGetColumnFlags(column_n.unwrap_or(-1))
+            };
+            TableColumnFlags::from_bits_truncate(bits)
+        }
+        pub fn table_set_column_enabled(&mut self, column_n: Option<i32>, enabled: bool) {
+            unsafe {
+                ImGui_TableSetColumnEnabled(column_n.unwrap_or(-1), enabled);
+            };
+        }
+        pub fn table_set_bg_color(&mut self, target: TableBgTarget, color: impl Into<Color>, column_n: Option<i32>) {
+            unsafe {
+                ImGui_TableSetBgColor(target.bits(), color_to_u32(color), column_n.unwrap_or(-1));
+            };
+        }
+        //TODO: ImGui_TableGetSortSpecs, TableGetColumnName
+    }
+}
+

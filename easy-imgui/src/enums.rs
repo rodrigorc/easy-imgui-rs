@@ -660,3 +660,101 @@ imgui_flags! {
         RendererHasVtxOffset,
     }
 }
+
+imgui_flags! {
+    pub TableFlags: ImGuiTableFlags_ {
+        None,
+        // Features
+        Resizable,
+        Reorderable,
+        Hideable,
+        Sortable,
+        NoSavedSettings,
+        ContextMenuInBody,
+        // Decorations
+        RowBg,
+        BordersInnerH,
+        BordersOuterH,
+        BordersInnerV,
+        BordersOuterV,
+        BordersH,
+        BordersV,
+        BordersInner,
+        BordersOuter,
+        Borders,
+        NoBordersInBody,
+        NoBordersInBodyUntilResize,
+        // Sizing Policy (read above for defaults)
+        SizingFixedFit,
+        SizingFixedSame,
+        SizingStretchProp,
+        SizingStretchSame,
+        // Sizing Extra Options
+        NoHostExtendX,
+        NoHostExtendY,
+        NoKeepColumnsVisible,
+        PreciseWidths,
+        // Clipping
+        NoClip,
+        // Padding
+        PadOuterX,
+        NoPadOuterX,
+        NoPadInnerX,
+        // Scrolling
+        ScrollX,
+        ScrollY,
+        // Sorting
+        SortMulti,
+        SortTristate,
+        // Miscellaneous
+        HighlightHoveredColumn,
+    }
+}
+
+imgui_flags! {
+    pub TableRowFlags: ImGuiTableRowFlags_ {
+        None,
+        Headers,
+    }
+}
+
+imgui_flags! {
+    pub TableColumnFlags: ImGuiTableColumnFlags_ {
+        // Input configuration flags
+        None,
+        Disabled,
+        DefaultHide,
+        DefaultSort,
+        WidthStretch,
+        WidthFixed,
+        NoResize,
+        NoReorder,
+        NoHide,
+        NoClip,
+        NoSort,
+        NoSortAscending,
+        NoSortDescending,
+        NoHeaderLabel,
+        NoHeaderWidth,
+        PreferSortAscending,
+        PreferSortDescending,
+        IndentEnable,
+        IndentDisable,
+        AngledHeader,
+
+        // Output status flags, read-only via Table::get_column_flags()
+        IsEnabled,
+        IsVisible,
+        IsSorted,
+        IsHovered,
+    }
+}
+
+imgui_enum! {
+    pub TableBgTarget: ImGuiTableBgTarget_ {
+        None,
+        RowBg0,
+        RowBg1,
+        CellBg,
+    }
+}

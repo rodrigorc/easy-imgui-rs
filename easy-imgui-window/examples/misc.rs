@@ -95,7 +95,7 @@ impl UiBuilder for MyData {
         {
             *ui.data() += 1;
             self.z += 1;
-            ui.set_next_window_size_constraints_callback([20.0, 20.0], [520.0, 520.0], |_data, mut d| {
+            ui.set_next_window_size_constraints_callback([20.0, 20.0], [1000.0, 1000.0], |_data, mut d| {
                 let mut sz = d.desired_size();
                 sz.x = (sz.x / 100.0).round() * 100.0;
                 sz.y = (sz.y / 100.0).round() * 100.0;
@@ -130,7 +130,7 @@ impl UiBuilder for MyData {
                         }
                     });
                 });
-                ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 0.0]).with(|ui| {
+                ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 300.0]).with(|ui| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -198,6 +198,53 @@ impl UiBuilder for MyData {
                     ui.foreground_draw_list().add_circle([50.0, 50.0], 25.0, [1.0, 1.0, 0.0, 1.0], 32, 2.0);
                     ui.background_draw_list().add_circle([150.0, 150.0], 25.0, [1.0, 0.0, 0.0, 1.0], 32, 2.0);
                 });
+
+                ui.table_config("Table 1", 3)
+                    .flags(imgui::TableFlags::Borders)
+                    .with(|ui| {
+                        ui.table_setup_column("Hello", imgui::TableColumnFlags::None, 0.0, 0);
+                        ui.table_setup_column("World", imgui::TableColumnFlags::None, 0.0, 0);
+                        ui.table_setup_column("!!!", imgui::TableColumnFlags::None, 0.0, 0);
+                        ui.table_headers_row();
+
+                        ui.table_next_row(imgui::TableRowFlags::None, 0.0);
+
+                        ui.table_next_column();
+                        ui.text("Uno");
+                        ui.table_next_column();
+                        ui.text("Dos");
+                        ui.table_next_column();
+                        ui.text("Tres");
+
+                        ui.table_next_row(imgui::TableRowFlags::None, 0.0);
+                        ui.table_next_column();
+                        ui.text("1");
+                        ui.table_next_column();
+                        ui.text("2");
+                        ui.table_next_column();
+
+                        ui.table_config("Table 2", 2)
+                            .flags(imgui::TableFlags::Borders)
+                            .with(|ui| {
+                                ui.table_next_row(imgui::TableRowFlags::Headers, 0.0);
+
+                                ui.table_next_column();
+                                ui.text("X");
+                                ui.table_next_column();
+                                ui.text("Y");
+                            });
+                    });
+                ui.tab_bar_config("Tab Bar")
+                    .with(|ui| {
+                        ui.tab_item_config("Tab1")
+                            .with(|ui| {
+                                ui.text("hi!");
+                            });
+                        ui.tab_item_config("Tab2")
+                            .with(|ui| {
+                                ui.text("bye!");
+                            });
+                    });
             });
         ui.show_demo_window(None);
         //println!("{}", *ui.data());

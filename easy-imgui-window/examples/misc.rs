@@ -69,7 +69,7 @@ struct MyData {
 impl UiBuilder for MyData {
     type Data = i32;
 
-    fn do_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>) {
+    fn do_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>, _: &mut i32) {
         self.f1 = atlas.add_font_collection([
             imgui::FontInfo::new(KARLA_TTF, 18.0),
             imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac),
@@ -90,10 +90,10 @@ impl UiBuilder for MyData {
         let rr = atlas.get_custom_rect(self.rr);
     }
 
-    fn do_ui(&mut self, ui: &mut imgui::Ui<Self::Data>) {
+    fn do_ui(&mut self, ui: &imgui::Ui<Self::Data>, _data: &mut Self::Data) {
         let mut y = 0;
         {
-            *ui.data() += 1;
+            //*ui.data() += 1;
             self.z += 1;
             ui.set_next_window_size_constraints_callback([20.0, 20.0], [1000.0, 1000.0], |_data, mut d| {
                 let mut sz = d.desired_size();
@@ -108,29 +108,33 @@ impl UiBuilder for MyData {
             });
             //println!("<<<<<<<<< {X}");
         }
+        *_data += 1;
         ui.set_next_window_size([300.0, 300.0], imgui::Cond::Once);
         ui.set_next_window_pos([0.0, 0.0], imgui::Cond::Once, [0.0, 0.0]);
         ui.window_config(cstr!("Yo"))
             .open(&mut true)
             .flags(imgui::WindowFlags::MenuBar)
             .push_for_begin((imgui::StyleVar::WindowPadding, imgui::StyleValue::Vec2([20.0, 20.0].into())))
-            .with(|ui: &mut imgui::Ui<Self::Data>| {
-
+            .with(|| {
                 ui.progress_bar_config(self.x / 6.0).overlay("hola").build();
                 ui.slider_angle_config("Angle", &mut self.x).display_format(imgui::FloatFormat::F(1)).build();
 
                 let mut s = 1;
                 ui.list_box("List", 3, [1, 2, 3, 4, 5, 6], |i| format!("{i}"), &mut s);
 
-                ui.with_menu_bar(|ui| {
-                    ui.menu_config("File").with(|ui| {
+                let x = String::from("x");
+                ui.tree_node_config(&x).with(|| {});
+                ui.tree_node_ex_config(42, &x).with(|| {});
+
+                ui.with_menu_bar(|| {
+                    ui.menu_config("File").with(|| {
                         if ui.menu_item_config("Exit").shortcut("Ctrl-X").build() {
                             let st = ui.style();
                             println!("{:#?}", st);
                         }
                     });
                 });
-                ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 300.0]).with(|ui| {
+                ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 300.0]).with(|| {
                     ui.window_draw_list().add_callback({
                         let gl = self.gl.clone();
                         move |data| {
@@ -161,20 +165,20 @@ impl UiBuilder for MyData {
                                 (imgui::StyleVar::Alpha, imgui::StyleValue::F32(0.25)),
                             ],
                         ),
-                        |ui| {
+                        || {
                             ui.text("Test #2");
-                            ui.with_item_tooltip(|ui| {
-                                ui.with_push(self.f1, |ui| {
+                            ui.with_item_tooltip(|| {
+                                ui.with_push(self.f1, || {
                                     ui.text("ok...");
                                 });
                             })
                         }
                     );
                     ui.checkbox("Click me!", &mut self.checked);
-                    ui.popup_context_void_config().with(|ui| {
+                    ui.popup_context_void_config().with(|| {
                         ui.selectable_config("hala!").build();
                     });
-                    ui.combo_config("Combo").preview_value("One").with(|ui| {
+                    ui.combo_config("Combo").preview_value("One").with(|| {
                         ui.text("ha");
                         ui.selectable_config("One").flags(SelectableFlags::DontClosePopups).build();
                         ui.selectable_config("Two").build();
@@ -201,7 +205,7 @@ impl UiBuilder for MyData {
 
                 ui.table_config("Table 1", 3)
                     .flags(imgui::TableFlags::Borders)
-                    .with(|ui| {
+                    .with(|| {
                         ui.table_setup_column("Hello", imgui::TableColumnFlags::None, 0.0, 0);
                         ui.table_setup_column("World", imgui::TableColumnFlags::None, 0.0, 0);
                         ui.table_setup_column("!!!", imgui::TableColumnFlags::None, 0.0, 0);
@@ -225,7 +229,7 @@ impl UiBuilder for MyData {
 
                         ui.table_config("Table 2", 2)
                             .flags(imgui::TableFlags::Borders)
-                            .with(|ui| {
+                            .with(|| {
                                 ui.table_next_row(imgui::TableRowFlags::Headers, 0.0);
 
                                 ui.table_next_column();
@@ -235,13 +239,13 @@ impl UiBuilder for MyData {
                             });
                     });
                 ui.tab_bar_config("Tab Bar")
-                    .with(|ui| {
+                    .with(|| {
                         ui.tab_item_config("Tab1")
-                            .with(|ui| {
+                            .with(|| {
                                 ui.text("hi!");
                             });
                         ui.tab_item_config("Tab2")
-                            .with(|ui| {
+                            .with(|| {
                                 ui.text("bye!");
                             });
                     });
@@ -257,7 +261,7 @@ impl UiBuilder for MyData {
 
 impl Application for MyData {
 
-    fn do_background(&mut self) {
+    fn do_background(&mut self, _: &mut i32) {
         unsafe {
             self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);

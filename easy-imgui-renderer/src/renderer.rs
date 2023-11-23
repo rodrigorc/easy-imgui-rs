@@ -9,7 +9,7 @@ use imgui::TextureId;
 use crate::glr;
 
 pub trait Application: imgui::UiBuilder {
-    fn do_background(&mut self);
+    fn do_background(&mut self, data: &mut Self::Data);
 }
 
 pub struct Renderer {
@@ -117,7 +117,7 @@ impl Renderer {
             self.imgui.set_current();
 
             if let Some(mut atlas) = self.imgui.update_atlas() {
-                app.do_custom_atlas(&mut atlas);
+                app.do_custom_atlas(&mut atlas, data);
                 atlas.build_custom_rects();
                 Self::update_atlas(&self.gl, &self.objs.atlas);
             }
@@ -125,15 +125,14 @@ impl Renderer {
             self.imgui.do_frame(
                 data,
                 app,
-                |app| {
+                |app, data| {
                     let io = &*ImGui_GetIO();
                     self.gl.viewport(
                         0, 0,
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
                         (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
                     );
-
-                    app.do_background();
+                    app.do_background(data);
                     let draw_data = ImGui_GetDrawData();
                     Self::render(&self.gl, &self.objs, draw_data);
                 }

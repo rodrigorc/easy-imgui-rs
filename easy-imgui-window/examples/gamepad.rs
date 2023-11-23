@@ -126,7 +126,7 @@ impl MyApp {
 impl UiBuilder for MyApp {
     type Data = ();
 
-    fn do_ui(&mut self, ui: &mut easy_imgui::Ui<Self::Data>) {
+    fn do_ui(&mut self, ui: &easy_imgui::Ui<Self::Data>, _data: &mut Self::Data) {
         if self.demo {
             ui.show_demo_window(Some(&mut self.demo));
         }
@@ -134,7 +134,7 @@ impl UiBuilder for MyApp {
         ui.set_next_window_size([400.0, 300.0], Cond::Always);
         ui.window_config("Gamepad")
             .flags(WindowFlags::AlwaysAutoResize)
-            .with(|ui| {
+            .with(|| {
                 /*
                    ui.checkbox("A", &mut { self.btn[0] });
                    ui.checkbox("B", &mut { self.btn[1] });
@@ -171,7 +171,7 @@ impl UiBuilder for MyApp {
 }
 
 impl Application for MyApp {
-    fn do_background(&mut self) {
+    fn do_background(&mut self, _data: &mut ()) {
         unsafe {
             self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
             self.gl.clear(glow::COLOR_BUFFER_BIT);

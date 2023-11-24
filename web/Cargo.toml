@@ -6,5 +6,3 @@ edition = "2021"
 [dependencies]
 easy-imgui-sys = { path = "../easy-imgui-sys" }
 easy-imgui = { path = "../easy-imgui" }
-glow = "*"
-

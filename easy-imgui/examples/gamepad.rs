@@ -1,11 +1,12 @@
 use std::{rc::Rc, time::Duration};
 
-use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
-use easy_imgui_window::{MainWindow, MainWindowWithRenderer};
-use easy_imgui_renderer::{Renderer, Application, glr::GlContext};
-use glow::HasContext;
-use glutin::{display::GetGlDisplay, prelude::GlDisplay};
-use winit::event_loop::{EventLoopBuilder, EventLoopProxy};
+use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color};
+use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
+    easy_imgui_renderer::{Renderer, glow},
+    glutin::{display::GetGlDisplay, prelude::GlDisplay},
+    winit::{self, event_loop::{EventLoopBuilder, EventLoopProxy}},
+};
+
 use anyhow::Result;
 
 fn main() {
@@ -21,9 +22,9 @@ fn main() {
     let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
     let gl = Rc::new(gl);
 
-    let renderer = Renderer::new(gl.clone()).unwrap();
+    let renderer = Renderer::new(gl, Some(Color::from([0.45, 0.55, 0.60, 1.0]))).unwrap();
 
-    let app = MyApp::new(gl);
+    let app = MyApp::new();
     let mut window = MainWindowWithRenderer::new(window, renderer, app);
 
     event_loop.run(move |event, _w, control_flow| {
@@ -32,7 +33,7 @@ fn main() {
             winit::event::Event::UserEvent(e) => {
                 //println!("{e:?}");
                 window.ping_user_input();
-                window.application().update_gamepad(e);
+                window.app_mut().update_gamepad(e);
             }
             _ => {}
         }
@@ -42,7 +43,6 @@ fn main() {
 
 #[derive(Debug)]
 struct MyApp {
-    gl: GlContext,
     demo: bool,
     connected: bool,
     axis: [f32; 4],
@@ -51,9 +51,8 @@ struct MyApp {
 }
 
 impl MyApp {
-    fn new(gl: GlContext) -> Self {
+    fn new() -> Self {
         MyApp {
-            gl,
             demo: true,
             connected: true,
             axis: [0.0; 4],
@@ -124,9 +123,7 @@ impl MyApp {
 }
 
 impl UiBuilder for MyApp {
-    type Data = ();
-
-    fn do_ui(&mut self, ui: &easy_imgui::Ui<Self::Data>, _data: &mut Self::Data) {
+    fn do_ui(&mut self, ui: &easy_imgui::Ui<Self>) {
         if self.demo {
             ui.show_demo_window(Some(&mut self.demo));
         }
@@ -167,15 +164,6 @@ impl UiBuilder for MyApp {
                         dr.add_circle([p0.x + pos[0], p0.y + pos[1]], 20.0, [1.0, 0.0, 0.0, 1.0], 0, 4.0);
                     }
             });
-    }
-}
-
-impl Application for MyApp {
-    fn do_background(&mut self, _data: &mut ()) {
-        unsafe {
-            self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
-        }
     }
 }
 

@@ -109,9 +109,9 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "bindgen"
-version = "0.68.1"
+version = "0.69.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
+checksum = "9ffcebc3849946a7170a05992aac39da343a90676ab392c51a4280981d6379c2"
 dependencies = [
  "bitflags 2.4.0",
  "cexpr",
@@ -406,9 +406,12 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 name = "easy-imgui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitflags 2.4.0",
  "cstr",
  "easy-imgui-sys",
+ "easy-imgui-window",
+ "gilrs",
  "image",
  "mint",
  "paste",
@@ -449,7 +452,6 @@ dependencies = [
  "easy-imgui-renderer",
  "easy-imgui-sys",
  "gilrs",
- "glow",
  "glutin",
  "glutin-winit",
  "image",
@@ -626,9 +628,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "glow"
-version = "0.12.3"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca0fe580e4b60a8ab24a868bc08e2f03cbcb20d3d676601fa909386713333728"
+checksum = "886c2a30b160c4c6fec8f987430c26b526b7988ca71f664e6a699ddf6f9601e4"
 dependencies = [
  "js-sys",
  "slotmap",
@@ -1759,7 +1761,6 @@ version = "0.1.0"
 dependencies = [
  "easy-imgui",
  "easy-imgui-sys",
- "glow",
 ]
 
 [[package]]

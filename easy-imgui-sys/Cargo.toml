@@ -9,7 +9,7 @@ links = "imgui"
 mint = "0.5"
 
 [build-dependencies]
-bindgen = "0.68"
+bindgen = "0.69"
 cc = "1"
 pkg-config = "0.3"
 xshell = "0.2"

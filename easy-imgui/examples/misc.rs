@@ -2,12 +2,14 @@
 
 use std::rc::Rc;
 use cstr::cstr;
-use winit::event_loop::EventLoopBuilder;
-use glutin::display::{GetGlDisplay, GlDisplay};
-use glow::HasContext;
+use easy_imgui as imgui;
+use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
+    easy_imgui_renderer::{Renderer, glow::{self, HasContext}},
+    winit::event_loop::EventLoopBuilder,
+    glutin::display::{GetGlDisplay, GlDisplay},
+};
 use imgui::{FontId, CustomRectIndex, UiBuilder, SelectableFlags, SliderFlags, FontAtlasMut};
-use easy_imgui_window::{MainWindow, MainWindowWithRenderer, easy_imgui as imgui, easy_imgui_renderer::{Renderer, Application}};
-use imgui::image::GenericImage;
+use imgui::{image::GenericImage, Color};
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
 static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
@@ -20,12 +22,7 @@ fn main() {
     let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
     let gl = Rc::new(gl);
 
-    let mut renderer = Renderer::new(gl.clone()).unwrap();
-
-    let imgui = renderer.imgui();
-    //let f1 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 18.0));
-    //imgui.merge_font(imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac));
-    //let f2 = imgui.add_font(imgui::FontInfo::new(KARLA_TTF, 36.0));
+    let renderer = Renderer::new(gl.clone(), Some(Color::from([0.45, 0.55, 0.60, 1.0]))).unwrap();
 
     let my = MyData {
         gl,
@@ -41,13 +38,12 @@ fn main() {
     };
 
     let mut window = MainWindowWithRenderer::new(window, renderer, my);
-
     let mut x = 0;
     let mut y = 0;
     event_loop.run(move |event, _w, control_flow| {
         x += 1;
         //window.ping_user_input();
-        window.do_event_with_data(&event, control_flow, &mut x);
+        window.do_event(&event, control_flow);
     });
 }
 
@@ -67,9 +63,13 @@ struct MyData {
 }
 
 impl UiBuilder for MyData {
-    type Data = i32;
-
-    fn do_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>, _: &mut i32) {
+    /*fn do_background(&mut self) {
+        unsafe {
+            self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+    }*/
+    fn build_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>) {
         self.f1 = atlas.add_font_collection([
             imgui::FontInfo::new(KARLA_TTF, 18.0),
             imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac),
@@ -90,12 +90,12 @@ impl UiBuilder for MyData {
         let rr = atlas.get_custom_rect(self.rr);
     }
 
-    fn do_ui(&mut self, ui: &imgui::Ui<Self::Data>, _data: &mut Self::Data) {
+    fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
         let mut y = 0;
         {
             //*ui.data() += 1;
             self.z += 1;
-            ui.set_next_window_size_constraints_callback([20.0, 20.0], [1000.0, 1000.0], |_data, mut d| {
+            ui.set_next_window_size_constraints_callback([20.0, 20.0], [1000.0, 1000.0], |mut d| {
                 let mut sz = d.desired_size();
                 sz.x = (sz.x / 100.0).round() * 100.0;
                 sz.y = (sz.y / 100.0).round() * 100.0;
@@ -104,11 +104,10 @@ impl UiBuilder for MyData {
                 //y += 1;
                 //let _ = *x;
                 unsafe { X += 1 };
-                *_data += 1;
             });
             //println!("<<<<<<<<< {X}");
         }
-        *_data += 1;
+        //*_data += 1;
         ui.set_next_window_size([300.0, 300.0], imgui::Cond::Once);
         ui.set_next_window_pos([0.0, 0.0], imgui::Cond::Once, [0.0, 0.0]);
         ui.window_config(cstr!("Yo"))
@@ -141,11 +140,12 @@ impl UiBuilder for MyData {
                             //println!("callback!");
                             //let _ = *x;
                             //y += 1;
-                            *data += 1;
+                            //*data += 1;
                             unsafe {
                                 gl.clear_color(0.2, 0.2, 0.0, 1.0);
                                 gl.clear(glow::COLOR_BUFFER_BIT);
                             }
+                            data.x += 0.1;
                         }
                     });
                     ui.text("Test #1");
@@ -258,15 +258,3 @@ impl UiBuilder for MyData {
     }
 
 }
-
-impl Application for MyData {
-
-    fn do_background(&mut self, _: &mut i32) {
-        unsafe {
-            self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
-        }
-    }
-
-}
-

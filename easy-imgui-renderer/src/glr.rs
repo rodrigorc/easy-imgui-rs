@@ -1,5 +1,5 @@
 // Too many unsafes ahead
-#![allow(dead_code, clippy::missing_safety_doc)]
+#![allow(clippy::missing_safety_doc)]
 
 use std::{cell::Cell, marker::PhantomData};
 use std::rc::Rc;

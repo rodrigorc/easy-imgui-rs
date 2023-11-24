@@ -14,7 +14,6 @@ easy-imgui-renderer = { path = "../easy-imgui-renderer" }
 
 anyhow = "1"
 
-glow = "0.12"
 glutin = "0.30"
 glutin-winit = "0.3"
 raw-window-handle = "0.5"

@@ -8,13 +8,10 @@ use easy_imgui as imgui;
 use imgui::TextureId;
 use crate::glr;
 
-pub trait Application: imgui::UiBuilder {
-    fn do_background(&mut self, data: &mut Self::Data);
-}
-
 pub struct Renderer {
     imgui: imgui::Context,
     gl: glr::GlContext,
+    bg_color: Option<imgui::Color>,
     objs: GlObjects,
 }
 
@@ -32,7 +29,7 @@ struct GlObjects {
 }
 
 impl Renderer {
-    pub fn new(gl: glr::GlContext) -> Result<Renderer> {
+    pub fn new(gl: glr::GlContext, bg_color: Option<Color>) -> Result<Renderer> {
         let atlas;
         let program;
         let vao;
@@ -88,6 +85,7 @@ impl Renderer {
         Ok(Renderer {
             imgui,
             gl,
+            bg_color,
             objs: GlObjects {
                 atlas,
                 program,
@@ -102,6 +100,12 @@ impl Renderer {
             }
         })
     }
+    pub fn set_background_color(&mut self, color: Option<Color>) {
+        self.bg_color = color;
+    }
+    pub fn background_color(&self) -> Option<Color> {
+        self.bg_color
+    }
     pub fn imgui(&mut self) -> &mut imgui::Context {
         &mut self.imgui
     }
@@ -112,28 +116,31 @@ impl Renderer {
             self.imgui.set_size(size, scale);
         }
     }
-    pub fn do_frame<A: Application>(&mut self, data: &mut A::Data, app: &mut A) {
+    pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
         unsafe {
             self.imgui.set_current();
 
             if let Some(mut atlas) = self.imgui.update_atlas() {
-                app.do_custom_atlas(&mut atlas, data);
+                app.build_custom_atlas(&mut atlas);
                 atlas.build_custom_rects();
                 Self::update_atlas(&self.gl, &self.objs.atlas);
             }
 
             self.imgui.do_frame(
-                data,
                 app,
-                |app, data| {
+                || {
                     let io = &*ImGui_GetIO();
                     self.gl.viewport(
                         0, 0,
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
                         (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
                     );
-                    app.do_background(data);
-                    let draw_data = ImGui_GetDrawData();
+                    if let Some(bg) = self.bg_color {
+                        self.gl.clear_color(bg.x, bg.y, bg.z, bg.w);
+                        self.gl.clear(glow::COLOR_BUFFER_BIT);
+                    }
+                },
+                |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data);
                 }
             );
@@ -167,9 +174,7 @@ impl Renderer {
         // We keep this, no need for imgui to hold a copy
         ImFontAtlas_ClearTexData(io.Fonts);
     }
-    unsafe fn render(gl: &glow::Context, objs: &GlObjects, draw_data: *mut ImDrawData) {
-        let draw_data = &*draw_data;
-
+    unsafe fn render(gl: &glow::Context, objs: &GlObjects, draw_data: &ImDrawData) {
         gl.bind_vertex_array(Some(objs.vao.id()));
         gl.use_program(Some(objs.program.id()));
         gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));

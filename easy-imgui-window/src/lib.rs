@@ -5,3 +5,5 @@ pub use window::*;
 pub use easy_imgui_renderer;
 pub use easy_imgui;
 pub use easy_imgui_sys;
+pub use winit;
+pub use glutin;

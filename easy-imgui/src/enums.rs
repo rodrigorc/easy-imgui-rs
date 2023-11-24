@@ -1,4 +1,6 @@
+// These enums have the same name as their C++ equivalent, do not warn about it
 #![allow(non_upper_case_globals)]
+
 use easy_imgui_sys::*;
 
 macro_rules! imgui_enum_ex {

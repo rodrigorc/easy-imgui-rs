@@ -131,6 +131,7 @@ impl Context {
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
     }
+    // I like to be explicit about this particular lifetime
     #[allow(clippy::needless_lifetimes)]
     pub unsafe fn update_atlas<'ui, 'app>(&'ui mut self) -> Option<FontAtlasMut<'ui, 'app>> {
         if !std::mem::take(&mut self.pending_atlas) {
@@ -148,22 +149,21 @@ impl Context {
             custom_rects: Vec::new(),
         })
     }
-    pub unsafe fn do_frame<'ctx, 'a, A: UiBuilder>(
-        &'ctx mut self,
-        data: &'ctx mut A::Data,
-        app: &'a mut A,
-        do_render: impl FnOnce(&'a mut A, &'ctx mut A::Data),
+    pub unsafe fn do_frame<A: UiBuilder>(
+        &mut self,
+        app: &mut A,
+        pre_render: impl FnOnce(),
+        render: impl FnOnce(&ImDrawData),
     )
     {
         let gen = &mut self.backend.get_mut().generation;
         *gen = gen.wrapping_add(1);
 
-        let mut ui = UnsafeCell::new(Ui {
-            data,
+        let mut ui = Ui {
+            data: std::ptr::null_mut(),
             generation: *gen,
             callbacks: RefCell::new(Vec::new()),
-        });
-
+        };
 
         // Not sure if this is totally sound, C callbacks will cast this pointer back to a
         // mutable reference, but those callbacks cannot see this "ui" any other way.
@@ -171,9 +171,17 @@ impl Context {
         let _guard = UiPtrToNullGuard(self);
 
         ImGui_NewFrame();
-        app.do_ui(ui.get_mut(), data);
+        app.do_ui(&ui);
+
+        pre_render();
+        app.pre_render();
+
         ImGui_Render();
-        do_render(app, data);
+
+        ui.data = app;
+
+        let draw_data = ImGui_GetDrawData();
+        render(&*draw_data);
     }
 }
 
@@ -198,9 +206,9 @@ impl Drop for UiPtrToNullGuard<'_> {
 }
 
 pub trait UiBuilder {
-    type Data;
-    fn do_ui(&mut self, ui: &Ui<Self::Data>, data: &mut Self::Data);
-    fn do_custom_atlas<'app>(&'app mut self, _atlas: &mut FontAtlasMut<'app, '_>, _data: &mut Self::Data) {}
+    fn pre_render(&mut self) {}
+    fn do_ui(&mut self, ui: &Ui<Self>);
+    fn build_custom_atlas<'app>(&'app mut self, _atlas: &mut FontAtlasMut<'app, '_>) {}
 }
 
 enum TtfData {
@@ -315,16 +323,18 @@ unsafe fn no_op() {}
 ///
 /// Usually you will get a `&mut Ui` when you are expected to build a user interface,
 /// as in [`UiBuilder::do_ui`].
-pub struct Ui<'ctx, D: 'ctx> {
-    data: *mut D, // only for callbacks, do not use directly
+pub struct Ui<'ctx, A: 'ctx>
+    where A: ?Sized
+{
+    data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
-    callbacks: RefCell<Vec<Box<dyn FnMut(&'ctx mut D, *mut c_void) + 'ctx>>>,
+    callbacks: RefCell<Vec<UiCallback<'ctx, A>>>,
 }
+type UiCallback<'ctx, A> = Box<dyn FnMut(&'ctx mut A, *mut c_void) + 'ctx>;
 
 macro_rules! with_begin_end {
     ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
-        //$(#[$attr])*
-        /// See $begin
+        $(#[$attr])*
         pub fn $name<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> R {
             unsafe { $begin( $( $pass, )* ) }
             let r = f();
@@ -335,7 +345,8 @@ macro_rules! with_begin_end {
 }
 
 macro_rules! with_begin_end_opt {
-    ( $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
+    ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
+        $(#[$attr])*
         pub fn $name<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> Option<R> {
             if !unsafe { $begin( $( $pass, )* ) } {
                 return None;
@@ -373,7 +384,7 @@ macro_rules! decl_builder {
             $($extra)*
         }
 
-        impl<'ctx, D: 'ctx> Ui<'ctx, D> {
+        impl<'ctx, A: 'ctx> Ui<'ctx, A> {
             $($constructor)*
         }
     };
@@ -427,6 +438,7 @@ macro_rules! decl_builder_with_maybe_opt {
                 self.with_always(move |opened| { opened.then(|| f()) })
             }
             pub fn with_always<R>(self, f: impl FnOnce(bool) -> R) -> R {
+                // Some uses will require `mut`, some will not`
                 #[allow(unused_mut)]
                 let $sname { $(mut $arg, )* push } = self;
                 let bres;
@@ -446,7 +458,7 @@ macro_rules! decl_builder_with_maybe_opt {
             $($extra)*
         }
 
-        impl<'ctx, D: 'ctx> Ui<'ctx, D> {
+        impl<'ctx, A: 'ctx> Ui<'ctx, A> {
             $($constructor)*
         }
     };
@@ -1619,11 +1631,11 @@ decl_builder_with_opt!{TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: In
     }
 }
 
-impl<'ctx, D: 'ctx> Ui<'ctx, D> {
+impl<'ctx, A: 'ctx> Ui<'ctx, A> {
     // The callback will be callable until the next call to do_frame()
-    unsafe fn push_callback<A>(&self, mut cb: impl FnMut(&'ctx mut D, A) + 'ctx) -> usize {
-        let cb = Box::new(move |data: &'ctx mut D, ptr: *mut c_void| {
-            let a = ptr as *mut A;
+    unsafe fn push_callback<X>(&self, mut cb: impl FnMut(*mut A, X) + 'ctx) -> usize {
+        let cb = Box::new(move |data: &'ctx mut A, ptr: *mut c_void| {
+            let a = ptr as *mut X;
             cb(data, unsafe { std::ptr::read(a) });
         });
         let mut callbacks = self.callbacks.borrow_mut();
@@ -1632,7 +1644,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
         callbacks.push(cb);
         merge_generation(id, self.generation)
     }
-    unsafe fn run_callback<A>(id: usize, a: A) {
+    unsafe fn run_callback<X>(id: usize, a: X) {
         let io = &*ImGui_GetIO();
         if io.BackendLanguageUserData.is_null() {
             return;
@@ -1643,7 +1655,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             return;
         };
 
-        // The lifetime of ui has been erased, but at least the type of D should be correct
+        // The lifetime of ui has been erased, but at least the type of A should be correct
         let ui = &mut *(backend.ui_ptr as *mut Self);
 
         let mut callbacks = ui.callbacks.borrow_mut();
@@ -1665,15 +1677,17 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
     pub fn set_next_window_size_constraints_callback(&self,
         size_min: impl Into<Vector2>,
         size_max: impl Into<Vector2>,
-        cb: impl FnMut(&'ctx mut D, SizeCallbackData<'_>) + 'ctx,
+        mut cb: impl FnMut(SizeCallbackData<'_>) + 'ctx,
     )
     {
         unsafe {
-            let id = self.push_callback(cb);
+            // Beware! This callback is called while the `do_ui()` is still running, so the argument for the
+            // first callback is null!
+            let id = self.push_callback(move |_, scd| cb(scd));
             ImGui_SetNextWindowSizeConstraints(
                 &size_min.into().into(),
                 &size_max.into().into(),
-                Some(call_size_callback::<D>),
+                Some(call_size_callback::<A>),
                 id as *mut c_void,
             );
         }
@@ -1793,7 +1807,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             ImGui_SetNextWindowBgAlpha(alpha);
         }
     }
-    pub fn window_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, D> {
+    pub fn window_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, A> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
             WindowDrawList {
@@ -1802,7 +1816,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             }
         }
     }
-    pub fn foreground_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, D> {
+    pub fn foreground_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, A> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList();
             WindowDrawList {
@@ -1811,7 +1825,7 @@ impl<'ctx, D: 'ctx> Ui<'ctx, D> {
             }
         }
     }
-    pub fn background_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, D> {
+    pub fn background_draw_list<'a>(&'a self) -> WindowDrawList<'a, 'ctx, A> {
         unsafe {
             let ptr = ImGui_GetBackgroundDrawList();
             WindowDrawList {
@@ -2630,17 +2644,17 @@ impl SizeCallbackData<'_> {
     }
 }
 
-unsafe extern "C" fn call_size_callback<D>(ptr: *mut ImGuiSizeCallbackData) {
+unsafe extern "C" fn call_size_callback<A>(ptr: *mut ImGuiSizeCallbackData) {
     let ptr = &mut *ptr;
     let id = ptr.UserData as usize;
     let data = SizeCallbackData {
         ptr,
     };
-    Ui::<D>::run_callback(id, data);
+    Ui::<A>::run_callback(id, data);
 }
 
-pub struct WindowDrawList<'ui, 'ctx, D> {
-    ui: &'ui Ui<'ctx, D>,
+pub struct WindowDrawList<'ui, 'ctx, A> {
+    ui: &'ui Ui<'ctx, A>,
     ptr: &'ui mut ImDrawList,
 }
 
@@ -2650,7 +2664,7 @@ pub fn color_to_u32(c: impl Into<Color>) -> u32 {
     }
 }
 
-impl<'ui, 'ctx, D> WindowDrawList<'ui, 'ctx, D> {
+impl<'ui, 'ctx, A> WindowDrawList<'ui, 'ctx, A> {
     pub fn add_line(&mut self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, color: impl Into<Color>, thickness: f32) {
         unsafe {
             ImDrawList_AddLine(self.ptr, &p1.into().into(), &p2.into().into(), color_to_u32(color), thickness);
@@ -2762,16 +2776,18 @@ impl<'ui, 'ctx, D> WindowDrawList<'ui, 'ctx, D> {
         }
     }
 
-    pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut D) + 'ctx) {
+    pub fn add_callback(&mut self, cb: impl FnOnce(&'ctx mut A) + 'ctx) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
+        // They are called after `do_ui` so first argument pointer is valid.
+        // The second argument is not used, set to `()``.
         let mut cb = Some(cb);
         unsafe {
             let id = self.ui.push_callback(move |d, _: ()| {
                 if let Some(cb) = cb.take() {
-                    cb(d);
+                    cb(&mut *d);
                 }
             });
-            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<D>), id as *mut c_void);
+            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<A>), id as *mut c_void);
         }
     }
     pub fn add_draw_cmd(&mut self) {
@@ -2782,9 +2798,9 @@ impl<'ui, 'ctx, D> WindowDrawList<'ui, 'ctx, D> {
     }
 }
 
-unsafe extern "C" fn call_drawlist_callback<D>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
+unsafe extern "C" fn call_drawlist_callback<A>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
     let id = (*cmd).UserCallbackData as usize;
-    Ui::<D>::run_callback(id, ());
+    Ui::<A>::run_callback(id, ());
 }
 
 pub trait Hashable {

@@ -7,7 +7,7 @@ use easy_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
-use easy_imgui_renderer::{Renderer, Application};
+use easy_imgui_renderer::Renderer;
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
 struct MainWindowStatus {
@@ -148,7 +148,7 @@ impl MainWindow {
     }
 }
 
-impl<A: Application> MainWindowWithRenderer<A> {
+impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
     pub fn new(main_window: MainWindow, mut renderer: Renderer, app: A) -> MainWindowWithRenderer<A> {
         let size = main_window.window.inner_size();
         let scale = main_window.window.scale_factor();
@@ -167,7 +167,10 @@ impl<A: Application> MainWindowWithRenderer<A> {
     pub fn renderer(&mut self) -> &mut Renderer {
         &mut self.renderer
     }
-    pub fn application(&mut self) -> &mut A {
+    pub fn app(&self) -> &A {
+        &self.app
+    }
+    pub fn app_mut(&mut self) -> &mut A {
         &mut self.app
     }
     pub fn main_window(&mut self) -> &mut MainWindow {
@@ -177,7 +180,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
         self.status.last_input_time = Instant::now();
         self.status.last_input_frame = 0;
     }
-    pub fn do_event_with_data<'ctx, EventUserType>(&'ctx mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow, data: &'ctx mut A::Data) {
+    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow) {
         match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
@@ -232,10 +235,7 @@ impl<A: Application> MainWindowWithRenderer<A> {
                             self.status.current_cursor = cursor;
                         }
                     }
-                    self.renderer.do_frame(
-                        data,
-                        &mut self.app,
-                    );
+                    self.renderer.do_frame(&mut self.app);
                 }
                 self.main_window.surface.swap_buffers(&self.main_window.gl_context).unwrap();
             }
@@ -378,13 +378,6 @@ impl<A: Application> MainWindowWithRenderer<A> {
             }
             _ => { }
         }
-    }
-}
-
-impl<A: Application<Data=()>> MainWindowWithRenderer<A> {
-    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow) {
-        static mut DUMMY: () = ();
-        self.do_event_with_data(event, control_flow, unsafe { &mut DUMMY })
     }
 }
 

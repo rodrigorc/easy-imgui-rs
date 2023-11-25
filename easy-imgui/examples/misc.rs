@@ -15,7 +15,7 @@ static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
 static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
 
 fn main() {
-    let event_loop = EventLoopBuilder::new().build();
+    let event_loop = EventLoopBuilder::new().build().unwrap();
     let mut window = MainWindow::new(&event_loop, "Example").unwrap();
 
     let dsp = window.gl_context().display();
@@ -40,11 +40,14 @@ fn main() {
     let mut window = MainWindowWithRenderer::new(window, renderer, my);
     let mut x = 0;
     let mut y = 0;
-    event_loop.run(move |event, _w, control_flow| {
+    event_loop.run(move |event, w| {
         x += 1;
         //window.ping_user_input();
-        window.do_event(&event, control_flow);
-    });
+        let res = window.do_event(&event, w);
+        if res.is_break() {
+            w.exit();
+        }
+    }).unwrap();
 }
 
 static mut X: i32 = 0;

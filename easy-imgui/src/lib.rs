@@ -118,7 +118,7 @@ impl Context {
             self.add_config_flags(ConfigFlags::NavEnableGamepad);
         }
     }
-    pub unsafe fn set_current(&mut self) {
+    pub unsafe fn set_current(&self) {
         ImGui_SetCurrentContext(self.imgui);
     }
     pub unsafe fn set_size(&mut self, size: impl Into<Vector2>, scale: f32) {
@@ -127,6 +127,12 @@ impl Context {
         io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
         io.FontGlobalScale = scale.recip();
         self.invalidate_font_atlas();
+    }
+    pub fn size(&self) -> Vector2 {
+        unsafe {
+            let io = &mut *ImGui_GetIO();
+            io.DisplaySize.into()
+        }
     }
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
@@ -2837,6 +2843,15 @@ pub trait Pushable {
 impl Pushable for () {
     unsafe fn push(&self) {}
     unsafe fn pop(&self) {}
+}
+
+impl<A: Pushable> Pushable for (A,) {
+    unsafe fn push(&self) {
+        self.0.push();
+    }
+    unsafe fn pop(&self) {
+        self.0.pop();
+    }
 }
 
 impl<A: Pushable, B: Pushable> Pushable for (A, B) {

@@ -11,7 +11,7 @@ use anyhow::Result;
 
 fn main() {
 
-    let event_loop = EventLoopBuilder::with_user_event().build();
+    let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
 
     let proxy = event_loop.create_proxy();
     std::thread::spawn(move || run_input_events(proxy));
@@ -27,7 +27,7 @@ fn main() {
     let app = MyApp::new();
     let mut window = MainWindowWithRenderer::new(window, renderer, app);
 
-    event_loop.run(move |event, _w, control_flow| {
+    event_loop.run(move |event, w| {
         #[allow(clippy::single_match)]
         match &event {
             winit::event::Event::UserEvent(e) => {
@@ -37,8 +37,11 @@ fn main() {
             }
             _ => {}
         }
-        window.do_event(&event, control_flow);
-    });
+        let res = window.do_event(&event, w);
+        if res.is_break() {
+            w.exit();
+        }
+    }).unwrap();
 }
 
 #[derive(Debug)]

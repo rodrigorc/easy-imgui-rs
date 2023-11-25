@@ -1,7 +1,9 @@
 use std::num::NonZeroU32;
 use std::time::{Instant, Duration};
 use glutin_winit::DisplayBuilder;
-use winit::{window::{Window, CursorIcon, WindowBuilder}, event::{Event, VirtualKeyCode}, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::{EventLoopWindowTarget, ControlFlow}};
+use winit::keyboard::PhysicalKey;
+use winit::event::Ime::Commit;
+use winit::{window::{Window, CursorIcon, WindowBuilder}, event::Event, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::EventLoopWindowTarget};
 use easy_imgui_sys::*;
 use easy_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
@@ -180,7 +182,8 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
         self.status.last_input_time = Instant::now();
         self.status.last_input_frame = 0;
     }
-    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, control_flow: &mut ControlFlow) {
+    #[must_use]
+    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
         match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
@@ -190,7 +193,7 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                 }
                 self.status.last_frame = now;
             }
-            Event::MainEventsCleared => {
+            Event::AboutToWait => {
                 unsafe {
                     let io = &*ImGui_GetIO();
                     if io.WantSetMousePos {
@@ -199,45 +202,15 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                         let _ = self.main_window.window.set_cursor_position(pos);
                     }
                 }
-                self.main_window.window.request_redraw();
-            }
-            Event::RedrawEventsCleared => {
                 let now = Instant::now();
                 // If the mouse is down, redraw all the time, maybe the user is dragging.
                 let mouse = unsafe { ImGui_IsAnyMouseDown() };
                 self.status.last_input_frame += 1;
                 if mouse || now.duration_since(self.status.last_input_time) < Duration::from_millis(1000) || self.status.last_input_frame < 60 {
-                    *control_flow = ControlFlow::Poll;
-                } else {
-                    *control_flow = ControlFlow::Wait;
+                    // No need to call set_control_flow(): doing a redraw will force extra Poll.
+                    // Not doing it will default to Wait.
+                    self.main_window.window.request_redraw();
                 }
-            }
-            Event::RedrawRequested(_) => {
-                unsafe {
-                    let io = &*ImGui_GetIO();
-					let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
-                    if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
-                        let cursor = if io.MouseDrawCursor {
-                            None
-                        } else {
-                            let cursor = imgui::MouseCursor::from_bits(ImGui_GetMouseCursor())
-                                .unwrap_or(imgui::MouseCursor::Arrow);
-                            from_imgui_cursor(cursor)
-                        };
-                        if cursor != self.status.current_cursor {
-                            match cursor {
-                                None => self.main_window.window.set_cursor_visible(false),
-                                Some(c) => {
-                                    self.main_window.window.set_cursor_icon(c);
-                                    self.main_window.window.set_cursor_visible(true);
-                                }
-                            }
-                            self.status.current_cursor = cursor;
-                        }
-                    }
-                    self.renderer.do_frame(&mut self.app);
-                }
-                self.main_window.surface.swap_buffers(&self.main_window.gl_context).unwrap();
             }
             Event::WindowEvent {
                 window_id,
@@ -245,13 +218,40 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
             } if *window_id == self.main_window.window.id() => {
                 use winit::event::WindowEvent::*;
 
-                self.ping_user_input();
-
                 match event {
                     CloseRequested => {
-                        *control_flow = ControlFlow::Exit;
+                        return std::ops::ControlFlow::Break(());
+                    }
+                    RedrawRequested => {
+                        unsafe {
+                            let io = &*ImGui_GetIO();
+                            let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
+                            if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
+                                let cursor = if io.MouseDrawCursor {
+                                    None
+                                } else {
+                                    let cursor = imgui::MouseCursor::from_bits(ImGui_GetMouseCursor())
+                                        .unwrap_or(imgui::MouseCursor::Arrow);
+                                    from_imgui_cursor(cursor)
+                                };
+                                if cursor != self.status.current_cursor {
+                                    match cursor {
+                                        None => self.main_window.window.set_cursor_visible(false),
+                                        Some(c) => {
+                                            self.main_window.window.set_cursor_icon(c);
+                                            self.main_window.window.set_cursor_visible(true);
+                                        }
+                                    }
+                                    self.status.current_cursor = cursor;
+                                }
+                            }
+                            self.renderer.do_frame(&mut self.app);
+                        }
+                        self.main_window.window.pre_present_notify();
+                        self.main_window.surface.swap_buffers(&self.main_window.gl_context).unwrap();
                     }
                     Resized(size) => {
+                        self.ping_user_input();
                         // GL surface in physical pixels, imgui in logical
                         if let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) {
                             self.main_window.surface.resize(&self.main_window.gl_context, w, h);
@@ -263,7 +263,8 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                             io.DisplaySize = size.into();
                         }
                     }
-                    ScaleFactorChanged { scale_factor, new_inner_size } => {
+                    ScaleFactorChanged { scale_factor, .. } => {
+                        self.ping_user_input();
                         let scale_factor = *scale_factor as f32;
                         unsafe {
                             let io = &mut *ImGui_GetIO();
@@ -273,58 +274,73 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                                 io.MousePos.y *= scale_factor / old_scale_factor;
                             }
                         }
-                        let new_inner_size = self.main_window.to_logical_size::<_, f32>(**new_inner_size);
-                        self.renderer.set_size(new_inner_size.into(), scale_factor);
+                        let size = self.renderer.size();
+                        self.renderer.set_size(size, scale_factor);
                     }
                     ModifiersChanged(mods) => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModCtrl.bits()), mods.ctrl());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModShift.bits()), mods.shift());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModAlt.bits()), mods.alt());
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModSuper.bits()), mods.logo());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModCtrl.bits()), mods.state().control_key());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModShift.bits()), mods.state().shift_key());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModAlt.bits()), mods.state().alt_key());
+                            ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModSuper.bits()), mods.state().super_key());
                         }
                     }
                     KeyboardInput {
-                        input: winit::event::KeyboardInput {
-                            virtual_keycode: Some(wkey),
+                        event: winit::event::KeyEvent {
+                            physical_key,
+                            text,
                             state,
                             ..
                         },
-                        // ImGuiIO_AddFocusEvent handles losing and gaining focus, so synthetic keys are redundant
                         is_synthetic: false,
                         ..
                     } => {
-                        if let Some(key) = to_imgui_key(*wkey) {
-                            let pressed = *state == winit::event::ElementState::Pressed;
+                        self.ping_user_input();
+                        let pressed = *state == winit::event::ElementState::Pressed;
+                        if let Some(key) = to_imgui_key(*physical_key) {
                             unsafe {
                                 let io = &mut *ImGui_GetIO();
                                 ImGuiIO_AddKeyEvent(io, ImGuiKey(key.bits()), pressed);
 
-                                let kmod = match wkey {
-                                    VirtualKeyCode::LControl |
-                                    VirtualKeyCode::RControl => Some(imgui::Key::ModCtrl),
-                                    VirtualKeyCode::LShift |
-                                    VirtualKeyCode::RShift => Some(imgui::Key::ModShift),
-                                    VirtualKeyCode::LAlt |
-                                    VirtualKeyCode::RAlt => Some(imgui::Key::ModAlt),
-                                    VirtualKeyCode::LWin |
-                                    VirtualKeyCode::RWin => Some(imgui::Key::ModSuper),
-                                    _ => None
-                                };
-                                if let Some(kmod) = kmod {
-                                    ImGuiIO_AddKeyEvent(io, ImGuiKey(kmod.bits()), pressed);
+                                use winit::keyboard::KeyCode::*;
+                                if let PhysicalKey::Code(keycode) = physical_key {
+                                    let kmod = match keycode {
+                                        ControlLeft | ControlRight => Some(imgui::Key::ModCtrl),
+                                        ShiftLeft | ShiftRight => Some(imgui::Key::ModShift),
+                                        AltLeft | AltRight => Some(imgui::Key::ModAlt),
+                                        SuperLeft | SuperRight => Some(imgui::Key::ModSuper),
+                                        _ => None
+                                    };
+                                    if let Some(kmod) = kmod {
+                                        ImGuiIO_AddKeyEvent(io, ImGuiKey(kmod.bits()), pressed);
+                                    }
+                                }
+                            }
+                        }
+                        if pressed {
+                            if let Some(text) = text {
+                                unsafe {
+                                    let io = &mut *ImGui_GetIO();
+                                    for c in text.chars() {
+                                        ImGuiIO_AddInputCharacter(io, c as u32);
+                                    }
                                 }
                             }
                         }
                     }
-                    ReceivedCharacter(c) => {
+                    Ime(Commit(text)) => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
-                            ImGuiIO_AddInputCharacter(io, *c as u32);
+                            for c in text.chars() {
+                                ImGuiIO_AddInputCharacter(io, c as u32);
+                            }
                         }
                     }
                     CursorMoved { position, .. } => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             let position = self.main_window.to_logical_pos(*position);
@@ -336,6 +352,7 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                         phase: winit::event::TouchPhase::Moved,
                         ..
                     } => {
+                        self.ping_user_input();
                         let io = unsafe {
                             &mut *ImGui_GetIO()
                         };
@@ -353,6 +370,7 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                         }
                     }
                     MouseInput { state, button, .. } => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             if let Some(btn) = to_imgui_button(*button) {
@@ -362,12 +380,14 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                         }
                     }
                     CursorLeft { .. } => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             ImGuiIO_AddMousePosEvent(io, f32::MAX, f32::MAX);
                         }
                     }
                     Focused(focused) => {
+                        self.ping_user_input();
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             ImGuiIO_AddFocusEvent(io, *focused);
@@ -378,6 +398,7 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
             }
             _ => { }
         }
+        std::ops::ControlFlow::Continue(())
     }
 }
 

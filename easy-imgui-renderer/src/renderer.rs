@@ -116,6 +116,12 @@ impl Renderer {
             self.imgui.set_size(size, scale);
         }
     }
+    pub fn size(&self) -> Vector2 {
+        unsafe {
+            self.imgui.set_current();
+            self.imgui.size()
+        }
+    }
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
         unsafe {
             self.imgui.set_current();

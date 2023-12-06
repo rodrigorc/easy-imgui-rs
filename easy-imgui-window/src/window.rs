@@ -1,4 +1,5 @@
 use std::num::NonZeroU32;
+use std::rc::Rc;
 use std::time::{Instant, Duration};
 use glutin_winit::DisplayBuilder;
 use winit::keyboard::PhysicalKey;
@@ -9,7 +10,7 @@ use easy_imgui as imgui;
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
-use easy_imgui_renderer::Renderer;
+use easy_imgui_renderer::{Renderer, glow};
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
 struct MainWindowStatus {
@@ -41,11 +42,10 @@ pub struct MainWindow {
     window: Window,
 }
 
-pub struct MainWindowWithRenderer<A> {
+pub struct MainWindowWithRenderer {
     main_window: MainWindow,
     renderer: Renderer,
     status: MainWindowStatus,
-    app: A,
 }
 
 impl MainWindow {
@@ -54,7 +54,7 @@ impl MainWindow {
             event_loop,
             title,
             |cfg1, cfg2| {
-                // For standard UI, we'll as few fancy things as available
+                // For standard UI, we need as few fancy things as available
                 let t = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
                 if t(&cfg2) < t(&cfg1) {
                     cfg2
@@ -124,8 +124,13 @@ impl MainWindow {
             surface,
         })
     }
-    pub fn gl_context(&self) -> &glutin::context::PossiblyCurrentContext {
+    pub fn glutin_context(&self) -> &glutin::context::PossiblyCurrentContext {
         &self.gl_context
+    }
+    pub fn create_gl_context(&self) -> Rc<glow::Context> {
+        let dsp = self.gl_context.display();
+        let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
+        Rc::new(gl)
     }
     pub fn window(&self) -> &Window {
         &self.window
@@ -150,8 +155,13 @@ impl MainWindow {
     }
 }
 
-impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
-    pub fn new(main_window: MainWindow, mut renderer: Renderer, app: A) -> MainWindowWithRenderer<A> {
+impl MainWindowWithRenderer {
+    pub fn new(main_window: MainWindow) -> MainWindowWithRenderer {
+        let gl = main_window.create_gl_context();
+        let renderer = Renderer::new(gl).unwrap();
+        Self::new_with_renderer(main_window, renderer)
+    }
+    pub fn new_with_renderer(main_window: MainWindow, mut renderer: Renderer) -> MainWindowWithRenderer {
         let size = main_window.window.inner_size();
         let scale = main_window.window.scale_factor();
         let l_size = size.to_logical::<f32>(scale);
@@ -163,17 +173,10 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
             main_window,
             renderer,
             status: MainWindowStatus::default(),
-            app,
         }
     }
     pub fn renderer(&mut self) -> &mut Renderer {
         &mut self.renderer
-    }
-    pub fn app(&self) -> &A {
-        &self.app
-    }
-    pub fn app_mut(&mut self) -> &mut A {
-        &mut self.app
     }
     pub fn main_window(&mut self) -> &mut MainWindow {
         &mut self.main_window
@@ -181,9 +184,10 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
     pub fn ping_user_input(&mut self) {
         self.status.last_input_time = Instant::now();
         self.status.last_input_frame = 0;
+        self.main_window.window.request_redraw();
     }
     #[must_use]
-    pub fn do_event<EventUserType>(&mut self, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
+    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
         match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
@@ -245,7 +249,7 @@ impl<A: imgui::UiBuilder> MainWindowWithRenderer<A> {
                                     self.status.current_cursor = cursor;
                                 }
                             }
-                            self.renderer.do_frame(&mut self.app);
+                            self.renderer.do_frame(app);
                         }
                         self.main_window.window.pre_present_notify();
                         self.main_window.surface.swap_buffers(&self.main_window.gl_context).unwrap();

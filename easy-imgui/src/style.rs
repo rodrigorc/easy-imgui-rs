@@ -11,7 +11,7 @@ impl Context {
     }
 }
 
-impl<'ctx, A: 'ctx> Ui<'ctx, A> {
+impl<A> Ui<A> {
     pub fn style(&self) -> Style<'_> {
         let ptr = unsafe {
             &mut *ImGui_GetStyle()

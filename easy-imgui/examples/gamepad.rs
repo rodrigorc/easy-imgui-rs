@@ -1,9 +1,9 @@
-use std::{rc::Rc, time::Duration};
+use std::time::Duration;
 
-use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color};
-use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
-    easy_imgui_renderer::{Renderer, glow},
-    glutin::{display::GetGlDisplay, prelude::GlDisplay},
+use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
+use easy_imgui_window::{
+    MainWindow,
+    MainWindowWithRenderer,
     winit::{self, event_loop::{EventLoopBuilder, EventLoopProxy}},
 };
 
@@ -17,15 +17,9 @@ fn main() {
     std::thread::spawn(move || run_input_events(proxy));
 
     let window = MainWindow::new(&event_loop, "Gamepad").unwrap();
+    let mut window = MainWindowWithRenderer::new(window);
 
-    let dsp = window.gl_context().display();
-    let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
-    let gl = Rc::new(gl);
-
-    let renderer = Renderer::new(gl, Some(Color::from([0.45, 0.55, 0.60, 1.0]))).unwrap();
-
-    let app = MyApp::new();
-    let mut window = MainWindowWithRenderer::new(window, renderer, app);
+    let mut app = MyApp::new();
 
     event_loop.run(move |event, w| {
         #[allow(clippy::single_match)]
@@ -33,11 +27,11 @@ fn main() {
             winit::event::Event::UserEvent(e) => {
                 //println!("{e:?}");
                 window.ping_user_input();
-                window.app_mut().update_gamepad(e);
+                app.update_gamepad(e);
             }
             _ => {}
         }
-        let res = window.do_event(&event, w);
+        let res = window.do_event(&mut app, &event, w);
         if res.is_break() {
             w.exit();
         }
@@ -150,22 +144,21 @@ impl UiBuilder for MyApp {
                 let sz = ui.get_content_region_avail();
                 let p1 = [p0.x + sz.x, p0.y + sz.y];
 
-                let mut dr = ui.window_draw_list();
+                let dr = ui.window_draw_list();
                 dr.add_rect_filled(p0, p1, [1.0, 1.0, 1.0, 1.0], 0.0, DrawFlags::None);
                 dr.add_rect(p0, p1, [0.5, 0.5, 0.5, 1.0], 0.0, DrawFlags::None, 4.0);
-
                 static BUTTONS: &[[f32; 2]] = &[
                     [300.0, 150.0],
                     [350.0, 100.0],
                     [300.0,  50.0],
                     [250.0, 100.0],
                 ];
-                    for (idx, pos) in BUTTONS.iter().enumerate() {
-                        if self.btn[idx] {
-                            dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], 20.0, [0.0, 0.0, 0.0, 1.0], 0);
-                        }
-                        dr.add_circle([p0.x + pos[0], p0.y + pos[1]], 20.0, [1.0, 0.0, 0.0, 1.0], 0, 4.0);
+                for (idx, pos) in BUTTONS.iter().enumerate() {
+                    if self.btn[idx] {
+                        dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], 20.0, [0.0, 0.0, 0.0, 1.0], 0);
                     }
+                    dr.add_circle([p0.x + pos[0], p0.y + pos[1]], 20.0, [1.0, 0.0, 0.0, 1.0], 0, 4.0);
+                }
             });
     }
 }

@@ -1,8 +1,0 @@
-[package]
-name = "web"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-easy-imgui-sys = { path = "../easy-imgui-sys" }
-easy-imgui = { path = "../easy-imgui" }

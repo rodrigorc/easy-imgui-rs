@@ -29,7 +29,7 @@ struct GlObjects {
 }
 
 impl Renderer {
-    pub fn new(gl: glr::GlContext, bg_color: Option<Color>) -> Result<Renderer> {
+    pub fn new(gl: glr::GlContext) -> Result<Renderer> {
         let atlas;
         let program;
         let vao;
@@ -85,7 +85,7 @@ impl Renderer {
         Ok(Renderer {
             imgui,
             gl,
-            bg_color,
+            bg_color: Some(Color::from([0.45, 0.55, 0.60, 1.0])),
             objs: GlObjects {
                 atlas,
                 program,
@@ -99,6 +99,9 @@ impl Renderer {
                 u_tex_location,
             }
         })
+    }
+    pub fn gl_context(&self) -> &glr::GlContext {
+        &self.gl
     }
     pub fn set_background_color(&mut self, color: Option<Color>) {
         self.bg_color = color;
@@ -128,7 +131,7 @@ impl Renderer {
 
             if let Some(mut atlas) = self.imgui.update_atlas() {
                 app.build_custom_atlas(&mut atlas);
-                atlas.build_custom_rects();
+                atlas.build_custom_rects(app);
                 Self::update_atlas(&self.gl, &self.objs.atlas);
             }
 

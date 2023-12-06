@@ -4,28 +4,23 @@ use std::rc::Rc;
 use cstr::cstr;
 use easy_imgui as imgui;
 use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
-    easy_imgui_renderer::{Renderer, glow::{self, HasContext}},
+    easy_imgui_renderer::glow::{self, HasContext},
     winit::event_loop::EventLoopBuilder,
-    glutin::display::{GetGlDisplay, GlDisplay},
 };
 use imgui::{FontId, CustomRectIndex, UiBuilder, SelectableFlags, SliderFlags, FontAtlasMut};
-use imgui::{image::GenericImage, Color};
+use imgui::image::GenericImage;
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
 static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
 
 fn main() {
     let event_loop = EventLoopBuilder::new().build().unwrap();
-    let mut window = MainWindow::new(&event_loop, "Example").unwrap();
+    let mut main_window = MainWindow::new(&event_loop, "Example").unwrap();
+    let mut window = MainWindowWithRenderer::new(main_window);
+    //window.renderer().set_background_color(Some(Color::from([0.0, 0.0, 0.0, 1.0])));
 
-    let dsp = window.gl_context().display();
-    let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
-    let gl = Rc::new(gl);
-
-    let renderer = Renderer::new(gl.clone(), Some(Color::from([0.45, 0.55, 0.60, 1.0]))).unwrap();
-
-    let my = MyData {
-        gl,
+    let mut my = MyData {
+        gl: window.renderer().gl_context().clone(),
         f1: FontId::default(),
         f2: FontId::default(),
         rr: CustomRectIndex::default(),
@@ -37,13 +32,12 @@ fn main() {
         x: 0.0,
     };
 
-    let mut window = MainWindowWithRenderer::new(window, renderer, my);
     let mut x = 0;
     let mut y = 0;
     event_loop.run(move |event, w| {
         x += 1;
         //window.ping_user_input();
-        let res = window.do_event(&event, w);
+        let res = window.do_event(&mut my, &event, w);
         if res.is_break() {
             w.exit();
         }
@@ -66,13 +60,7 @@ struct MyData {
 }
 
 impl UiBuilder for MyData {
-    /*fn do_background(&mut self) {
-        unsafe {
-            self.gl.clear_color(0.45, 0.55, 0.60, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
-        }
-    }*/
-    fn build_custom_atlas<'ctx>(&'ctx mut self, atlas: &mut FontAtlasMut<'ctx, '_>) {
+    fn build_custom_atlas(& mut self, atlas: &mut FontAtlasMut<'_, Self>) {
         self.f1 = atlas.add_font_collection([
             imgui::FontInfo::new(KARLA_TTF, 18.0),
             imgui::FontInfo::new(UBUNTU_TTF, 18.0).char_range(0x20ac, 0x20ac),
@@ -84,11 +72,14 @@ impl UiBuilder for MyData {
         let poo = Rc::new(poo);
 
         self.rr = atlas.add_custom_rect_regular([poo.width(), poo.height()],
-            { let poo = Rc::clone(&poo); move |pixels| pixels.copy_from(&*poo, 0, 0).unwrap() }
+            {
+                let poo = Rc::clone(&poo);
+                move |_, pixels| pixels.copy_from(&*poo, 0, 0).unwrap()
+            }
         );
 
         atlas.add_custom_rect_font_glyph(self.f1, '💩', [poo.width(), poo.height()], 20.0, [2.0, 2.0],
-            move |pixels| pixels.copy_from(&*poo, 0, 0).unwrap()
+            move |_, pixels| { pixels.copy_from(&*poo, 0, 0).unwrap(); }
         );
         let rr = atlas.get_custom_rect(self.rr);
     }
@@ -137,20 +128,20 @@ impl UiBuilder for MyData {
                     });
                 });
                 ui.child_config("T").child_flags(imgui::ChildFlags::Border).size([0.0, 300.0]).with(|| {
-                    ui.window_draw_list().add_callback({
-                        let gl = self.gl.clone();
-                        move |data| {
-                            //println!("callback!");
-                            //let _ = *x;
-                            //y += 1;
-                            //*data += 1;
-                            unsafe {
-                                gl.clear_color(0.2, 0.2, 0.0, 1.0);
-                                gl.clear(glow::COLOR_BUFFER_BIT);
+                    ui.window_draw_list()
+                        .add_callback(
+                            move |this| {
+                                //println!("callback!");
+                                //let _ = *x;
+                                //y += 1;
+                                //*data += 1;
+                                unsafe {
+                                    this.gl.clear_color(0.2, 0.2, 0.0, 1.0);
+                                    this.gl.clear(glow::COLOR_BUFFER_BIT);
+                                }
+                                this.x += 0.1;
                             }
-                            data.x += 0.1;
-                        }
-                    });
+                        );
                     ui.text("Test #1");
                     ui.separator();
                     ui.separator_text("Hala");

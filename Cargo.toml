@@ -5,5 +5,4 @@ members = [
     "easy-imgui",
     "easy-imgui-renderer",
     "easy-imgui-window",
-    "web",
 ]

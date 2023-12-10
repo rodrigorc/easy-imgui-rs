@@ -1,5 +1,5 @@
 # easy-imgui-rs
-Build full GUI applications with Rust and [Dear ImGui][dearimgui].
+Build full GUI applications with Rust and [Dear ImGui][dearimgui]. It currently uses version v1.90.
 
 There are several crates in this repository:
  * [`easy-imgui-sys`](easy-imgui-sys): This is the direct binding of the C++ Dear ImGui library.

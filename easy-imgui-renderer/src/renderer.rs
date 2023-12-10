@@ -8,6 +8,7 @@ use easy_imgui as imgui;
 use imgui::TextureId;
 use crate::glr;
 
+/// The main `Renderer` type.
 pub struct Renderer {
     imgui: imgui::Context,
     gl: glr::GlContext,
@@ -29,6 +30,9 @@ struct GlObjects {
 }
 
 impl Renderer {
+    /// Creates a new renderer object.
+    ///
+    /// You need to provide the OpenGL context yourself.
     pub fn new(gl: glr::GlContext) -> Result<Renderer> {
         let atlas;
         let program;
@@ -100,31 +104,41 @@ impl Renderer {
             }
         })
     }
+    /// Gets a reference to the OpenGL context.
     pub fn gl_context(&self) -> &glr::GlContext {
         &self.gl
     }
+    /// Sets the default background color.
+    ///
+    /// The set color will be used for `glClear(GL_COLOR_BUFFER_BIT)`.
+    /// Set to `None` to avoid this, and use [`easy_imgui::UiBuilder::pre_render`] to do whatever clearing
+    /// you need, if anything.
     pub fn set_background_color(&mut self, color: Option<Color>) {
         self.bg_color = color;
     }
+    /// Gets the background color.
     pub fn background_color(&self) -> Option<Color> {
         self.bg_color
     }
+    /// Gets the stored Dear ImGui context.
     pub fn imgui(&mut self) -> &mut imgui::Context {
         &mut self.imgui
     }
-    /// size in logical units
+    /// Sets the UI size, in logical units, and the scale factor.
     pub fn set_size(&mut self, size: Vector2, scale: f32) {
         unsafe {
             self.imgui.set_current();
             self.imgui.set_size(size, scale);
         }
     }
+    /// Gets the UI size, in logical units.
     pub fn size(&self) -> Vector2 {
         unsafe {
             self.imgui.set_current();
             self.imgui.size()
         }
     }
+    /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
         unsafe {
             self.imgui.set_current();
@@ -293,32 +307,35 @@ impl Renderer {
         gl.bind_vertex_array(None);
         gl.disable(glow::SCISSOR_TEST);
     }
+    /// Maps an OpenGL texture to an ImGui texture.
+    pub fn map_tex(ntex: glow::Texture) -> TextureId {
+        #[cfg(target_arch="wasm32")]
+        {
+            let mut tex_map = WASM_TEX_MAP.lock().unwrap();
+            let id = tex_map.len();
+            tex_map.push(ntex);
+            unsafe { TextureId::from_id(id as *mut std::ffi::c_void) }
+        }
+        #[cfg(not(target_arch="wasm32"))]
+        {
+            unsafe { TextureId::from_id(ntex.0.get() as ImTextureID) }
+        }
+    }
+    /// Gets an OpenGL texture from an ImGui texture.
+    pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
+        #[cfg(target_arch="wasm32")]
+        {
+            let tex_map = WASM_TEX_MAP.lock().unwrap();
+            let id = tex.id() as usize;
+            tex_map.get(id).cloned()
+        }
+        #[cfg(not(target_arch="wasm32"))]
+        {
+            Some(glow::NativeTexture(std::num::NonZeroU32::new(tex.id() as u32)?))
+        }
+    }
 }
 
-#[cfg(not(target_arch="wasm32"))]
-impl Renderer {
-    pub fn map_tex(ntex: glow::Texture) -> TextureId {
-        unsafe { TextureId::from_id(ntex.0.get() as ImTextureID) }
-    }
-    pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
-        Some(glow::NativeTexture(std::num::NonZeroU32::new(tex.id() as u32)?))
-    }
-}
-
-#[cfg(target_arch="wasm32")]
-impl Renderer {
-    pub fn map_tex(ntex: glow::Texture) -> TextureId {
-        let mut tex_map = WASM_TEX_MAP.lock().unwrap();
-        let id = tex_map.len();
-        tex_map.push(ntex);
-        unsafe { TextureId::from_id(id as *mut std::ffi::c_void) }
-    }
-    pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
-        let tex_map = WASM_TEX_MAP.lock().unwrap();
-        let id = tex.id() as usize;
-        tex_map.get(id).cloned()
-    }
-}
 #[cfg(target_arch="wasm32")]
 static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::new(Vec::new());
 

@@ -1,3 +1,82 @@
+/*!
+ * Crate for easy integration of the [Dear ImGui][dearimgui] library.
+ *
+ * This crate is a bind to the Dear ImGui library only. There is also a matching rendering
+ * library, [`easy-imgui-renderer`], that renders the UI using OpenGl, and a matching
+ * window-integrated library, [`easy-imgui-window`], that enables to build a full desktop
+ * application in just a few lines.
+ *
+ * If you don't know where to start, then start with the latter. Take a look at the [examples].
+ *
+ * This `crate` is similar to [`imgui-rs`][imguirs], and it is inpired by it, but with a few key
+ * differences:
+ *  * It doesn't use any C++-to-C api generator, as `rust-bindgen` is able to import simple C++
+ * libraries directly.
+ *  * It is lower level, there are fewer high-level abstractions over the ImGui API. This means
+ * that:
+ *      * This API is less Rusty than imgui-rs's.
+ *      * If you know how to use Dear ImGui, then you know how to use easy-imgui.
+ *      * It is far easier to upgrade to new Dear ImGui versions.
+ *
+ * # Features
+ * These are the available features for this crate:
+ *  * `freetype`: Uses an external _freetype_ font loader for Dear ImGui, instead of the embedded
+ *  `stb_truetype` library.
+ *
+ * # Usage
+ * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
+ * But if you intend to render the UI your self, then you can use this directly.
+ *
+ * These are the main pieces of this crate:
+ *  * [`Context`]: It represents the ImGui context. In DearImgui this is a global variable. Here it
+ *  is a thread-local variable. Still, since it is implicit in most API calls, most uses of this
+ *  type are unsafe. If you use [`easy-imgui-window`] or [`easy-imgui-renderer`] you will rarely
+ *  need to touch this type directly.
+ *  * [`Ui`]: A frame that is being built. Most ImGui functions are members of `Ui`.
+ *  * [`UiBuilder`]: A trait that your application implements do build your user interface.
+ *
+ * If you want to use this library directly, just create a [`Context`], set up its properties, and
+ * when you want to render a frame do [`Context::set_current`] and then [`Context::do_frame`].
+ *
+ * If you use one of the helper crates then you will just implement `UiBuilder` and get a `Ui` for
+ * free.
+ *
+ * # Conventions
+ * This crate follows a series of naming conventions to make the API more predictable,
+ * particularly with the [`Ui`] member functions:
+ *  * A [`Pushable`] is any value that can be made active by a _push_ function and inactive by a
+ *  corresponding _pop_ function. Examples are styles, colors, fonts...
+ *  * A [`Hashable`] is any value that can be used to build an ImGui hash id. Ideally there should
+ *  be one of these everywhere, but the Dear ImGui API it not totally othogonal here...
+ *  * A function without special prefix or suffix does the same thing as its Dear ImGui
+ *  counterpart. For example [`Ui::button`] calls `ImGui_Button`.
+ *  * A function name that contains the `with` word takes a function that is called immediately. It
+ *  corresponds to a pair of `*Begin` and `*End` functions in Dear ImGui. The function is called
+ *  between these two functions. The value returned will be that of the function.
+ *      * If the function is called based on some condition, such as with `ImGui_BeginChild`, then there
+ *      will be another function with prefix `with_always_` that takes a function with a bool
+ *      argument `opened: bool`, that can be used if you need the function to be called even if the
+ *      condition is not met.
+ *  * A function name that ends as `_config` will create a builder object (with the `must_use`
+ *  annotation). This object will have a few properties to be set and a `build` or a
+ *  `with` function to create the actual UI element.
+ *  * Most builder object have a `push_for_begin` function, that will set up the pushable to be
+ *  used only for the `begin` part of the UI. This is useful for example to set up the style for a
+ *  window but not for its contents.
+ *
+ * When a function takes a value of type `String` this crate will usually take a generic `impl IntoCStr`.
+ * This is an optimization that allows you to pass either a `String`, a `&str`, a `CString` or a
+ * `&CStr`, avoiding an extra allocation if it is not really necessary. If you pass a constant
+ * string and have a recent Rust compiler you can pass a literal `CStr` with the new syntax `c"hello"`.
+ * 
+ *
+ *
+ *
+ * [dearimgui]: https://github.com/ocornut/imgui
+ * [imguirs]: https://github.com/imgui-rs/imgui-rs
+ * [examples]: ../../../easy-imgui/examples
+ */
+
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
 
@@ -51,6 +130,7 @@ fn remove_generation(id: usize, gen: usize) -> Option<usize> {
     }
 }
 
+/// The main ImGui context.
 pub struct Context {
     imgui: *mut ImGuiContext,
     backend: Box<UnsafeCell<BackendData>>,
@@ -155,6 +235,11 @@ impl Context {
             custom_rects: Vec::new(),
         })
     }
+    /// Builds and renders a UI frame.
+    ///
+    /// * `app`: `UiBuilder` to be used to build the frame.
+    /// * `re_render`: function to be called after `app.do_ui` but before rendering.
+    /// * `render`: function to do the actual render.
     pub unsafe fn do_frame<A: UiBuilder>(
         &mut self,
         app: &mut A,
@@ -211,9 +296,19 @@ impl Drop for UiPtrToNullGuard<'_> {
     }
 }
 
+/// The main trait that the user must implement to create a UI.
 pub trait UiBuilder {
+    /// This function is run the first time an ImGui context is used to create the font atlas.
+    ///
+    /// You can force new call by invalidating the current atlas by calling [`Context::invalidate_font_atlas`].
     fn build_custom_atlas(&mut self, _atlas: &mut FontAtlasMut<'_, Self>) {}
+    /// This function is run after `do_ui` but before rendering.
+    ///
+    /// It can be used to clear the framebuffer.
     fn pre_render(&mut self) {}
+    /// User the `ui` value to create a UI frame.
+    ///
+    /// This is equivalent to the Dear ImGui code between `NewFrame` and `EndFrame`.
     fn do_ui(&mut self, ui: &Ui<Self>);
 }
 
@@ -340,26 +435,33 @@ type UiCallback<A> = Box<dyn FnMut(&mut A, *mut c_void)>;
 
 macro_rules! with_begin_end {
     ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
-        $(#[$attr])*
-        pub fn $name<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> R {
-            unsafe { $begin( $( $pass, )* ) }
-            let r = f();
-            unsafe { $end() }
-            r
+        paste::paste! {
+            $(#[$attr])*
+            pub fn [< with_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> R {
+                unsafe { $begin( $( $pass, )* ) }
+                let r = f();
+                unsafe { $end() }
+                r
+            }
         }
     };
 }
 
 macro_rules! with_begin_end_opt {
     ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
-        $(#[$attr])*
-        pub fn $name<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> Option<R> {
-            if !unsafe { $begin( $( $pass, )* ) } {
-                return None;
+        paste::paste! {
+            $(#[$attr])*
+            pub fn [< with_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> Option<R> {
+                self.[< with_always_ $name >](move |opened| { opened.then(|| f()) })
             }
-            let r = f();
-            unsafe { $end() }
-            Some(r)
+            pub fn [< with_always_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce(bool) -> R) -> R {
+                if !unsafe { $begin( $( $pass, )* ) } {
+                    return f(false);
+                }
+                let r = f(true);
+                unsafe { $end() }
+                r
+            }
         }
     };
 }
@@ -577,6 +679,9 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
                 label: label.into(),
                 size: ImVec2::zero(),
             }
+        }
+        pub fn button<S: IntoCStr>(&self, label: S) -> bool {
+            self.button_config(label).build()
         }
     }
 }
@@ -856,17 +961,15 @@ macro_rules! decl_builder_drag {
 macro_rules! impl_float_format {
     ($name:ident) => { impl_float_format!{$name "%g" "%.0f" "%.3f" "%.{}f"} };
     ($name:ident $g:literal $f0:literal $f3:literal $f_n:literal) => {
-        paste::paste! {
-            impl<S: IntoCStr> $name<'_, S> {
-                pub fn display_format(mut self, format: FloatFormat) -> Self {
-                    self.format = match format {
-                        FloatFormat::G => Cow::Borrowed(cstr!($g)),
-                        FloatFormat::F(0) => Cow::Borrowed(cstr!($f0)),
-                        FloatFormat::F(3) => Cow::Borrowed(cstr!($f3)),
-                        FloatFormat::F(n) => Cow::Owned(CString::new(format!($f_n, n)).unwrap()),
-                    };
-                    self
-                }
+        impl<S: IntoCStr> $name<'_, S> {
+            pub fn display_format(mut self, format: FloatFormat) -> Self {
+                self.format = match format {
+                    FloatFormat::G => Cow::Borrowed(cstr!($g)),
+                    FloatFormat::F(0) => Cow::Borrowed(cstr!($f0)),
+                    FloatFormat::F(3) => Cow::Borrowed(cstr!($f3)),
+                    FloatFormat::F(n) => Cow::Owned(CString::new(format!($f_n, n)).unwrap()),
+                };
+                self
             }
         }
     };
@@ -1730,17 +1833,17 @@ impl<A> Ui<A> {
 
     with_begin_end!{
         /// See [ImGui_BeginGroup].
-        with_group ImGui_BeginGroup ImGui_EndGroup ()
+        group ImGui_BeginGroup ImGui_EndGroup ()
     }
     with_begin_end!{
         /// See [ImGui_BeginDisabled].
-        with_disabled ImGui_BeginDisabled ImGui_EndDisabled (
+        disabled ImGui_BeginDisabled ImGui_EndDisabled (
             disabled (bool) (disabled),
         )
     }
     with_begin_end!{
         /// See [ImGui_PushClipRect].
-        with_clip_rect ImGui_PushClipRect ImGui_PopClipRect (
+        clip_rect ImGui_PushClipRect ImGui_PopClipRect (
             clip_rect_min (Vector2) (&clip_rect_min.into()),
             clip_rect_max (Vector2) (&clip_rect_max.into()),
             intersect_with_current_clip_rect (bool) (intersect_with_current_clip_rect),
@@ -1748,16 +1851,16 @@ impl<A> Ui<A> {
     }
 
     with_begin_end_opt!{
-        with_main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()
+        main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()
     }
     with_begin_end_opt!{
-        with_menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar ()
+        menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar ()
     }
     with_begin_end_opt!{
-        with_tooltip ImGui_BeginTooltip ImGui_EndTooltip ()
+        tooltip ImGui_BeginTooltip ImGui_EndTooltip ()
     }
     with_begin_end_opt!{
-        with_item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip ()
+        item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip ()
     }
 
     pub fn with_push<R>(&self, style: impl Pushable, f: impl FnOnce() -> R) -> R {
@@ -2824,11 +2927,18 @@ impl Hashable for usize {
     }
 }
 
+/// Any value that can be applied with a _push_ function and unapplied with a _pop_ function.
+///
+/// Apply to the current frame using [`Ui::with_push`]. If you want to apply several values at the
+/// same time use a tuple or an array.
+/// Only tuples up to 4 values are supported, but you can apply arbitrarily many pushables by
+/// creating tuples of tuples: `(A, B, C, (D, E, F, (G, H, I, J)))`.
 pub trait Pushable {
     unsafe fn push(&self);
     unsafe fn pop(&self);
 }
 
+/// A [`Pushable`] that does nothing.
 impl Pushable for () {
     unsafe fn push(&self) {}
     unsafe fn pop(&self) {}
@@ -2895,6 +3005,7 @@ impl Pushable for &[&dyn Pushable] {
     }
 }
 
+/// A [`Pushable`] that is applied optionally.
 impl<T: Pushable> Pushable for Option<T> {
     unsafe fn push(&self) {
         if let Some(s) = self {

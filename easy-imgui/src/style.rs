@@ -22,8 +22,15 @@ impl<A> Ui<A> {
     }
 }
 
+/// An immutable reference to the ImGui styles.
 #[derive(Debug)]
 pub struct Style<'a>(StylePtr<'a>);
+
+/// A mutable reference to the ImGui styles.
+///
+/// You can't get this from a running frame [`Ui`], because you can't change the style during a
+/// frame. This can only be retrieved from a mutable [`Context`].
+/// To change the style during a frame use a [`Pushable`].
 #[derive(Debug)]
 pub struct StyleMut<'a>(StylePtr<'a>);
 
@@ -52,17 +59,17 @@ pub struct StylePtr<'a> {
 }
 
 impl<'a> StylePtr<'a> {
-    pub fn colors_light(&mut self) {
+    pub fn set_colors_light(&mut self) {
         unsafe {
             ImGui_StyleColorsLight(self.ptr);
         }
     }
-    pub fn colors_dark(&mut self) {
+    pub fn set_colors_dark(&mut self) {
         unsafe {
             ImGui_StyleColorsDark(self.ptr);
         }
     }
-    pub fn colors_classic(&mut self) {
+    pub fn set_colors_classic(&mut self) {
         unsafe {
             ImGui_StyleColorsClassic(self.ptr);
         }

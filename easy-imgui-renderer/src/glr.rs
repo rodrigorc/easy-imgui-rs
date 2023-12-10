@@ -1,3 +1,6 @@
+/*!
+* Helper module to wrap calls to `glow` OpenGL functions.
+*/
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc)]
 
@@ -19,6 +22,8 @@ impl std::fmt::Display for GLError {
 }
 
 pub type Result<T> = std::result::Result<T, GLError>;
+
+/// A shareable OpenGL context.
 pub type GlContext = Rc<glow::Context>;
 
 pub fn check_gl(gl: &GlContext) -> std::result::Result<(), GLError> {

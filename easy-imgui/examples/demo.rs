@@ -1,5 +1,3 @@
-#![allow(unused_variables, unused_mut)]
-
 use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
     winit::event_loop::EventLoopBuilder,
     easy_imgui as imgui,
@@ -7,7 +5,7 @@ use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
 
 fn main() {
     let event_loop = EventLoopBuilder::new().build().unwrap();
-    let mut main_window = MainWindow::new(&event_loop, "Example").unwrap();
+    let main_window = MainWindow::new(&event_loop, "Example").unwrap();
     let mut window = MainWindowWithRenderer::new(main_window);
 
     let mut app = App;

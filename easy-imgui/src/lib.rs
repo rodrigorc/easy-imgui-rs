@@ -204,16 +204,22 @@ impl Context {
     pub unsafe fn set_size(&mut self, size: impl Into<Vector2>, scale: f32) {
         let io = &mut *ImGui_GetIO();
         io.DisplaySize = size.into().into();
-        io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
-        io.FontGlobalScale = scale.recip();
-        self.invalidate_font_atlas();
-    }
-    pub fn size(&self) -> Vector2 {
-        unsafe {
-            let io = &mut *ImGui_GetIO();
-            io.DisplaySize.into()
+        if self.scale() != scale {
+            io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+            io.FontGlobalScale = scale.recip();
+            self.invalidate_font_atlas();
         }
     }
+    pub unsafe fn size(&self) -> Vector2 {
+        let io = &mut *ImGui_GetIO();
+        io.DisplaySize.into()
+    }
+    pub unsafe fn scale(&self) -> f32 {
+        let io = &mut *ImGui_GetIO();
+        io.DisplayFramebufferScale.x
+    }
+    /// The next time [`Self::do_frame()`] is called, it will trigger a call to
+    /// [`UiBuilder::build_custom_atlas`].
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
     }
@@ -316,6 +322,8 @@ enum TtfData {
     Bytes(Cow<'static, [u8]>),
     DefaultFont,
 }
+
+/// A font to be fed to the ImGui atlas.
 pub struct FontInfo {
     ttf: TtfData,
     size: f32,
@@ -323,6 +331,7 @@ pub struct FontInfo {
 }
 
 impl FontInfo {
+    /// Creates a new `FontInfo` from a TTF content and a font size.
     pub fn new(ttf: impl Into<Cow<'static, [u8]>>, size: f32) -> FontInfo {
         FontInfo {
             ttf: TtfData::Bytes(ttf.into()),
@@ -330,6 +339,7 @@ impl FontInfo {
             char_ranges: Vec::new(),
         }
     }
+    /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
     pub fn default_font(size: f32) -> FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
@@ -337,12 +347,18 @@ impl FontInfo {
             char_ranges: Vec::new(),
         }
     }
-    pub fn char_range(mut self, char_from: ImWchar, char_to: ImWchar) -> Self {
-        self.char_ranges.push([char_from, char_to]);
+    /// Adds the given char range to this font info.
+    ///
+    /// If the range list is empty, it is as if `'\u{20}'..='\u{ff}'`, that is the "ISO-8859-1"
+    /// table. But if you call this function for a font, then it will not be added by default, you
+    /// should add it yourself.
+    pub fn add_char_range(mut self, range: std::ops::RangeInclusive<char>) -> Self {
+        self.char_ranges.push([ImWchar::from(*range.start()), ImWchar::from(*range.end())]);
         self
     }
 }
 
+/// Represents any type that can be converted into something that can be deref'ed to a `&CStr`.
 pub trait IntoCStr {
     type Temp: Deref<Target = CStr>;
     fn into(self) -> Self::Temp;
@@ -401,6 +417,7 @@ fn optional_mut_bool(b: &mut Option<&mut bool>) -> *mut bool {
     b.as_mut().map(|x| *x as *mut bool).unwrap_or(null_mut())
 }
 
+/// Helper function that, given a string, returns the start and end pointer.
 pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
     let btxt = text.as_bytes();
     let start = btxt.as_ptr() as *const c_char;
@@ -408,6 +425,7 @@ pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
     ( start, end )
 
 }
+
 pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     let io = &*ImGui_GetIO();
     let fonts = &*io.Fonts;
@@ -2538,10 +2556,17 @@ impl<A> Ui<A> {
     }
 }
 
-// Default fount will be the index 0
+/// Identifier of a registered font. Only the values obtained from the latest call to [`UiBuilder::build_custom_atlas`] are actually valid.
+///
+/// `FontId::default()` wil be the default font.
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
 
+/// Identifier for a registered custom rectangle. Only the values obtained from the latest call to
+/// [`UiBuilder::build_custom_atlas`] are actually valid.
+///
+/// The `CustomRectIndex::default()` is provided as a convenience, but it is always invalid, and
+/// will panic if used.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CustomRectIndex(i32);
 
@@ -2572,10 +2597,22 @@ pub struct FontAtlasMut<'ui, A: ?Sized> {
     custom_rects: Vec<Option<FuncCustomRect<A>>>,
 }
 
+/// A reference to the font altas that is to be built.
+///
+/// You get a value of this type when implementing [`UiBuilder::build_custom_atlas`]. If you want
+/// that function to be called again, call [`Context::invalidate_font_atlas`].
 impl<'ui, A> FontAtlasMut<'ui, A> {
+    /// Adds the given font to the atlas.
+    ///
+    /// It returns the id to use this font. `FontId` implements `Pushable` so you can use it with
+    /// [`Ui::with_push`].
     pub fn add_font(&mut self, font: FontInfo) -> FontId {
         self.add_font_priv(font, false)
     }
+    /// Adds several fonts with as a single ImGui font.
+    ///
+    /// This is useful mainly if different TTF files have different charset coverage but you want
+    /// to use them all as a unit.
     pub fn add_font_collection(&mut self, fonts: impl IntoIterator<Item = FontInfo>) -> FontId {
         let mut fonts = fonts.into_iter();
         let first = fonts.next().expect("empty font collection");
@@ -2624,6 +2661,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
             FontId((*io.Fonts).Fonts.len() - 1)
         }
     }
+    /// Adds an image as a substitution for a character in a font.
     pub fn add_custom_rect_font_glyph(
         &mut self,
         font: FontId,
@@ -2644,6 +2682,9 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
             CustomRectIndex(idx)
         }
     }
+    /// Adds an arbitrary image to the font atlas.
+    ///
+    /// The returned `CustomRectIndex` can be used later to draw the image.
     pub fn add_custom_rect_regular(
         &mut self,
         size: impl Into<mint::Vector2<u32>>,
@@ -2756,6 +2797,7 @@ pub struct WindowDrawList<'ui, A> {
     ptr: *mut ImDrawList,
 }
 
+/// Converts a `Color` into a `u32` value, required by some Dear ImGui functions.
 pub fn color_to_u32(c: impl Into<Color>) -> u32 {
     unsafe {
         ImGui_ColorConvertFloat4ToU32(&c.into().into())
@@ -2901,6 +2943,7 @@ unsafe extern "C" fn call_drawlist_callback<A>(_parent_lilst: *const ImDrawList,
     Ui::<A>::run_callback(id, ());
 }
 
+/// Represents any type that can be converted to a Dear ImGui hash id.
 pub trait Hashable {
     // These are unsafe because they should be called only inside a frame (holding a &mut Ui)
     unsafe fn get_id(&self) -> ImGuiID;

@@ -12,6 +12,7 @@ mint = "0.5"
 image = { version = "0.24", default_features = false }
 
 [features]
+default = []
 freetype = ["easy-imgui-sys/freetype"]
 
 # For the examples

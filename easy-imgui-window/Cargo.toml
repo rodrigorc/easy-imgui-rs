@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 default = ["clipboard"]
 clipboard = ["dep:arboard"]
+freetype = ["easy-imgui/freetype"]
 
 [dependencies]
 easy-imgui-sys = { path = "../easy-imgui-sys" }

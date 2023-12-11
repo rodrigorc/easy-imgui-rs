@@ -13,28 +13,7 @@ use anyhow::{Result, anyhow};
 use easy_imgui_renderer::{Renderer, glow};
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
-struct MainWindowStatus {
-    last_frame: Instant,
-    last_input_time: Instant,
-    last_input_frame: u32,
-    current_cursor: Option<CursorIcon>,
-}
-
-impl Default for MainWindowStatus {
-    fn default() -> MainWindowStatus {
-        let now = Instant::now();
-        // The main loop will keep on rendering for some ms or some frames after the last input,
-        // whatever is longer. The frames are needed in case a file operation takes a lot of time,
-        // we want at least a render just after that.
-        MainWindowStatus {
-            last_frame: now,
-            last_input_time: now,
-            last_input_frame: 0,
-            current_cursor: Some(CursorIcon::Default),
-        }
-    }
-}
-
+/// This type represents a `winit` window and an OpenGL context.
 pub struct MainWindow {
     gl_context: PossiblyCurrentContext,
     // The surface must be dropped before the window.
@@ -42,27 +21,40 @@ pub struct MainWindow {
     window: Window,
 }
 
+/// This is a [`MainWindow`] plus a [`Renderer`]. It is the ultimate `easy-imgui` object.
 pub struct MainWindowWithRenderer {
     main_window: MainWindow,
     renderer: Renderer,
-    status: MainWindowStatus,
+
+    idle_time: Duration,
+    idle_frame_count: u32,
+
+    last_frame: Instant,
+    last_input_time: Instant,
+    last_input_frame: u32,
+    current_cursor: Option<CursorIcon>,
 }
 
 impl MainWindow {
+    /// Creates a `MainWindow` with default values.
     pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
+        // For standard UI, we need as few fancy things as available
+        let score = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
         Self::with_gl_chooser(
             event_loop,
             title,
             |cfg1, cfg2| {
-                // For standard UI, we need as few fancy things as available
-                let t = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
-                if t(&cfg2) < t(&cfg1) {
+                if score(&cfg2) < score(&cfg1) {
                     cfg2
                 } else {
                     cfg1
                 }
             })
     }
+    /// Creates a `MainWindow` with your own OpenGL context chooser.
+    ///
+    /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
+    /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
     pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
         let window_builder = WindowBuilder::new();
         let template = ConfigTemplateBuilder::new()
@@ -127,28 +119,31 @@ impl MainWindow {
     pub fn glutin_context(&self) -> &glutin::context::PossiblyCurrentContext {
         &self.gl_context
     }
-    pub fn create_gl_context(&self) -> Rc<glow::Context> {
+    /// Creates a new `glow` OpenGL context withfor this window and the selected configuration.
+    pub fn create_gl_context(&self) -> glow::Context {
         let dsp = self.gl_context.display();
-        let gl = unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) };
-        Rc::new(gl)
+        unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) }
     }
+    /// Gets a reference to the `winit` window.
     pub fn window(&self) -> &Window {
         &self.window
     }
+    /// Converts the given physical size to a logical size, using the window scale factor.
     pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
         let scale = self.window.scale_factor();
         size.to_logical(scale)
     }
-    #[allow(dead_code)]
+    /// Converts the given logical size to a physical size, using the window scale factor.
     pub fn to_physical_size<X: Pixel, Y: Pixel>(&self, size: LogicalSize<X>) -> PhysicalSize<Y> {
         let scale = self.window.scale_factor();
         size.to_physical(scale)
     }
+    /// Converts the given physical position to a logical position, using the window scale factor.
     pub fn to_logical_pos<X: Pixel, Y: Pixel>(&self, pos: PhysicalPosition<X>) -> LogicalPosition<Y> {
         let scale = self.window.scale_factor();
         pos.to_logical(scale)
     }
-    #[allow(dead_code)]
+    /// Converts the given logical position to a physical position, using the window scale factor.
     pub fn to_physical_pos<X: Pixel, Y: Pixel>(&self, pos: LogicalPosition<X>) -> PhysicalPosition<Y> {
         let scale = self.window.scale_factor();
         pos.to_physical(scale)
@@ -156,11 +151,13 @@ impl MainWindow {
 }
 
 impl MainWindowWithRenderer {
+    /// Creates a new [`Renderer`] and attaches it to the given window.
     pub fn new(main_window: MainWindow) -> MainWindowWithRenderer {
         let gl = main_window.create_gl_context();
-        let renderer = Renderer::new(gl).unwrap();
+        let renderer = Renderer::new(Rc::new(gl)).unwrap();
         Self::new_with_renderer(main_window, renderer)
     }
+    /// Attaches the given window an renderer together.
     pub fn new_with_renderer(main_window: MainWindow, mut renderer: Renderer) -> MainWindowWithRenderer {
         let size = main_window.window.inner_size();
         let scale = main_window.window.scale_factor();
@@ -168,24 +165,50 @@ impl MainWindowWithRenderer {
         renderer.set_size(l_size.into(), scale as f32);
 
         clipboard::maybe_setup_clipboard();
+        let now = Instant::now();
 
         MainWindowWithRenderer {
             main_window,
             renderer,
-            status: MainWindowStatus::default(),
+            idle_time: Duration::from_secs(1),
+            idle_frame_count: 60,
+            last_frame: now,
+            last_input_time: now,
+            last_input_frame: 0,
+            current_cursor: Some(CursorIcon::Default),
         }
     }
+    /// Sets the time after which the UI will stop rendering, if there is no user input.
+    pub fn set_idle_time(&mut self, time: Duration) {
+        self.idle_time = time;
+    }
+    /// Sets the frame count after which the UI will stop rendering, if there is no user input.
+    ///
+    /// Note that by default V-Sync is enabled, and that will affect the frame rate.
+    pub fn set_idle_frame_count(&mut self, frame_count: u32) {
+        self.idle_frame_count = frame_count;
+    }
+    /// Gets a reference to the inner renderer.
     pub fn renderer(&mut self) -> &mut Renderer {
         &mut self.renderer
     }
+    /// Gets a reference to the inner window.
     pub fn main_window(&mut self) -> &mut MainWindow {
         &mut self.main_window
     }
+    /// Forces a rebuild of the UI.
+    ///
+    /// By default the window will stop rendering the UI after a while without user input. Use this
+    /// function to force a redraw because of some external factor.
     pub fn ping_user_input(&mut self) {
-        self.status.last_input_time = Instant::now();
-        self.status.last_input_frame = 0;
+        self.last_input_time = Instant::now();
+        self.last_input_frame = 0;
         self.main_window.window.request_redraw();
     }
+    /// The main event function, to be called from your event loop.
+    ///
+    /// It returns [`std::ops::ControlFlow::Break`] for the event [`winit::event::WindowEvent::CloseRequested`] as a convenience. You can
+    /// use it to break the main loop, or ignore it, as you see fit.
     #[must_use]
     pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
         match event {
@@ -193,9 +216,9 @@ impl MainWindowWithRenderer {
                 let now = Instant::now();
                 unsafe {
                     let io = &mut *ImGui_GetIO();
-                    io.DeltaTime = now.duration_since(self.status.last_frame).as_secs_f32();
+                    io.DeltaTime = now.duration_since(self.last_frame).as_secs_f32();
                 }
-                self.status.last_frame = now;
+                self.last_frame = now;
             }
             Event::AboutToWait => {
                 unsafe {
@@ -209,8 +232,8 @@ impl MainWindowWithRenderer {
                 let now = Instant::now();
                 // If the mouse is down, redraw all the time, maybe the user is dragging.
                 let mouse = unsafe { ImGui_IsAnyMouseDown() };
-                self.status.last_input_frame += 1;
-                if mouse || now.duration_since(self.status.last_input_time) < Duration::from_millis(1000) || self.status.last_input_frame < 60 {
+                self.last_input_frame += 1;
+                if mouse || now.duration_since(self.last_input_time) < self.idle_time || self.last_input_frame < self.idle_frame_count {
                     // No need to call set_control_flow(): doing a redraw will force extra Poll.
                     // Not doing it will default to Wait.
                     self.main_window.window.request_redraw();
@@ -238,7 +261,7 @@ impl MainWindowWithRenderer {
                                         .unwrap_or(imgui::MouseCursor::Arrow);
                                     from_imgui_cursor(cursor)
                                 };
-                                if cursor != self.status.current_cursor {
+                                if cursor != self.current_cursor {
                                     match cursor {
                                         None => self.main_window.window.set_cursor_visible(false),
                                         Some(c) => {
@@ -246,7 +269,7 @@ impl MainWindowWithRenderer {
                                             self.main_window.window.set_cursor_visible(true);
                                         }
                                     }
-                                    self.status.current_cursor = cursor;
+                                    self.current_cursor = cursor;
                                 }
                             }
                             self.renderer.do_frame(app);

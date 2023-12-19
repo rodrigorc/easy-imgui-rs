@@ -4,11 +4,12 @@
 use easy_imgui_sys::*;
 
 macro_rules! imgui_enum_ex {
-    ($vis:vis $name:ident: $native_name:ident { $($field:ident = $value:ident),* $(,)? }) => {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
         #[repr(i32)]
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
         $vis enum $name {
             $(
+                $(#[$inner $($args)*])*
                 $field = $native_name::$value.0 as i32,
             )*
         }
@@ -18,10 +19,12 @@ macro_rules! imgui_enum_ex {
             }
             pub fn from_bits(bits: i32) -> Option<Self> {
                 $(
+                    $(#[$inner $($args)*])*
                     const $field: i32 = $native_name::$value.0 as i32;
                 )*
                 let r = match bits {
                     $(
+                        $(#[$inner $($args)*])*
                         $field => Self::$field,
                     )*
                     _ => return std::option::Option::None,
@@ -33,11 +36,11 @@ macro_rules! imgui_enum_ex {
 }
 
 macro_rules! imgui_enum {
-    ($vis:vis $name:ident: $native_name:ident { $($field:ident ),* $(,)? }) => {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident ),* $(,)? }) => {
         paste::paste! {
             imgui_enum_ex! {
                 $vis $name: $native_name {
-                    $($field = [<$native_name $field>],)*
+                    $( $(#[$inner $($args)*])* $field = [<$native_name $field>],)*
                 }
             }
         }
@@ -45,10 +48,11 @@ macro_rules! imgui_enum {
 }
 
 macro_rules! imgui_flags_ex {
-    ($vis:vis $name:ident: $native_name:ident { $($field:ident = $value:ident),* $(,)? }) => {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
         bitflags::bitflags! {
             $vis struct $name : i32 {
                 $(
+                    $(#[$inner $($args)*])*
                     const $field = $native_name::$value.0 as i32;
                 )*
             }
@@ -57,11 +61,11 @@ macro_rules! imgui_flags_ex {
 }
 
 macro_rules! imgui_flags {
-    ($vis:vis $name:ident: $native_name:ident { $($field:ident),* $(,)? }) => {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident),* $(,)? }) => {
         paste::paste! {
             imgui_flags_ex! {
                 $vis $name: $native_name {
-                    $($field = [<$native_name $field>],)*
+                    $( $(#[$inner $($args)*])* $field = [<$native_name $field>],)*
                 }
             }
         }
@@ -133,6 +137,10 @@ imgui_enum!{
         TabActive,
         TabUnfocused,
         TabUnfocusedActive,
+        #[cfg(feature="docking")]
+        DockingPreview,
+        #[cfg(feature="docking")]
+        DockingEmptyBg,
         PlotLines,
         PlotLinesHovered,
         PlotHistogram,
@@ -181,6 +189,8 @@ imgui_enum!{
         SeparatorTextBorderSize,
         SeparatorTextAlign,
         SeparatorTextPadding,
+        #[cfg(feature="docking")]
+        DockingSeparatorSize,
     }
 }
 
@@ -206,6 +216,8 @@ imgui_flags!{
         NoNavInputs,
         NoNavFocus,
         UnsavedDocument,
+        #[cfg(feature="docking")]
+        NoDocking,
         NoNav,
         NoDecoration,
         NoInputs,
@@ -311,7 +323,8 @@ imgui_flags!{
         RootWindow,
         AnyWindow,
         NoPopupHierarchy,
-        //DockHierarchy,
+        #[cfg(feature="docking")]
+        DockHierarchy,
         AllowWhenBlockedByPopup,
         //AllowWhenBlockedByModal,
         AllowWhenBlockedByActiveItem,
@@ -526,6 +539,28 @@ imgui_flags!{
         IsPlatformWindow,
         IsPlatformMonitor,
         OwnedByApp,
+        #[cfg(feature="docking")]
+        NoDecoration,
+        #[cfg(feature="docking")]
+        NoTaskBarIcon,
+        #[cfg(feature="docking")]
+        NoFocusOnAppearing,
+        #[cfg(feature="docking")]
+        NoFocusOnClick,
+        #[cfg(feature="docking")]
+        NoInputs,
+        #[cfg(feature="docking")]
+        NoRendererClear,
+        #[cfg(feature="docking")]
+        NoAutoMerge,
+        #[cfg(feature="docking")]
+        TopMost,
+        #[cfg(feature="docking")]
+        CanHostOtherWindows,
+        #[cfg(feature="docking")]
+        IsMinimized,
+        #[cfg(feature="docking")]
+        IsFocused,
     }
 }
 
@@ -547,15 +582,17 @@ imgui_flags!{
 
 imgui_flags! {
     pub ConfigFlags: ImGuiConfigFlags_ {
-		None,
-		NavEnableKeyboard,
-		NavEnableGamepad,
-		NavEnableSetMousePos,
-		NavNoCaptureKeyboard,
-		NoMouse,
-		NoMouseCursorChange,
-		IsSRGB,
-		IsTouchScreen,
+        None,
+        NavEnableKeyboard,
+        NavEnableGamepad,
+        NavEnableSetMousePos,
+        NavNoCaptureKeyboard,
+        NoMouse,
+        NoMouseCursorChange,
+        #[cfg(feature="docking")]
+        DockingEnable,
+        IsSRGB,
+        IsTouchScreen,
     }
 }
 
@@ -588,7 +625,8 @@ imgui_flags! {
         RootWindow,
         AnyWindow,
         NoPopupHierarchy,
-        //DockHierarchy,
+        #[cfg(feature="docking")]
+        DockHierarchy,
         RootAndChildWindows,
     }
 }
@@ -758,5 +796,20 @@ imgui_enum! {
         RowBg0,
         RowBg1,
         CellBg,
+    }
+}
+
+#[cfg(feature="docking")]
+imgui_flags! {
+    pub DockNodeFlags: ImGuiDockNodeFlags_ {
+        None,
+        KeepAliveOnly,
+        //NoCentralNode,
+        NoDockingOverCentralNode,
+        PassthruCentralNode,
+        NoDockingSplit,
+        NoResize,
+        AutoHideTabBar,
+        NoUndocking,
     }
 }

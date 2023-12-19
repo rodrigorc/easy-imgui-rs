@@ -147,6 +147,13 @@ impl Context {
             let io = &mut *ImGui_GetIO();
             io.BackendLanguageUserData = backend.get() as *mut c_void;
             io.IniFilename = null();
+
+            // If you eanbled the "docking" feature you will want to use it
+            #[cfg(feature="docking")]
+            {
+                io.ConfigFlags |= ConfigFlags::DockingEnable.bits();
+            }
+
             //ImGui_StyleColorsDark(null_mut());
             imgui
         };
@@ -183,10 +190,12 @@ impl Context {
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
     pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
-        unsafe {
-            let io = &mut *ImGui_GetIO();
-            io.ConfigFlags |= flags.bits();
-        }
+        let io = &mut *ImGui_GetIO();
+        io.ConfigFlags |= flags.bits();
+    }
+    pub unsafe fn remove_config_flags(&mut self, flags: ConfigFlags) {
+        let io = &mut *ImGui_GetIO();
+        io.ConfigFlags &= !flags.bits();
     }
     pub fn nav_enable_keyboard(&mut self) {
         unsafe {
@@ -2555,6 +2564,38 @@ impl<A> Ui<A> {
         }
     }
 }
+
+
+#[cfg(feature="docking")]
+impl<A> Ui<A> {
+    pub fn dock_space(&self, id: ImGuiID, size: impl Into<Vector2>, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
+        unsafe {
+            ImGui_DockSpace(id, &size.into().into(), flags.bits(), std::ptr::null())
+        }
+    }
+    pub fn dock_space_over_viewport(&self, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
+        unsafe {
+            ImGui_DockSpaceOverViewport(std::ptr::null(), flags.bits(), std::ptr::null())
+        }
+    }
+    pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
+        unsafe {
+            ImGui_SetNextWindowDockID(dock_id, cond.bits());
+        }
+    }
+    //SetNextWindowClass(const ImGuiWindowClass* window_class)
+    pub fn get_window_doc_id(&self) -> ImGuiID {
+        unsafe {
+            ImGui_GetWindowDockID()
+        }
+    }
+    pub fn is_window_docked(&self) -> bool {
+        unsafe {
+            ImGui_IsWindowDocked()
+        }
+    }
+}
+
 
 /// Identifier of a registered font. Only the values obtained from the latest call to [`UiBuilder::build_custom_atlas`] are actually valid.
 ///

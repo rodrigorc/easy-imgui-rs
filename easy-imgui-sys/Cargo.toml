@@ -16,3 +16,4 @@ xshell = "0.2"
 
 [features]
 freetype = []
+docking = []

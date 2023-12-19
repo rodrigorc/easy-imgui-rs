@@ -14,6 +14,7 @@ image = { version = "0.24", default_features = false }
 [features]
 default = []
 freetype = ["easy-imgui-sys/freetype"]
+docking = ["easy-imgui-sys/docking"]
 
 # For the examples
 [dev-dependencies]

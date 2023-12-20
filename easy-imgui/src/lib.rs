@@ -22,6 +22,8 @@
  * These are the available features for this crate:
  *  * `freetype`: Uses an external _freetype_ font loader for Dear ImGui, instead of the embedded
  *  `stb_truetype` library.
+ *  * `docking`: Uses the `docking` branch of Dear ImGui. Note that this is considered somewhat
+ *  experimental.
  *
  * # Usage
  * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
@@ -84,7 +86,7 @@ use std::ffi::{CString, c_char, CStr, c_void};
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
-use std::cell::{UnsafeCell, RefCell};
+use std::cell::RefCell;
 use std::borrow::Cow;
 use cstr::cstr;
 use easy_imgui_sys::*;
@@ -93,23 +95,14 @@ mod enums;
 pub mod style;
 
 pub use enums::*;
-pub use easy_imgui_sys::{self, Vector2, Color, ImGuiID};
+pub use easy_imgui_sys::{self, Vector2, ImGuiID};
 use image::GenericImage;
 
-struct BackendData {
-    generation: usize,
-    ui_ptr: *mut c_void,
-}
-
-impl Default for BackendData {
-    fn default() -> Self {
-        BackendData {
-            generation: 0,
-            ui_ptr: null_mut(),
-        }
-    }
-}
-
+// Here we use a "generation value" to avoid calling stale callbacks. It shouldn't happen, but just
+// in case, as it would cause undefined behavior.
+// The generation value is taken from the ImGui frame number, that is increased every frame.
+// The callback id itself is composed by combining the callback index with the generation value.
+// When calling a callback, if the generation value does not match the callback is ignored.
 const GEN_BITS: u32 = 8;
 const GEN_ID_BITS: u32 = usize::BITS - GEN_BITS;
 const GEN_MASK: usize = (1 << GEN_BITS) - 1;
@@ -123,35 +116,34 @@ fn merge_generation(id: usize, gen: usize) -> usize {
 }
 fn remove_generation(id: usize, gen: usize) -> Option<usize> {
     if (id >> GEN_ID_BITS) != (gen & GEN_MASK) {
-        eprintln!("lost generation callback");
         None
     } else {
         Some(id & GEN_ID_MASK)
     }
 }
 
+/// For now a color is just a `Vector4`: [red, green, blue, alpha], values between 0.0 and 1.0.
+pub type Color = Vector4;
+
 /// The main ImGui context.
 pub struct Context {
     imgui: *mut ImGuiContext,
-    backend: Box<UnsafeCell<BackendData>>,
     pending_atlas: bool,
 }
 
 impl Context {
     pub unsafe fn new() -> Context {
-        let backend = Box::new(UnsafeCell::new(BackendData::default()));
         let imgui = unsafe {
             let imgui = ImGui_CreateContext(null_mut());
             ImGui_SetCurrentContext(imgui);
 
-            let io = &mut *ImGui_GetIO();
-            io.BackendLanguageUserData = backend.get() as *mut c_void;
-            io.IniFilename = null();
+            let io = ImGui_GetIO();
+            (*io).IniFilename = null();
 
             // If you eanbled the "docking" feature you will want to use it
             #[cfg(feature="docking")]
             {
-                io.ConfigFlags |= ConfigFlags::DockingEnable.bits();
+                (*io).ConfigFlags |= ConfigFlags::DockingEnable.bits();
             }
 
             //ImGui_StyleColorsDark(null_mut());
@@ -159,14 +151,13 @@ impl Context {
         };
         Context {
             imgui,
-            backend,
             pending_atlas: true,
         }
     }
     pub fn set_allow_user_scaling(&mut self, val: bool) {
         unsafe {
-            let io = &mut *ImGui_GetIO();
-            io.FontAllowUserScaling = val;
+            let io = ImGui_GetIO();
+            (*io).FontAllowUserScaling = val;
         }
     }
     pub fn want_capture_mouse(&self) -> bool {
@@ -190,12 +181,12 @@ impl Context {
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
     pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
-        let io = &mut *ImGui_GetIO();
-        io.ConfigFlags |= flags.bits();
+        let io = ImGui_GetIO();
+        (*io).ConfigFlags |= flags.bits();
     }
     pub unsafe fn remove_config_flags(&mut self, flags: ConfigFlags) {
-        let io = &mut *ImGui_GetIO();
-        io.ConfigFlags &= !flags.bits();
+        let io = ImGui_GetIO();
+        (*io).ConfigFlags &= !flags.bits();
     }
     pub fn nav_enable_keyboard(&mut self) {
         unsafe {
@@ -211,21 +202,21 @@ impl Context {
         ImGui_SetCurrentContext(self.imgui);
     }
     pub unsafe fn set_size(&mut self, size: impl Into<Vector2>, scale: f32) {
-        let io = &mut *ImGui_GetIO();
-        io.DisplaySize = size.into().into();
+        let io = ImGui_GetIO();
+        (*io).DisplaySize = size.into().into();
         if self.scale() != scale {
-            io.DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
-            io.FontGlobalScale = scale.recip();
+            (*io).DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+            (*io).FontGlobalScale = scale.recip();
             self.invalidate_font_atlas();
         }
     }
     pub unsafe fn size(&self) -> Vector2 {
-        let io = &mut *ImGui_GetIO();
-        io.DisplaySize.into()
+        let io = ImGui_GetIO();
+        (*io).DisplaySize.into()
     }
     pub unsafe fn scale(&self) -> f32 {
-        let io = &mut *ImGui_GetIO();
-        io.DisplayFramebufferScale.x
+        let io = ImGui_GetIO();
+        (*io).DisplayFramebufferScale.x
     }
     /// The next time [`Self::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
@@ -238,13 +229,13 @@ impl Context {
         if !std::mem::take(&mut self.pending_atlas) {
             return None;
         }
-        let io = &mut *ImGui_GetIO();
-        ImFontAtlas_Clear(io.Fonts);
-        (*io.Fonts).TexPixelsUseColors = true;
+        let io = ImGui_GetIO();
+        ImFontAtlas_Clear((*io).Fonts);
+        (*(*io).Fonts).TexPixelsUseColors = true;
 
-        let scale = io.DisplayFramebufferScale.x;
+        let scale = (*io).DisplayFramebufferScale.x;
         Some(FontAtlasMut {
-            ptr: FontAtlasPtr { ptr: &mut *io.Fonts },
+            ptr: FontAtlasPtr { ptr: &mut *(*io).Fonts },
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
@@ -262,21 +253,17 @@ impl Context {
         render: impl FnOnce(&ImDrawData),
     )
     {
-        let gen = &mut self.backend.get_mut().generation;
-        *gen = gen.wrapping_add(1);
-
         let mut ui = Ui {
             data: std::ptr::null_mut(),
-            generation: *gen,
+            generation: ImGui_GetFrameCount() as usize,
             callbacks: RefCell::new(Vec::new()),
         };
 
-        // Not sure if this is totally sound, C callbacks will cast this pointer back to a
-        // mutable reference, but those callbacks cannot see this "ui" any other way.
-        self.backend.get_mut().ui_ptr = &mut ui as *mut _ as *mut c_void;
+        let io = ImGui_GetIO();
+        (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
         let _guard = UiPtrToNullGuard(self);
-
         ImGui_NewFrame();
+
         app.do_ui(&ui);
 
         pre_render();
@@ -285,6 +272,10 @@ impl Context {
         ImGui_Render();
 
         ui.data = app;
+
+        // This is the same pointer, but without it, there is something fishy about stacked borrows
+        // and the mutable access to `ui` above.
+        (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
 
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
@@ -303,11 +294,10 @@ struct UiPtrToNullGuard<'a>(&'a mut Context);
 
 impl Drop for UiPtrToNullGuard<'_> {
     fn drop(&mut self) {
-        self.0.backend.get_mut().ui_ptr = null_mut();
-
-        // change the generation to avoid trying to call stale callbacks
-        let gen = &mut self.0.backend.get_mut().generation;
-        *gen = gen.wrapping_add(1);
+        unsafe {
+            let io = ImGui_GetIO();
+            (*io).BackendLanguageUserData = null_mut();
+        }
     }
 }
 
@@ -427,7 +417,7 @@ fn optional_mut_bool(b: &mut Option<&mut bool>) -> *mut bool {
 }
 
 /// Helper function that, given a string, returns the start and end pointer.
-pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
+unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
     let btxt = text.as_bytes();
     let start = btxt.as_ptr() as *const c_char;
     let end = unsafe { start.add(btxt.len()) };
@@ -435,7 +425,7 @@ pub unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 
 }
 
-pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
+unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     let io = &*ImGui_GetIO();
     let fonts = &*io.Fonts;
     // If there is no fonts, create the default here
@@ -445,7 +435,7 @@ pub unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     fonts.Fonts[font.0]
 }
 
-unsafe fn no_op() {}
+fn no_op() {}
 
 /// `Ui` represents an ImGui frame that is being built.
 ///
@@ -458,7 +448,15 @@ pub struct Ui<A>
     generation: usize,
     callbacks: RefCell<Vec<UiCallback<A>>>,
 }
-type UiCallback<A> = Box<dyn FnMut(&mut A, *mut c_void)>;
+
+/// Callbacks called during `A::do_ui()` will have the first argument as null, because the app value
+/// is already `self`, no need for it.
+/// Callbacks called during rendering will not have access to `Ui`, because the frame is finished,
+/// but they will get a proper `&mut A` as a first argument.
+/// The second is a generic pointer to the real function argument, beware of fat pointers!
+/// The second parameter will be consumed by the callback, take care of calling the drop exactly
+/// once.
+type UiCallback<A> = Box<dyn FnMut(*mut A, *mut c_void)>;
 
 macro_rules! with_begin_end {
     ( $(#[$attr:meta])* $name:ident $begin:ident $end:ident ($($arg:ident ($($type:tt)*) ($pass:expr),)*) ) => {
@@ -561,6 +559,11 @@ macro_rules! decl_builder_with_maybe_opt {
             push: P,
         }
         impl <$($life,)* $($gen_n : $gen_d, )* P: Pushable > $sname<$($life,)* $($gen_n,)* P > {
+            /// Registers this `Pushable` to be called only for the `begin` part of this UI
+            /// element.
+            ///
+            /// This is useful for example to modify the style of a window without changing the
+            /// stily of its content.
             pub fn push_for_begin<P2: Pushable>(self, push: P2) -> $sname< $($life,)* $($gen_n,)* (P, P2) > {
                 $sname {
                     $(
@@ -569,18 +572,19 @@ macro_rules! decl_builder_with_maybe_opt {
                     push: (self.push, push),
                 }
             }
+            /// Calls `f` inside this UI element, but only if it is visible.
             pub fn with<R>(self, f: impl FnOnce() -> R) -> Option<R> {
                 self.with_always(move |opened| { opened.then(|| f()) })
             }
+            /// Calls `f` inside this UI element, passing `true` if the elements visible, `false`
+            /// if it is not.
             pub fn with_always<R>(self, f: impl FnOnce(bool) -> R) -> R {
                 // Some uses will require `mut`, some will not`
                 #[allow(unused_mut)]
                 let $sname { $(mut $arg, )* push } = self;
-                let bres;
-                unsafe {
-                    push.push();
-                    bres = $func_beg($($pass,)*);
-                    push.pop();
+                let bres = unsafe {
+                    let _guard = push_guard(&push);
+                    $func_beg($($pass,)*)
                 };
                 let r = f(bres);
                 unsafe {
@@ -1321,8 +1325,13 @@ decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCSt
     }
 }
 
+/// How to convert a float value to a string.
+///
+/// It maps to the inner ImGui `sprintf` format parameter.
 pub enum FloatFormat {
+    /// `F(x)` is like `sprintf("%xf")`
     F(u32),
+    /// `G` is like `sprintf("%g")`
     G,
 }
 
@@ -1770,9 +1779,9 @@ decl_builder_with_opt!{TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: In
 impl<A> Ui<A> {
     // The callback will be callable until the next call to do_frame()
     unsafe fn push_callback<X>(&self, mut cb: impl FnMut(*mut A, X) + 'static) -> usize {
-        let cb = Box::new(move |data: &mut A, ptr: *mut c_void| {
-            let a = ptr as *mut X;
-            cb(data, unsafe { std::ptr::read(a) });
+        let cb = Box::new(move |data: *mut A, ptr: *mut c_void| {
+            let x = ptr as *mut X;
+            cb(data, unsafe { std::ptr::read(x) });
         });
         let mut callbacks = self.callbacks.borrow_mut();
         let id = callbacks.len();
@@ -1780,24 +1789,23 @@ impl<A> Ui<A> {
         callbacks.push(cb);
         merge_generation(id, self.generation)
     }
-    unsafe fn run_callback<X>(id: usize, a: X) {
+    unsafe fn run_callback<X>(id: usize, x: X) {
         let io = &*ImGui_GetIO();
         if io.BackendLanguageUserData.is_null() {
             return;
         }
-        let backend = &*(io.BackendLanguageUserData as *const BackendData);
-        let Some(id) = remove_generation(id, backend.generation) else {
-            // lost callback!
+        // The lifetime of ui has been erased, but at least the types of A and X should be correct
+        let ui = &*(io.BackendLanguageUserData as *const Self);
+        let Some(id) = remove_generation(id, ui.generation) else {
+            eprintln!("lost generation callback");
             return;
         };
 
-        // The lifetime of ui has been erased, but at least the type of A should be correct
-        let ui = &mut *(backend.ui_ptr as *mut Self);
-
         let mut callbacks = ui.callbacks.borrow_mut();
         let cb = &mut callbacks[id];
-        let mut a = MaybeUninit::new(a);
-        cb(&mut *ui.data, a.as_mut_ptr() as *mut c_void);
+        // disable the destructor of x, it will be run inside the callback
+        let mut x = MaybeUninit::new(x);
+        cb(&mut *ui.data, x.as_mut_ptr() as *mut c_void);
     }
     pub fn get_clipboard_text(&self) -> String {
         unsafe {
@@ -1859,17 +1867,17 @@ impl<A> Ui<A> {
     }
 
     with_begin_end!{
-        /// See [ImGui_BeginGroup].
+        /// See `BeginGroup`, `EndGroup`.
         group ImGui_BeginGroup ImGui_EndGroup ()
     }
     with_begin_end!{
-        /// See [ImGui_BeginDisabled].
+        /// See `BeginDisabled`, `EndDisabled`.
         disabled ImGui_BeginDisabled ImGui_EndDisabled (
             disabled (bool) (disabled),
         )
     }
     with_begin_end!{
-        /// See [ImGui_PushClipRect].
+        /// See `PushClipRect`, `PopClipRect`.
         clip_rect ImGui_PushClipRect ImGui_PopClipRect (
             clip_rect_min (Vector2) (&clip_rect_min.into()),
             clip_rect_max (Vector2) (&clip_rect_max.into()),
@@ -1878,30 +1886,32 @@ impl<A> Ui<A> {
     }
 
     with_begin_end_opt!{
+        /// See `BeginMainMenuBar`, `EndMainMenuBar`.
         main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()
     }
     with_begin_end_opt!{
+        /// See `BeginMenuBar`, `EndMenuBar`.
         menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar ()
     }
     with_begin_end_opt!{
+        /// See `BeginTooltip`, `EndTooltip`.
         tooltip ImGui_BeginTooltip ImGui_EndTooltip ()
     }
     with_begin_end_opt!{
+        /// See `BeginItemTooltip`, `EndTooltip`. There is not `EndItemTooltip`.
         item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip ()
     }
 
-    pub fn with_push<R>(&self, style: impl Pushable, f: impl FnOnce() -> R) -> R {
-        let r;
+    /// Calls the `f` functions with the given `push`
+    pub fn with_push<R>(&self, push: impl Pushable, f: impl FnOnce() -> R) -> R {
         unsafe {
-            style.push();
-            r = f();
-            style.pop();
+            let _guard = push_guard(&push);
+            f()
         }
-        r
     }
-    pub fn show_demo_window(&self, show: Option<&mut bool>) {
+    pub fn show_demo_window(&self, mut show: Option<&mut bool>) {
         unsafe {
-            ImGui_ShowDemoWindow(show.map(|b| b as *mut bool).unwrap_or(null_mut()));
+            ImGui_ShowDemoWindow(optional_mut_bool(&mut show));
         }
     }
     pub fn set_next_window_pos(&self, pos: impl Into<Vector2>, cond: Cond, pivot: impl Into<Vector2>) {
@@ -2683,11 +2693,11 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
                 self.glyph_ranges.push(char_ranges);
                 ptr
             };
-            let io = &mut *ImGui_GetIO();
+            let io = ImGui_GetIO();
             match font.ttf {
                 TtfData::Bytes(bytes) => {
                     ImFontAtlas_AddFontFromMemoryTTF(
-                        io.Fonts,
+                        (*io).Fonts,
                         bytes.as_ptr() as *mut _,
                         bytes.len() as i32,
                         font.size * self.scale,
@@ -2696,10 +2706,10 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
                     );
                 }
                 TtfData::DefaultFont => {
-                    ImFontAtlas_AddFontDefault(io.Fonts, &fc);
+                    ImFontAtlas_AddFontDefault((*io).Fonts, &fc);
                 }
             }
-            FontId((*io.Fonts).Fonts.len() - 1)
+            FontId((*(*io).Fonts).Fonts.len() - 1)
         }
     }
     /// Adds an image as a substitution for a character in a font.
@@ -2715,10 +2725,10 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
     {
         let size = size.into();
         unsafe {
-            let io = &mut *ImGui_GetIO();
+            let io = ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph(io.Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &offset.into().into());
+            let idx = ImFontAtlas_AddCustomRectFontGlyph((*io).Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &offset.into().into());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -2734,9 +2744,9 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
     {
         let size = size.into();
         unsafe {
-            let io = &mut *ImGui_GetIO();
+            let io = ImGui_GetIO();
 
-            let idx = ImFontAtlas_AddCustomRectRegular(io.Fonts, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap());
+            let idx = ImFontAtlas_AddCustomRectRegular((*io).Fonts, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap());
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -2754,8 +2764,8 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         let mut pixel_size = 0;
         let io;
         unsafe {
-            io = &mut *ImGui_GetIO();
-            ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
+            io = ImGui_GetIO();
+            ImFontAtlas_GetTexDataAsRGBA32((*io).Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
         }
         let pixel_size = pixel_size as usize;
         assert!(pixel_size == 4);
@@ -2765,7 +2775,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
                 unsafe {
-                    let rect = &(*io.Fonts).CustomRects[idx];
+                    let rect = &(*(*io).Fonts).CustomRects[idx];
                     let mut sub_image = pixel_image.sub_image(rect.X as u32, rect.Y as u32, rect.Width as u32, rect.Height as u32);
                     f(app, &mut sub_image);
                 }
@@ -2963,9 +2973,9 @@ impl<'ui, A> WindowDrawList<'ui, A> {
         // The second argument is not used, set to `()``.
         let mut cb = Some(cb);
         unsafe {
-            let id = self.ui.push_callback(move |d, _: ()| {
+            let id = self.ui.push_callback(move |a, _: ()| {
                 if let Some(cb) = cb.take() {
-                    cb(&mut *d);
+                    cb(&mut *a);
                 }
             });
             ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<A>), id as *mut c_void);
@@ -3020,6 +3030,21 @@ impl Hashable for usize {
 pub trait Pushable {
     unsafe fn push(&self);
     unsafe fn pop(&self);
+}
+
+struct PushableGuard<'a, P: Pushable>(&'a P);
+
+impl<P: Pushable> Drop for PushableGuard<'_, P> {
+    fn drop(&mut self) {
+        unsafe {
+            self.0.pop();
+        }
+    }
+}
+
+unsafe fn push_guard<'a, P: Pushable>(p: &'a P) -> PushableGuard<'a, P> {
+    p.push();
+    PushableGuard(p)
 }
 
 /// A [`Pushable`] that does nothing.
@@ -3128,7 +3153,7 @@ impl TextureId {
 
 impl Pushable for StyleColor {
     unsafe fn push(&self) {
-        ImGui_PushStyleColor(self.0.bits(), color_to_u32(self.1));
+        ImGui_PushStyleColor1(self.0.bits(), &self.1.into());
     }
     unsafe fn pop(&self) {
         ImGui_PopStyleColor(1);

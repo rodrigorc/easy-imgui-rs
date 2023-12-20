@@ -9,7 +9,6 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 pub type Vector2 = mint::Vector2<f32>;
 pub type Vector4 = mint::Vector4<f32>;
-pub type Color = Vector4;
 
 impl From<ImVec2> for Vector2 {
     #[inline]

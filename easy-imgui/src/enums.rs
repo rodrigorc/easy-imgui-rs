@@ -345,10 +345,6 @@ imgui_flags!{
 }
 
 
-// MouseButton is hand-crafted.
-
-pub const MOUSE_BUTTON_COUNT: u32 = ImGuiMouseButton_::ImGuiMouseButton_COUNT.0;
-
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MouseButton {

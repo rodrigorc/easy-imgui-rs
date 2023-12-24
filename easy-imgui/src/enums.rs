@@ -50,6 +50,7 @@ macro_rules! imgui_enum {
 macro_rules! imgui_flags_ex {
     ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
         bitflags::bitflags! {
+            #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
             $vis struct $name : i32 {
                 $(
                     $(#[$inner $($args)*])*
@@ -807,5 +808,27 @@ imgui_flags! {
         NoResize,
         AutoHideTabBar,
         NoUndocking,
+    }
+}
+
+// ImGuiDragDropFlags is split into two bitflags, one for the Source, one for the Accept.
+imgui_flags_ex! {
+    pub DragDropSourceFlags: ImGuiDragDropFlags_ {
+        None = ImGuiDragDropFlags_None,
+        NoPreviewTooltip = ImGuiDragDropFlags_SourceNoPreviewTooltip,
+        NoDisableHover = ImGuiDragDropFlags_SourceNoDisableHover,
+        NoHoldToOpenOthers = ImGuiDragDropFlags_SourceNoHoldToOpenOthers,
+        AllowNullID = ImGuiDragDropFlags_SourceAllowNullID,
+        Extern = ImGuiDragDropFlags_SourceExtern,
+        AutoExpirePayload = ImGuiDragDropFlags_SourceAutoExpirePayload,
+    }
+}
+imgui_flags_ex! {
+    pub DragDropAcceptFlags: ImGuiDragDropFlags_ {
+        None = ImGuiDragDropFlags_None,
+        BeforeDelivery = ImGuiDragDropFlags_AcceptBeforeDelivery,
+        NoDrawDefaultRect = ImGuiDragDropFlags_AcceptNoDrawDefaultRect,
+        NoPreviewTooltip =  ImGuiDragDropFlags_AcceptNoPreviewTooltip,
+        PeekOnly = ImGuiDragDropFlags_AcceptPeekOnly,
     }
 }

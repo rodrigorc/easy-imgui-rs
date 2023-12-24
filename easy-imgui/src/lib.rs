@@ -70,7 +70,7 @@
  * This is an optimization that allows you to pass either a `String`, a `&str`, a `CString` or a
  * `&CStr`, avoiding an extra allocation if it is not really necessary. If you pass a constant
  * string and have a recent Rust compiler you can pass a literal `CStr` with the new syntax `c"hello"`.
- * 
+ *
  *
  *
  *
@@ -83,6 +83,7 @@
 #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
 
 use std::ffi::{CString, c_char, CStr, c_void};
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
@@ -435,7 +436,9 @@ unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     fonts.Fonts[font.0]
 }
 
-fn no_op() {}
+// this is unsafe because it replaces a C binding function that does nothing, and adding `unsafe`
+// avoids a warning
+unsafe fn no_op() {}
 
 /// `Ui` represents an ImGui frame that is being built.
 ///
@@ -477,7 +480,7 @@ macro_rules! with_begin_end_opt {
         paste::paste! {
             $(#[$attr])*
             pub fn [< with_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> Option<R> {
-                self.[< with_always_ $name >](move |opened| { opened.then(|| f()) })
+                self.[< with_always_ $name >]($($arg,)* move |opened| { opened.then(f) })
             }
             pub fn [< with_always_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce(bool) -> R) -> R {
                 if !unsafe { $begin( $( $pass, )* ) } {
@@ -574,7 +577,7 @@ macro_rules! decl_builder_with_maybe_opt {
             }
             /// Calls `f` inside this UI element, but only if it is visible.
             pub fn with<R>(self, f: impl FnOnce() -> R) -> Option<R> {
-                self.with_always(move |opened| { opened.then(|| f()) })
+                self.with_always(move |opened| { opened.then(f) })
             }
             /// Calls `f` inside this UI element, passing `true` if the elements visible, `false`
             /// if it is not.
@@ -2573,6 +2576,31 @@ impl<A> Ui<A> {
             }
         }
     }
+
+    pub fn with_always_drag_drop_source<R>(&self, flags: DragDropSourceFlags, f: impl FnOnce(Option<DragDropPayloadSetter<'_>>) -> R) -> R {
+        if !unsafe { ImGui_BeginDragDropSource(flags.bits()) } {
+            return f(None);
+        }
+        let payload = DragDropPayloadSetter { _dummy: PhantomData };
+        let r = f(Some(payload));
+        unsafe { ImGui_EndDragDropSource() }
+        r
+    }
+    pub fn with_drag_drop_source<R>(&self, flags: DragDropSourceFlags, f: impl FnOnce(DragDropPayloadSetter<'_>) -> R) -> Option<R> {
+        self.with_always_drag_drop_source(flags, move |r| { r.map(f) })
+    }
+    pub fn with_always_drag_drop_target<R>(&self, f: impl FnOnce(Option<DragDropPayloadGetter<'_>>) -> R) -> R {
+        if !unsafe { ImGui_BeginDragDropTarget() } {
+            return f(None);
+        }
+        let payload = DragDropPayloadGetter { _dummy: PhantomData };
+        let r = f(Some(payload));
+        unsafe { ImGui_EndDragDropTarget() }
+        r
+    }
+    pub fn with_drag_drop_target<R>(&self, f: impl FnOnce(DragDropPayloadGetter<'_>) -> R) -> Option<R> {
+        self.with_always_drag_drop_target(move |r| { r.map(f) })
+    }
 }
 
 
@@ -3042,6 +3070,7 @@ impl<P: Pushable> Drop for PushableGuard<'_, P> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 unsafe fn push_guard<'a, P: Pushable>(p: &'a P) -> PushableGuard<'a, P> {
     p.push();
     PushableGuard(p)
@@ -3440,3 +3469,114 @@ decl_builder_with!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCSt
     }
 }
 
+/// Helper token class that allows to set the drag&drop payload, once.
+pub struct DragDropPayloadSetter<'a> {
+    _dummy: PhantomData<&'a ()>
+}
+
+/// This is a sub-set of [`Cond`], only for drag&drop payloads.
+pub enum DragDropPayloadCond {
+    Always,
+    Once,
+}
+
+impl<'a> DragDropPayloadSetter<'a> {
+    pub fn set(self, type_: impl IntoCStr, data: &[u8], cond: DragDropPayloadCond) -> bool {
+        // For some reason ImGui does not accept a non-null pointer with length 0.
+        let ptr = if data.is_empty() { null() } else { data.as_ptr() as *const c_void};
+        let len = data.len();
+        let cond = match cond {
+            DragDropPayloadCond::Always => Cond::Always,
+            DragDropPayloadCond::Once => Cond::Once,
+        };
+        unsafe {
+            ImGui_SetDragDropPayload(type_.into().as_ptr(), ptr, len, cond.bits())
+        }
+    }
+}
+
+/// Helpar class to get the drag&drop payload.
+pub struct DragDropPayloadGetter<'a> {
+    _dummy: PhantomData<&'a ()>,
+}
+
+/// The payload of a drag&drop operation.
+///
+/// It contains a "type", and a byte array.
+pub struct DragDropPayload<'a> {
+    pay: &'a ImGuiPayload,
+}
+
+impl<'a> DragDropPayloadGetter<'a> {
+    pub fn any(&self, flags: DragDropAcceptFlags) -> Option<DragDropPayload<'a>> {
+        unsafe {
+            let pay = ImGui_AcceptDragDropPayload(null(), flags.bits());
+            if pay.is_null() {
+                None
+            } else {
+                Some(DragDropPayload {
+                    pay: &*pay,
+                })
+            }
+        }
+    }
+    pub fn by_type(&self, type_: impl IntoCStr, flags: DragDropAcceptFlags) -> Option<DragDropPayload<'a>> {
+        unsafe {
+            let pay = ImGui_AcceptDragDropPayload(type_.into().as_ptr(), flags.bits());
+            if pay.is_null() {
+                None
+            } else {
+                Some(DragDropPayload {
+                    pay: &*pay,
+                })
+            }
+        }
+    }
+    pub fn peek(&self) -> Option<DragDropPayload<'a>> {
+        unsafe {
+            let pay = ImGui_GetDragDropPayload();
+            if pay.is_null() {
+                None
+            } else {
+                Some(DragDropPayload {
+                    pay: &*pay,
+                })
+            }
+        }
+    }
+}
+
+impl<'a> DragDropPayload<'a> {
+    //WARNING: inline functions
+    pub fn is_data_type(&self, type_: impl IntoCStr) -> bool {
+        if self.pay.DataFrameCount == -1 {
+            return false;
+        }
+        let data_type = unsafe { std::mem::transmute::<&[i8], &[u8]>(&self.pay.DataType) };
+        let data_type = CStr::from_bytes_until_nul(data_type).unwrap();
+        data_type == type_.into().as_ref()
+    }
+    pub fn type_(&self) -> Cow<'_, str> {
+        let data_type = unsafe { std::mem::transmute::<&[i8], &[u8]>(&self.pay.DataType) };
+        let data_type = CStr::from_bytes_until_nul(data_type).unwrap();
+        data_type.to_string_lossy()
+    }
+    pub fn is_preview(&self) -> bool {
+        self.pay.Preview
+    }
+    pub fn is_delivery(&self) -> bool {
+        self.pay.Delivery
+    }
+    pub fn data(&self) -> &[u8] {
+        if self.pay.Data.is_null() {
+            &[]
+        } else {
+            unsafe {
+                std::slice::from_raw_parts(self.pay.Data as *const u8, self.pay.DataSize as usize)
+            }
+        }
+    }
+}
+
+pub const PAYLOAD_TYPE_COLOR_3F: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_3F) };
+pub const PAYLOAD_TYPE_COLOR_4F: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_4F) };

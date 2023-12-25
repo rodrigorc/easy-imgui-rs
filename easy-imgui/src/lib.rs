@@ -2601,6 +2601,24 @@ impl<A> Ui<A> {
     pub fn with_drag_drop_target<R>(&self, f: impl FnOnce(DragDropPayloadGetter<'_>) -> R) -> Option<R> {
         self.with_always_drag_drop_target(move |r| { r.map(f) })
     }
+
+    pub fn with_list_clipper(&self, items_count: usize, items_height: f32, included_ranges: &[std::ops::Range<usize>],
+        mut f: impl FnMut(usize)
+        )
+    {
+        unsafe {
+            let mut clip = ImGuiListClipper::new();
+            clip.Begin(items_count as i32, items_height);
+            for r in included_ranges {
+                clip.IncludeItemsByIndex(r.start as i32, r.end as i32);
+            }
+            while clip.Step() {
+                for i in clip.DisplayStart .. clip.DisplayEnd {
+                    f(i as usize);
+                }
+            }
+        }
+    }
 }
 
 

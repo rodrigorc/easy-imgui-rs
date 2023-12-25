@@ -3375,7 +3375,7 @@ impl Viewport<'_> {
     }
 }
 
-decl_builder_with!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
+decl_builder_with_opt!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         column (i32) (column),

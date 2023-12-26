@@ -4,7 +4,7 @@
  */
 use std::time::Duration;
 
-use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond};
+use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color};
 use easy_imgui_window::{
     MainWindow,
     MainWindowWithRenderer,
@@ -145,8 +145,8 @@ impl UiBuilder for MyApp {
                 let p1 = [p0.x + sz.x, p0.y + sz.y];
 
                 let dr = ui.window_draw_list();
-                dr.add_rect_filled(p0, p1, [1.0, 1.0, 1.0, 1.0], 0.0, DrawFlags::None);
-                dr.add_rect(p0, p1, [0.5, 0.5, 0.5, 1.0], 0.0, DrawFlags::None, 4.0);
+                dr.add_rect_filled(p0, p1, Color::new(1.0, 1.0, 1.0, 1.0), 0.0, DrawFlags::None);
+                dr.add_rect(p0, p1, Color::new(0.5, 0.5, 0.5, 1.0), 0.0, DrawFlags::None, 4.0);
 
                 static BUTTONS: &[[f32; 2]] = &[
                     [250.0       , 80.0 + 30.0],
@@ -160,9 +160,9 @@ impl UiBuilder for MyApp {
                     [80.0 - 30.0, 180.0       ],
                 ];
                 let color = if self.connected.is_some() {
-                    [0.75, 0.1, 0.2, 1.0]
+                    Color::new(0.75, 0.1, 0.2, 1.0)
                 } else {
-                    [0.75, 0.75, 0.75, 1.0]
+                    Color::new(0.75, 0.75, 0.75, 1.0)
                 };
                 let draw_btn = |center: [f32; 2], color, dpad, filled| {
                     if dpad {
@@ -173,12 +173,10 @@ impl UiBuilder for MyApp {
                         } else {
                             dr.add_rect(tl, br, color, 2.0, DrawFlags::RoundCornersAll, 2.0);
                         }
+                    } else if filled {
+                        dr.add_circle_filled(center, 10.0, color, 0);
                     } else {
-                        if filled {
-                            dr.add_circle_filled(center, 10.0, color, 0);
-                        } else {
-                            dr.add_circle(center, 10.0, color, 0, 2.0);
-                        }
+                        dr.add_circle(center, 10.0, color, 0, 2.0);
                     }
                 };
                 for (idx, pos) in BUTTONS.iter().enumerate() {
@@ -194,7 +192,7 @@ impl UiBuilder for MyApp {
                 for (idx, pos) in AXES.iter().enumerate() {
                     let x = self.axis[2 * idx];
                     let y = self.axis[2 * idx + 1];
-                    dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], R1 + R2, [0.8, 0.8, 0.8, 1.0], 0);
+                    dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], R1 + R2, Color::new(0.8, 0.8, 0.8, 1.0), 0);
                     dr.add_circle_filled([p0.x + pos[0] + x * R1, p0.y + pos[1] - y * R1], R2, color, 0);
                 }
             });

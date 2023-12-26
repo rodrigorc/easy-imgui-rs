@@ -89,7 +89,7 @@ impl<'a> StylePtr<'a> {
     pub fn color_alpha(&self, id: ColorId, alpha_mul: f32) -> Color {
         let mut c = self.color(id);
         let a = self.alpha();
-        c.w *= a * alpha_mul;
+        c.a *= a * alpha_mul;
         c
     }
     pub fn frame_padding(&self) -> Vector2 {

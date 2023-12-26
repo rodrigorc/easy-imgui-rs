@@ -89,7 +89,7 @@ impl Renderer {
         Ok(Renderer {
             imgui,
             gl,
-            bg_color: Some(Color::from([0.45, 0.55, 0.60, 1.0])),
+            bg_color: Some(Color::new(0.45, 0.55, 0.60, 1.0)),
             objs: GlObjects {
                 atlas,
                 program,
@@ -159,7 +159,7 @@ impl Renderer {
                         (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
                     );
                     if let Some(bg) = self.bg_color {
-                        self.gl.clear_color(bg.x, bg.y, bg.z, bg.w);
+                        self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
                         self.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
                 },

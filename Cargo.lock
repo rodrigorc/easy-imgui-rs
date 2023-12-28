@@ -304,6 +304,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a98d30140e3296250832bbaaff83b27dcd6fa3cc70fb6f1f3e5c9c0023b5317"
 dependencies = [
  "approx",
+ "mint",
  "num-traits",
 ]
 
@@ -485,6 +486,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitflags 2.4.1",
+ "cgmath",
  "cstr",
  "easy-imgui-sys",
  "easy-imgui-window",
@@ -513,7 +515,6 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cc",
- "mint",
  "pkg-config",
  "xshell",
 ]

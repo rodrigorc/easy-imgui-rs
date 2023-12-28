@@ -4,7 +4,7 @@
  */
 use std::time::Duration;
 
-use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color};
+use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color, vec2, Vector2};
 use easy_imgui_window::{
     MainWindow,
     MainWindowWithRenderer,
@@ -136,13 +136,13 @@ impl UiBuilder for MyApp {
             ui.show_demo_window(Some(&mut self.demo));
         }
 
-        ui.set_next_window_size([360.0, 300.0], Cond::Always);
+        ui.set_next_window_size(vec2(360.0, 300.0), Cond::Always);
         ui.window_config(&format!("Gamepad: {}###gamepad", self.connected.as_ref().map(|info| info.name.as_str()).unwrap_or("disconnected")))
             .flags(WindowFlags::AlwaysAutoResize)
             .with(|| {
                 let p0 = ui.get_cursor_screen_pos();
                 let sz = ui.get_content_region_avail();
-                let p1 = [p0.x + sz.x, p0.y + sz.y];
+                let p1 = vec2(p0.x + sz.x, p0.y + sz.y);
 
                 let dr = ui.window_draw_list();
                 dr.add_rect_filled(p0, p1, Color::new(1.0, 1.0, 1.0, 1.0), 0.0, DrawFlags::None);
@@ -164,10 +164,10 @@ impl UiBuilder for MyApp {
                 } else {
                     Color::new(0.75, 0.75, 0.75, 1.0)
                 };
-                let draw_btn = |center: [f32; 2], color, dpad, filled| {
+                let draw_btn = |center: Vector2, color, dpad, filled| {
                     if dpad {
-                        let tl = [center[0] - 10.0, center[1] - 10.0];
-                        let br = [center[0] + 10.0, center[1] + 10.0];
+                        let tl = vec2(center.x - 10.0, center.y - 10.0);
+                        let br = vec2(center.x + 10.0, center.y + 10.0);
                         if filled {
                             dr.add_rect_filled(tl, br, color, 2.0, DrawFlags::RoundCornersAll);
                         } else {
@@ -181,7 +181,7 @@ impl UiBuilder for MyApp {
                 };
                 for (idx, pos) in BUTTONS.iter().enumerate() {
                     let dpad = idx >= 4;
-                    draw_btn([p0.x + pos[0], p0.y + pos[1]], color, dpad, self.btn[idx]);
+                    draw_btn(vec2(p0.x + pos[0], p0.y + pos[1]), color, dpad, self.btn[idx]);
                 }
                 static AXES: &[[f32; 2]] = &[
                     [80.0, 80.0],
@@ -192,8 +192,8 @@ impl UiBuilder for MyApp {
                 for (idx, pos) in AXES.iter().enumerate() {
                     let x = self.axis[2 * idx];
                     let y = self.axis[2 * idx + 1];
-                    dr.add_circle_filled([p0.x + pos[0], p0.y + pos[1]], R1 + R2, Color::new(0.8, 0.8, 0.8, 1.0), 0);
-                    dr.add_circle_filled([p0.x + pos[0] + x * R1, p0.y + pos[1] - y * R1], R2, color, 0);
+                    dr.add_circle_filled(vec2(p0.x + pos[0], p0.y + pos[1]), R1 + R2, Color::new(0.8, 0.8, 0.8, 1.0), 0);
+                    dr.add_circle_filled(vec2(p0.x + pos[0] + x * R1, p0.y + pos[1] - y * R1), R2, color, 0);
                 }
             });
     }

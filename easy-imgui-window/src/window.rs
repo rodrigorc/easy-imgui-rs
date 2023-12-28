@@ -7,6 +7,7 @@ use winit::event::Ime::Commit;
 use winit::{window::{Window, CursorIcon, WindowBuilder}, event::Event, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::EventLoopWindowTarget};
 use easy_imgui_sys::*;
 use easy_imgui as imgui;
+use imgui::{mint, Vector2};
 use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
 use raw_window_handle::HasRawWindowHandle;
 use anyhow::{Result, anyhow};
@@ -162,7 +163,7 @@ impl MainWindowWithRenderer {
         let size = main_window.window.inner_size();
         let scale = main_window.window.scale_factor();
         let l_size = size.to_logical::<f32>(scale);
-        renderer.set_size(l_size.into(), scale as f32);
+        renderer.set_size(Vector2::from(mint::Vector2::from(l_size)), scale as f32);
 
         clipboard::maybe_setup_clipboard();
         let now = Instant::now();
@@ -286,8 +287,8 @@ impl MainWindowWithRenderer {
                         unsafe {
                             let io = &mut *ImGui_GetIO();
                             let size = self.main_window.to_logical_size::<_, f32>(*size);
-                            let size: Vector2 = size.into();
-                            io.DisplaySize = size.into();
+                            let size = Vector2::from(mint::Vector2::from(size));
+                            io.DisplaySize = imgui::v2_to_im(size);
                         }
                     }
                     ScaleFactorChanged { scale_factor, .. } => {

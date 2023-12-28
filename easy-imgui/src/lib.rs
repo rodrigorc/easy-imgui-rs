@@ -7,7 +7,51 @@
  * application in just a few lines.
  *
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
+ * The simplest easy-imgui program would be something like this:
  *
+ * ```rust
+ * use easy_imgui_window::{
+ *     easy_imgui as imgui,
+ *     MainWindow,
+ *     MainWindowWithRenderer,
+ *     winit::event_loop::EventLoopBuilder,
+ * };
+ * 
+ * // The App type, this will do the actual app. stuff.
+ * struct App;
+ * 
+ * impl imgui::UiBuilder for App {
+ *     // There are other function in this trait, but this is the only one
+ *     // mandatory and the most important: it build the UI.
+ *     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
+ *         ui.show_demo_window(None);
+ *     }
+ * }
+ *
+ * fn main() {
+ *     // Create a `winit` event loop.
+ *     let event_loop = EventLoopBuilder::new().build().unwrap();
+ *     // Create a `winit` window.
+ *     let main_window = MainWindow::new(&event_loop, "Example").unwrap();
+ *     // Create a `easy-imgui` window.
+ *     let mut window = MainWindowWithRenderer::new(main_window);
+ * 
+ *     // Create the app object.
+ *     let mut app = App;
+ * 
+ *     // Run the loop.
+ *     event_loop.run(move |event, w| {
+ *         // Do the magic!
+ *         let res = window.do_event(&mut app, &event, w);
+ *         // If the user requested to close the app, you should consider doing that.
+ *         if res.is_break() {
+ *             w.exit();
+ *         }
+ *     }).unwrap();
+ * }
+ * ```
+ *
+ * # Alternatives
  * This `crate` is similar to [`imgui-rs`][imguirs], and it is inpired by it, but with a few key
  * differences:
  *  * It doesn't use any C++-to-C api generator, as `rust-bindgen` is able to import simple C++
@@ -27,7 +71,7 @@
  *
  * # Usage
  * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
- * But if you intend to render the UI your self, then you can use this directly.
+ * But if you intend to render the UI yourself, then you can use this directly.
  *
  * These are the main pieces of this crate:
  *  * [`Context`]: It represents the ImGui context. In DearImgui this is a global variable. Here it
@@ -91,12 +135,22 @@ use std::cell::RefCell;
 use std::borrow::Cow;
 use cstr::cstr;
 use easy_imgui_sys::*;
+pub use cgmath;
+
+/// A type alias of the `cgmath::Vector2<f32>`.
+///
+/// Used in this crate to describe a 2D position or size.
+/// The equivalent type in Dear ImGui would be [`ImVec2`].
+pub type Vector2 = cgmath::Vector2<f32>;
 
 mod enums;
 pub mod style;
 
 pub use enums::*;
-pub use easy_imgui_sys::{self, Vector2, ImGuiID};
+pub use easy_imgui_sys::{self, ImGuiID};
+pub use image;
+pub use mint;
+
 use image::GenericImage;
 
 // Here we use a "generation value" to avoid calling stale callbacks. It shouldn't happen, but just
@@ -123,7 +177,38 @@ fn remove_generation(id: usize, gen: usize) -> Option<usize> {
     }
 }
 
-/// A color is storead as a `[r, g, b, a]`, each value between 0.0 and 1.0.
+/// Helper function to create a `Vector2`.
+pub fn to_v2(v: impl Into<mint::Vector2<f32>>) -> Vector2 {
+    let v = v.into();
+    Vector2 {
+        x: v.x,
+        y: v.y,
+    }
+}
+/// Helper function to create a `Vector2`.
+pub const fn vec2(x: f32, y: f32) -> Vector2 {
+    Vector2 { x, y }
+}
+/// Helper function to create a `ImVec2`.
+pub const fn im_vec2(x: f32, y: f32) -> ImVec2 {
+    ImVec2 { x, y }
+}
+/// Helper function to create a `ImVec2`.
+pub const fn v2_to_im(v: Vector2) -> ImVec2 {
+    ImVec2 {
+        x: v.x,
+        y: v.y,
+    }
+}
+/// Helper function to create a `Vector2`.
+pub const fn im_to_v2(v: ImVec2) -> Vector2 {
+    Vector2 {
+        x: v.x,
+        y: v.y,
+    }
+}
+
+/// A color is stored as a `[r, g, b, a]`, each value between 0.0 and 1.0.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(C)]
 pub struct Color {
@@ -147,18 +232,6 @@ impl Color {
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color { r, g, b, a }
     }
-    pub fn as_array(&self) -> &[f32; 4] {
-        // SAFETY: Self is repr(C) so layout compatible with an array
-        unsafe {
-            std::mem::transmute::<&Color, &[f32; 4]>(self)
-        }
-    }
-    pub fn as_mut_array(&mut self) -> &mut [f32; 4] {
-        // SAFETY: Self is repr(C) so layout compatible with an array
-        unsafe {
-            std::mem::transmute::<&mut Color, &mut [f32; 4]>(self)
-        }
-    }
     /// Converts a `Color` into a packed `u32` value, required by some Dear ImGui functions.
     pub fn as_u32(&self) -> u32 {
         unsafe {
@@ -166,32 +239,38 @@ impl Color {
         }
     }
 }
+impl AsRef<[f32; 4]> for Color {
+    fn as_ref(&self) -> &[f32; 4] {
+        // SAFETY: Self is repr(C) so layout compatible with an array
+        unsafe {
+            std::mem::transmute::<&Color, &[f32; 4]>(self)
+        }
+    }
+}
+impl AsMut<[f32; 4]> for Color {
+    fn as_mut(&mut self) -> &mut [f32; 4] {
+        // SAFETY: Self is repr(C) so layout compatible with an array
+        unsafe {
+            std::mem::transmute::<&mut Color, &mut [f32; 4]>(self)
+        }
+    }
+}
 impl From<ImVec4> for Color {
     #[inline]
     fn from(c: ImVec4) -> Color {
-        Color::from(Vector4::from(c))
+        Color::new(c.x, c.y, c.z, c.w)
     }
 }
 impl From<Color> for ImVec4 {
     #[inline]
     fn from(c: Color) -> ImVec4 {
-        ImVec4::from(Vector4::from(c))
+        ImVec4 {
+            x: c.r,
+            y: c.g,
+            z: c.b,
+            w: c.a,
+        }
     }
-}
-impl From<Color> for Vector4 {
-    #[inline]
-    fn from(c: Color) -> Vector4 {
-        Vector4::from([c.r, c.g, c.b, c.a])
-    }
-}
-impl From<Vector4> for Color {
-    #[inline]
-    fn from(v: Vector4) -> Color {
-        Color::new(v.x, v.y, v.z, v.w)
-    }
-}
-impl mint::IntoMint for Color {
-    type MintType = Vector4;
 }
 
 /// The main ImGui context.
@@ -270,9 +349,9 @@ impl Context {
     pub unsafe fn set_current(&self) {
         ImGui_SetCurrentContext(self.imgui);
     }
-    pub unsafe fn set_size(&mut self, size: impl Into<Vector2>, scale: f32) {
+    pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
         let io = ImGui_GetIO();
-        (*io).DisplaySize = size.into().into();
+        (*io).DisplaySize = v2_to_im(size);
         if self.scale() != scale {
             (*io).DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
             (*io).FontGlobalScale = scale.recip();
@@ -281,7 +360,7 @@ impl Context {
     }
     pub unsafe fn size(&self) -> Vector2 {
         let io = ImGui_GetIO();
-        (*io).DisplaySize.into()
+        im_to_v2((*io).DisplaySize)
     }
     pub unsafe fn scale(&self) -> f32 {
         let io = ImGui_GetIO();
@@ -607,8 +686,8 @@ macro_rules! decl_builder_setter {
     ($name:ident: $ty:ty) => { decl_builder_setter_ex!{ $name: $ty = $name.into() } };
 }
 
-macro_rules! decl_builder_setter_into {
-    ($name:ident: $ty:ty) => { decl_builder_setter_ex!{ $name: impl Into<$ty> = $name.into().into() } };
+macro_rules! decl_builder_setter_vector2 {
+    ($name:ident: Vector2) => { decl_builder_setter_ex!{ $name: Vector2 = v2_to_im($name) } };
 }
 
 macro_rules! decl_builder_with_maybe_opt {
@@ -694,7 +773,7 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
         window_flags (WindowFlags) (window_flags.bits()),
     )
     {
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
         decl_builder_setter!{child_flags: ChildFlags}
         decl_builder_setter!{window_flags: WindowFlags}
     }
@@ -702,7 +781,7 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
         pub fn child_config<S: IntoCStr>(&self, name: S) -> Child<S> {
             Child {
                 name: name.into(),
-                size: ImVec2::zero(),
+                size: im_vec2(0.0, 0.0),
                 child_flags: ChildFlags::None,
                 window_flags: WindowFlags::None,
                 push: (),
@@ -773,13 +852,13 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
         size (ImVec2) (&size),
     )
     {
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
     }
     {
         pub fn button_config<S: IntoCStr>(&self, label: S) -> Button<S> {
             Button {
                 label: label.into(),
-                size: ImVec2::zero(),
+                size: im_vec2(0.0, 0.0),
             }
         }
         pub fn button<S: IntoCStr>(&self, label: S) -> bool {
@@ -812,14 +891,14 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
         flags (ButtonFlags) (flags.bits()),
     )
     {
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
         decl_builder_setter!{flags: ButtonFlags}
     }
     {
         pub fn invisible_button_config<S: IntoCStr>(&self, id: S) -> InvisibleButton<S> {
             InvisibleButton {
                 id: id.into(),
-                size: ImVec2::zero(),
+                size: im_vec2(0.0, 0.0),
                 flags: ButtonFlags::MouseButtonLeft,
             }
         }
@@ -887,7 +966,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
         overlay (Option<S::Temp>) (optional_str(&overlay)),
     )
     {
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
         pub fn overlay<S2: IntoCStr>(self, overlay: S2) -> ProgressBar<S2> {
             ProgressBar {
                 fraction: self.fraction,
@@ -900,7 +979,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
         pub fn progress_bar_config<'a>(&self, fraction: f32) -> ProgressBar<&'a str> {
             ProgressBar {
                 fraction,
-                size: ImVec2::new(-f32::MIN_POSITIVE, 0.0),
+                size: im_vec2(-f32::MIN_POSITIVE, 0.0),
                 overlay: None,
             }
         }
@@ -917,18 +996,18 @@ decl_builder! { Image -> (), ImGui_Image () ()
         border_col (ImVec4) (&border_col),
     )
     {
-        decl_builder_setter_into!{uv0: Vector2}
-        decl_builder_setter_into!{uv1: Vector2}
+        decl_builder_setter_vector2!{uv0: Vector2}
+        decl_builder_setter_vector2!{uv1: Vector2}
         decl_builder_setter!{tint_col: Color}
         decl_builder_setter!{border_col: Color}
     }
     {
-        pub fn image_config(&self, user_texture_id: TextureId, size: impl Into<Vector2>) -> Image {
+        pub fn image_config(&self, user_texture_id: TextureId, size: Vector2) -> Image {
             Image {
                 user_texture_id,
-                size: size.into().into(),
-                uv0: ImVec2::new(0.0, 0.0),
-                uv1: ImVec2::new(1.0, 1.0),
+                size: v2_to_im(size),
+                uv0: im_vec2(0.0, 0.0),
+                uv1: im_vec2(1.0, 1.0),
                 tint_col: Color::WHITE.into(),
                 border_col: Color::TRANSPARENT.into(),
             }
@@ -940,10 +1019,10 @@ decl_builder! { Image -> (), ImGui_Image () ()
             let tex_size = atlas.texture_size();
             let inv_tex_w = 1.0 / tex_size[0] as f32;
             let inv_tex_h = 1.0 / tex_size[1] as f32;
-            let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
-            let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
+            let uv0 = vec2(rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h);
+            let uv1 = vec2((rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h);
 
-            self.image_config(tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+            self.image_config(tex_id, vec2(scale * rect.Width as f32, scale * rect.Height as f32))
                 .uv0(uv0)
                 .uv1(uv1)
         }
@@ -961,19 +1040,19 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         tint_col (ImVec4) (&tint_col),
     )
     {
-        decl_builder_setter_into!{uv0: Vector2}
-        decl_builder_setter_into!{uv1: Vector2}
+        decl_builder_setter_vector2!{uv0: Vector2}
+        decl_builder_setter_vector2!{uv1: Vector2}
         decl_builder_setter!{bg_col: Color}
         decl_builder_setter!{tint_col: Color}
     }
     {
-        pub fn image_button_config<S: IntoCStr>(&self, str_id: S, user_texture_id: TextureId, size: impl Into<Vector2>) -> ImageButton<S> {
+        pub fn image_button_config<S: IntoCStr>(&self, str_id: S, user_texture_id: TextureId, size: Vector2) -> ImageButton<S> {
             ImageButton {
                 str_id: str_id.into(),
                 user_texture_id,
-                size: size.into().into(),
-                uv0: ImVec2::new(0.0, 0.0),
-                uv1: ImVec2::new(1.0, 1.0),
+                size: v2_to_im(size),
+                uv0: im_vec2(0.0, 0.0),
+                uv1: im_vec2(1.0, 1.0),
                 bg_col: Color::TRANSPARENT.into(),
                 tint_col: Color::WHITE.into(),
             }
@@ -985,10 +1064,10 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
             let tex_size = atlas.texture_size();
             let inv_tex_w = 1.0 / tex_size[0] as f32;
             let inv_tex_h = 1.0 / tex_size[1] as f32;
-            let uv0 = [rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h];
-            let uv1 = [(rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h];
+            let uv0 = vec2(rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h);
+            let uv1 = vec2((rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h);
 
-            self.image_button_config(str_id, tex_id, [scale * rect.Width as f32, scale * rect.Height as f32])
+            self.image_button_config(str_id, tex_id, vec2(scale * rect.Width as f32, scale * rect.Height as f32))
                 .uv0(uv0)
                 .uv1(uv1)
         }
@@ -1005,7 +1084,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
     {
         decl_builder_setter!{selected: bool}
         decl_builder_setter!{flags: SelectableFlags}
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
     }
     {
         pub fn selectable_config<S: IntoCStr>(&self, label: S) -> Selectable<S> {
@@ -1013,7 +1092,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
                 label: label.into(),
                 selected: false,
                 flags: SelectableFlags::None,
-                size: ImVec2::zero(),
+                size: im_vec2(0.0, 0.0),
             }
         }
         pub fn selectable<S: IntoCStr>(&self, label: S) -> bool {
@@ -1205,7 +1284,7 @@ decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
         pub fn color_edit_4_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut Color) -> ColorEdit4<'v, S> {
             ColorEdit4 {
                 label: label.into(),
-                color: color.as_mut_array(),
+                color: color.as_mut(),
                 flags: ColorEditFlags::None,
             }
         }
@@ -1237,7 +1316,7 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
         label (S::Temp) (label.as_ptr()),
         color (&'v mut [f32; 4]) (color.as_mut_ptr()),
         flags (ColorEditFlags) (flags.bits()),
-        ref_col (Option<Color>) (ref_col.as_ref().map(|x| x.as_array().as_ptr()).unwrap_or(null())),
+        ref_col (Option<Color>) (ref_col.as_ref().map(|x| x.as_ref().as_ptr()).unwrap_or(null())),
     )
     {
         decl_builder_setter!{flags: ColorEditFlags}
@@ -1250,7 +1329,7 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
         pub fn color_picker_4_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut Color) -> ColorPicker4<'v, S> {
             ColorPicker4 {
                 label: label.into(),
-                color: color.as_mut_array(),
+                color: color.as_mut(),
                 flags: ColorEditFlags::None,
                 ref_col: None,
             }
@@ -1344,7 +1423,7 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
     )
     {
         decl_builder_setter!{flags: InputTextFlags}
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
     }
     {
         pub fn input_text_multiline_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut String) -> InputTextMultiline<'v, S> {
@@ -1352,7 +1431,7 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
                 label:label.into(),
                 text,
                 flags: InputTextFlags::None,
-                size: ImVec2::zero(),
+                size: im_vec2(0.0, 0.0),
             }
         }
     }
@@ -1748,13 +1827,13 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
         size (ImVec2) (&size),
     )
     {
-        decl_builder_setter_into!{size: Vector2}
+        decl_builder_setter_vector2!{size: Vector2}
     }
     {
         pub fn list_box_config<S: IntoCStr>(&self, label: S) -> ListBox<S> {
             ListBox {
                 label: label.into(),
-                size: ImVec2::new(0.0, 0.0),
+                size: im_vec2(0.0, 0.0),
                 push: (),
             }
         }
@@ -1778,7 +1857,7 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
 
             let mut changed = false;
             self.list_box_config(label)
-                .size([0.0, height_in_pixels.floor()])
+                .size(vec2(0.0, height_in_pixels.floor()))
                 .with(|| {
                     for val in values {
                         if self.selectable_config(f_name(val))
@@ -1878,6 +1957,18 @@ impl<A> Ui<A> {
         let mut x = MaybeUninit::new(x);
         cb(&mut *ui.data, x.as_mut_ptr() as *mut c_void);
     }
+    pub fn display_size(&self) -> Vector2 {
+        unsafe {
+            let io = ImGui_GetIO();
+            im_to_v2((*io).DisplaySize)
+        }
+    }
+    pub fn display_scale(&self) -> f32 {
+        unsafe {
+            let io = ImGui_GetIO();
+            (*io).DisplayFramebufferScale.x
+        }
+    }
     pub fn get_clipboard_text(&self) -> String {
         unsafe {
             CStr::from_ptr(ImGui_GetClipboardText()).to_string_lossy().into_owned()
@@ -1890,8 +1981,8 @@ impl<A> Ui<A> {
         }
     }
     pub fn set_next_window_size_constraints_callback(&self,
-        size_min: impl Into<Vector2>,
-        size_max: impl Into<Vector2>,
+        size_min: Vector2,
+        size_max: Vector2,
         mut cb: impl FnMut(SizeCallbackData<'_>) + 'static,
     )
     {
@@ -1900,22 +1991,22 @@ impl<A> Ui<A> {
             // first callback is null!
             let id = self.push_callback(move |_, scd| cb(scd));
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into().into(),
-                &size_max.into().into(),
+                &v2_to_im(size_min),
+                &v2_to_im(size_max),
                 Some(call_size_callback::<A>),
                 id as *mut c_void,
             );
         }
     }
     pub fn set_next_window_size_constraints(&self,
-        size_min: impl Into<Vector2>,
-        size_max: impl Into<Vector2>,
+        size_min: Vector2,
+        size_max: Vector2,
     )
     {
         unsafe {
             ImGui_SetNextWindowSizeConstraints(
-                &size_min.into().into(),
-                &size_max.into().into(),
+                &v2_to_im(size_min),
+                &v2_to_im(size_max),
                 None,
                 null_mut(),
             );
@@ -1950,8 +2041,8 @@ impl<A> Ui<A> {
     with_begin_end!{
         /// See `PushClipRect`, `PopClipRect`.
         clip_rect ImGui_PushClipRect ImGui_PopClipRect (
-            clip_rect_min (Vector2) (&clip_rect_min.into()),
-            clip_rect_max (Vector2) (&clip_rect_max.into()),
+            clip_rect_min (Vector2) (&v2_to_im(clip_rect_min)),
+            clip_rect_max (Vector2) (&v2_to_im(clip_rect_max)),
             intersect_with_current_clip_rect (bool) (intersect_with_current_clip_rect),
         )
     }
@@ -1985,19 +2076,19 @@ impl<A> Ui<A> {
             ImGui_ShowDemoWindow(optional_mut_bool(&mut show));
         }
     }
-    pub fn set_next_window_pos(&self, pos: impl Into<Vector2>, cond: Cond, pivot: impl Into<Vector2>) {
+    pub fn set_next_window_pos(&self, pos: Vector2, cond: Cond, pivot: Vector2) {
         unsafe {
-            ImGui_SetNextWindowPos(&pos.into().into(), cond.bits(), &pivot.into().into());
+            ImGui_SetNextWindowPos(&v2_to_im(pos), cond.bits(), &v2_to_im(pivot));
         }
     }
-    pub fn set_next_window_size(&self, size: impl Into<Vector2>, cond: Cond) {
+    pub fn set_next_window_size(&self, size: Vector2, cond: Cond) {
         unsafe {
-            ImGui_SetNextWindowSize(&size.into().into(), cond.bits());
+            ImGui_SetNextWindowSize(&v2_to_im(size), cond.bits());
         }
     }
-    pub fn set_next_window_content_size(&self, size: impl Into<Vector2>) {
+    pub fn set_next_window_content_size(&self, size: Vector2) {
         unsafe {
-            ImGui_SetNextWindowContentSize(&size.into().into());
+            ImGui_SetNextWindowContentSize(&v2_to_im(size));
         }
     }
 
@@ -2013,9 +2104,9 @@ impl<A> Ui<A> {
         }
     }
 
-    pub fn set_next_window_scroll(&self, scroll: impl Into<Vector2>) {
+    pub fn set_next_window_scroll(&self, scroll: Vector2) {
         unsafe {
-            ImGui_SetNextWindowScroll(&scroll.into().into());
+            ImGui_SetNextWindowScroll(&v2_to_im(scroll));
         }
     }
 
@@ -2206,17 +2297,17 @@ impl<A> Ui<A> {
     }
     pub fn get_item_rect_min(&self) -> Vector2 {
         unsafe {
-            ImGui_GetItemRectMin().into()
+            im_to_v2(ImGui_GetItemRectMin())
         }
     }
     pub fn get_item_rect_max(&self) -> Vector2 {
         unsafe {
-            ImGui_GetItemRectMax().into()
+            im_to_v2(ImGui_GetItemRectMax())
         }
     }
     pub fn get_item_rect_size(&self) -> Vector2 {
         unsafe {
-            ImGui_GetItemRectSize().into()
+            im_to_v2(ImGui_GetItemRectSize())
         }
     }
     pub fn get_main_viewport(&self) -> Viewport<'_> {
@@ -2228,27 +2319,27 @@ impl<A> Ui<A> {
     }
     pub fn get_content_region_avail(&self) -> Vector2 {
         unsafe {
-            ImGui_GetContentRegionAvail().into()
+            im_to_v2(ImGui_GetContentRegionAvail())
         }
     }
     pub fn get_content_region_max(&self) -> Vector2 {
         unsafe {
-            ImGui_GetContentRegionMax().into()
+            im_to_v2(ImGui_GetContentRegionMax())
         }
     }
     pub fn get_window_content_region_min(&self) -> Vector2 {
         unsafe {
-            ImGui_GetWindowContentRegionMin().into()
+            im_to_v2(ImGui_GetWindowContentRegionMin())
         }
     }
     pub fn get_window_content_region_max(&self) -> Vector2 {
         unsafe {
-            ImGui_GetWindowContentRegionMax().into()
+            im_to_v2(ImGui_GetWindowContentRegionMax())
         }
     }
     pub fn get_window_pos(&self) -> Vector2 {
         unsafe {
-            ImGui_GetWindowPos().into()
+            im_to_v2(ImGui_GetWindowPos())
         }
     }
     pub fn get_window_width(&self) -> f32 {
@@ -2311,14 +2402,14 @@ impl<A> Ui<A> {
             ImGui_SetScrollFromPosY(local_y, center_y_ratio);
         }
     }
-    pub fn set_window_pos(&self, pos: impl Into<Vector2>, cond: Cond) {
+    pub fn set_window_pos(&self, pos: Vector2, cond: Cond) {
         unsafe {
-            ImGui_SetWindowPos(&pos.into().into(), cond.bits());
+            ImGui_SetWindowPos(&v2_to_im(pos), cond.bits());
         }
     }
-    pub fn set_window_size(&self, size: impl Into<Vector2>, cond: Cond) {
+    pub fn set_window_size(&self, size: Vector2, cond: Cond) {
         unsafe {
-            ImGui_SetWindowSize(&size.into().into(), cond.bits());
+            ImGui_SetWindowSize(&v2_to_im(size), cond.bits());
         }
     }
     pub fn set_window_collapsed(&self, collapsed: bool, cond: Cond) {
@@ -2351,9 +2442,9 @@ impl<A> Ui<A> {
             ImGui_Spacing();
         }
     }
-    pub fn dummy(&self, size: impl Into<Vector2>) {
+    pub fn dummy(&self, size: Vector2) {
         unsafe {
-            ImGui_Dummy(&size.into().into());
+            ImGui_Dummy(&v2_to_im(size));
         }
     }
     pub fn indent(&self, indent_w: f32) {
@@ -2368,7 +2459,7 @@ impl<A> Ui<A> {
     }
     pub fn get_cursor_pos(&self) -> Vector2 {
         unsafe {
-            ImGui_GetCursorPos().into()
+            im_to_v2(ImGui_GetCursorPos())
         }
     }
     pub fn get_cursor_pos_x(&self) -> f32 {
@@ -2381,9 +2472,9 @@ impl<A> Ui<A> {
             ImGui_GetCursorPosY()
         }
     }
-    pub fn set_cursor_pos(&self, local_pos: impl Into<Vector2>) {
+    pub fn set_cursor_pos(&self, local_pos: Vector2) {
         unsafe {
-            ImGui_SetCursorPos(&local_pos.into().into());
+            ImGui_SetCursorPos(&v2_to_im(local_pos));
         }
     }
     pub fn set_cursor_pos_x(&self, local_x: f32) {
@@ -2398,17 +2489,17 @@ impl<A> Ui<A> {
     }
     pub fn get_cursor_start_pos(&self) -> Vector2 {
         unsafe {
-            ImGui_GetCursorStartPos().into()
+            im_to_v2(ImGui_GetCursorStartPos())
         }
     }
     pub fn get_cursor_screen_pos(&self) -> Vector2 {
         unsafe {
-            ImGui_GetCursorScreenPos().into()
+            im_to_v2(ImGui_GetCursorScreenPos())
         }
     }
-    pub fn set_cursor_screen_pos(&self, pos: impl Into<Vector2>) {
+    pub fn set_cursor_screen_pos(&self, pos: Vector2) {
         unsafe {
-            ImGui_SetCursorScreenPos(&pos.into().into());
+            ImGui_SetCursorScreenPos(&v2_to_im(pos));
         }
     }
     pub fn align_text_to_frame_padding(&self) {
@@ -2447,7 +2538,7 @@ impl<A> Ui<A> {
     pub fn calc_text_size_ex(&self, text: &str, hide_text_after_double_hash: bool, wrap_width: f32) -> Vector2 {
         unsafe {
             let (start, end) = text_ptrs(text);
-            ImGui_CalcTextSize(start, end, hide_text_after_double_hash, wrap_width).into()
+            im_to_v2(ImGui_CalcTextSize(start, end, hide_text_after_double_hash, wrap_width))
         }
     }
     pub fn set_color_edit_options(&self, flags: ColorEditFlags) {
@@ -2483,7 +2574,7 @@ impl<A> Ui<A> {
     }
     pub fn get_font_tex_uv_white_pixel(&self) -> Vector2 {
         unsafe {
-            ImGui_GetFontTexUvWhitePixel().into()
+            im_to_v2(ImGui_GetFontTexUvWhitePixel())
         }
     }
     //GetKeyName
@@ -2523,14 +2614,14 @@ impl<A> Ui<A> {
             ImGui_GetMouseClickedCount(button.bits())
         }
     }
-    pub fn is_rect_visible_size(&self, size: impl Into<Vector2>) -> bool {
+    pub fn is_rect_visible_size(&self, size: Vector2) -> bool {
         unsafe {
-            ImGui_IsRectVisible(&size.into().into())
+            ImGui_IsRectVisible(&v2_to_im(size))
         }
     }
-    pub fn is_rect_visible(&self, rect_min: impl Into<Vector2>, rect_max: impl Into<Vector2>) -> bool {
+    pub fn is_rect_visible(&self, rect_min: Vector2, rect_max: Vector2) -> bool {
         unsafe {
-            ImGui_IsRectVisible1(&rect_min.into().into(), &rect_max.into().into())
+            ImGui_IsRectVisible1(&v2_to_im(rect_min), &v2_to_im(rect_max))
         }
     }
     /*
@@ -2551,12 +2642,12 @@ impl<A> Ui<A> {
     }
     pub fn get_mouse_pos(&self) -> Vector2 {
         unsafe {
-            ImGui_GetMousePos().into()
+            im_to_v2(ImGui_GetMousePos())
         }
     }
     pub fn get_mouse_pos_on_opening_current_popup(&self) -> Vector2 {
         unsafe {
-            ImGui_GetMousePosOnOpeningCurrentPopup().into()
+            im_to_v2(ImGui_GetMousePosOnOpeningCurrentPopup())
         }
     }
     pub fn is_mouse_dragging(&self, button: MouseButton) -> bool {
@@ -2566,7 +2657,7 @@ impl<A> Ui<A> {
     }
     pub fn get_mouse_drag_delta(&self, button: MouseButton) -> Vector2 {
         unsafe {
-            ImGui_GetMouseDragDelta(button.bits(), /*lock_threshold*/ -1.0).into()
+            im_to_v2(ImGui_GetMouseDragDelta(button.bits(), /*lock_threshold*/ -1.0))
         }
     }
     pub fn reset_mouse_drag_delta(&self, button: MouseButton) {
@@ -2692,7 +2783,7 @@ impl<A> Ui<A> {
 
 #[cfg(feature="docking")]
 impl<A> Ui<A> {
-    pub fn dock_space(&self, id: ImGuiID, size: impl Into<Vector2>, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
+    pub fn dock_space(&self, id: ImGuiID, size: Vector2, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
         unsafe {
             ImGui_DockSpace(id, &size.into().into(), flags.bits(), std::ptr::null())
         }
@@ -2746,8 +2837,6 @@ impl Default for CustomRectIndex {
 pub struct FontAtlasPtr<'ui> {
     ptr: &'ui mut ImFontAtlas,
 }
-
-pub use image;
 
 type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
 type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
@@ -2833,7 +2922,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         id: char,
         size: impl Into<mint::Vector2<u32>>,
         advance_x: f32,
-        offset: impl Into<Vector2>,
+        offset: Vector2,
         draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static
     ) -> CustomRectIndex
     {
@@ -2842,7 +2931,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
             let io = ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph((*io).Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &offset.into().into());
+            let idx = ImFontAtlas_AddCustomRectFontGlyph((*io).Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &v2_to_im(offset));
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -2935,16 +3024,16 @@ pub struct SizeCallbackData<'a> {
 
 impl SizeCallbackData<'_> {
     pub fn pos(&self) -> Vector2 {
-        self.ptr.Pos.into()
+        im_to_v2(self.ptr.Pos)
     }
     pub fn current_size(&self) -> Vector2 {
-        self.ptr.CurrentSize.into()
+        im_to_v2(self.ptr.CurrentSize)
     }
     pub fn desired_size(&self) -> Vector2 {
-        self.ptr.DesiredSize.into()
+        im_to_v2(self.ptr.DesiredSize)
     }
-    pub fn set_desired_size(&mut self, sz: impl Into<Vector2>) {
-        self.ptr.DesiredSize = sz.into().into();
+    pub fn set_desired_size(&mut self, sz: Vector2) {
+        self.ptr.DesiredSize = v2_to_im(sz);
     }
 }
 
@@ -2963,77 +3052,77 @@ pub struct WindowDrawList<'ui, A> {
 }
 
 impl<'ui, A> WindowDrawList<'ui, A> {
-    pub fn add_line(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, color: Color, thickness: f32) {
+    pub fn add_line(&self, p1: Vector2, p2: Vector2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddLine(self.ptr, &p1.into().into(), &p2.into().into(), color.as_u32(), thickness);
+            ImDrawList_AddLine(self.ptr, &v2_to_im(p1), &v2_to_im(p2), color.as_u32(), thickness);
         }
     }
-    pub fn add_rect(&self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, color: Color, rounding: f32, flags: DrawFlags, thickness: f32) {
+    pub fn add_rect(&self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags, thickness: f32) {
         unsafe {
-            ImDrawList_AddRect(self.ptr, &p_min.into().into(), &p_max.into().into(), color.as_u32(), rounding, flags.bits(), thickness);
+            ImDrawList_AddRect(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), color.as_u32(), rounding, flags.bits(), thickness);
         }
     }
-    pub fn add_rect_filled(&self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_rect_filled(&self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddRectFilled(self.ptr, &p_min.into().into(), &p_max.into().into(), color.as_u32(), rounding, flags.bits());
+            ImDrawList_AddRectFilled(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), color.as_u32(), rounding, flags.bits());
         }
     }
-    pub fn add_rect_filled_multicolor(&self, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
+    pub fn add_rect_filled_multicolor(&self, p_min: Vector2, p_max: Vector2, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
         unsafe {
-            ImDrawList_AddRectFilledMultiColor(self.ptr, &p_min.into().into(), &p_max.into().into(), col_upr_left.as_u32(), col_upr_right.as_u32(), col_bot_right.as_u32(), col_bot_left.as_u32());
+            ImDrawList_AddRectFilledMultiColor(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), col_upr_left.as_u32(), col_upr_right.as_u32(), col_bot_right.as_u32(), col_bot_left.as_u32());
         }
     }
-    pub fn add_quad(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: Color, thickness: f32) {
+    pub fn add_quad(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddQuad(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color.as_u32(), thickness);
+            ImDrawList_AddQuad(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32(), thickness);
         }
     }
-    pub fn add_quad_filled(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: Color) {
+    pub fn add_quad_filled(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color) {
         unsafe {
-            ImDrawList_AddQuadFilled(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color.as_u32());
+            ImDrawList_AddQuadFilled(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32());
         }
     }
-    pub fn add_triangle(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: Color, thickness: f32) {
+    pub fn add_triangle(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddTriangle(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color.as_u32(), thickness);
+            ImDrawList_AddTriangle(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32(), thickness);
         }
     }
-    pub fn add_triangle_filled(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: Color) {
+    pub fn add_triangle_filled(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color) {
         unsafe {
-            ImDrawList_AddTriangleFilled(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color.as_u32());
+            ImDrawList_AddTriangleFilled(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32());
         }
     }
-    pub fn add_circle(&self, center: impl Into<Vector2>, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_circle(&self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddCircle(self.ptr, &center.into().into(), radius, color.as_u32(), num_segments, thickness);
+            ImDrawList_AddCircle(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments, thickness);
         }
     }
-    pub fn add_circle_filled(&self, center: impl Into<Vector2>, radius: f32, color: Color, num_segments: i32) {
+    pub fn add_circle_filled(&self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddCircleFilled(self.ptr, &center.into().into(), radius, color.as_u32(), num_segments);
+            ImDrawList_AddCircleFilled(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments);
         }
     }
-    pub fn add_ngon(&self, center: impl Into<Vector2>, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_ngon(&self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
         unsafe {
-            ImDrawList_AddNgon(self.ptr, &center.into().into(), radius, color.as_u32(), num_segments, thickness);
+            ImDrawList_AddNgon(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments, thickness);
         }
     }
-    pub fn add_ngon_filled(&self, center: impl Into<Vector2>, radius: f32, color: Color, num_segments: i32) {
+    pub fn add_ngon_filled(&self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddNgonFilled(self.ptr, &center.into().into(), radius, color.as_u32(), num_segments);
+            ImDrawList_AddNgonFilled(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments);
         }
     }
-    pub fn add_text(&self, pos: impl Into<Vector2>, color: Color, text: &str) {
+    pub fn add_text(&self, pos: Vector2, color: Color, text: &str) {
         unsafe {
             let (start, end) = text_ptrs(text);
-            ImDrawList_AddText(self.ptr, &pos.into().into(), color.as_u32(), start, end);
+            ImDrawList_AddText(self.ptr, &v2_to_im(pos), color.as_u32(), start, end);
         }
     }
-    pub fn add_text_ex(&self, font: FontId, font_size: f32, pos: impl Into<Vector2>, color: Color, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
+    pub fn add_text_ex(&self, font: FontId, font_size: f32, pos: Vector2, color: Color, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
         unsafe {
             let (start, end) = text_ptrs(text);
             ImDrawList_AddText1(
-                self.ptr, font_ptr(font), font_size, &pos.into().into(), color.as_u32(), start, end,
+                self.ptr, font_ptr(font), font_size, &v2_to_im(pos), color.as_u32(), start, end,
                 wrap_width, cpu_fine_clip_rect.as_ref().map(|x| x as *const _).unwrap_or(null())
             );
         }
@@ -3048,29 +3137,29 @@ impl<'ui, A> WindowDrawList<'ui, A> {
             ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color.as_u32());
         }
     }
-    pub fn add_bezier_cubic(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_cubic(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierCubic(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), color.as_u32(), thickness, num_segments);
+            ImDrawList_AddBezierCubic(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32(), thickness, num_segments);
         }
     }
-    pub fn add_bezier_quadratic(&self, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_quadratic(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32, num_segments: i32) {
         unsafe {
-            ImDrawList_AddBezierQuadratic(self.ptr, &p1.into().into(), &p2.into().into(), &p3.into().into(), color.as_u32(), thickness, num_segments);
+            ImDrawList_AddBezierQuadratic(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32(), thickness, num_segments);
         }
     }
-    pub fn add_image(&self, user_texture_id: TextureId, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: Color) {
+    pub fn add_image(&self, user_texture_id: TextureId, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color) {
         unsafe {
-            ImDrawList_AddImage(self.ptr, user_texture_id.id(), &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color.as_u32());
+            ImDrawList_AddImage(self.ptr, user_texture_id.id(), &v2_to_im(p_min), &v2_to_im(p_max), &v2_to_im(uv_min), &v2_to_im(uv_max), color.as_u32());
         }
     }
-    pub fn add_image_quad(&self, user_texture_id: TextureId, p1: impl Into<Vector2>, p2: impl Into<Vector2>, p3: impl Into<Vector2>, p4: impl Into<Vector2>, uv1: impl Into<Vector2>, uv2: impl Into<Vector2>, uv3: impl Into<Vector2>, uv4: impl Into<Vector2>, color: Color) {
+    pub fn add_image_quad(&self, user_texture_id: TextureId, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, uv1: Vector2, uv2: Vector2, uv3: Vector2, uv4: Vector2, color: Color) {
         unsafe {
-            ImDrawList_AddImageQuad(self.ptr, user_texture_id.id(), &p1.into().into(), &p2.into().into(), &p3.into().into(), &p4.into().into(), &uv1.into().into(), &uv2.into().into(), &uv3.into().into(), &uv4.into().into(), color.as_u32());
+            ImDrawList_AddImageQuad(self.ptr, user_texture_id.id(), &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), &v2_to_im(uv1), &v2_to_im(uv2), &v2_to_im(uv3), &v2_to_im(uv4), color.as_u32());
         }
     }
-    pub fn add_image_rounded(&self, user_texture_id: TextureId, p_min: impl Into<Vector2>, p_max: impl Into<Vector2>, uv_min: impl Into<Vector2>, uv_max: impl Into<Vector2>, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_image_rounded(&self, user_texture_id: TextureId, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id.id(), &p_min.into().into(), &p_max.into().into(), &uv_min.into().into(), &uv_max.into().into(), color.as_u32(), rounding, flags.bits());
+            ImDrawList_AddImageRounded(self.ptr, user_texture_id.id(), &v2_to_im(p_min), &v2_to_im(p_max), &v2_to_im(uv_min), &v2_to_im(uv_max), color.as_u32(), rounding, flags.bits());
         }
     }
 
@@ -3332,7 +3421,7 @@ impl Pushable for Style {
     unsafe fn push(&self) {
         match self.1 {
             StyleValue::F32(f) => ImGui_PushStyleVar(self.0.bits(), f),
-            StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v.into()),
+            StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v2_to_im(v)),
         }
     }
     unsafe fn pop(&self) {
@@ -3441,16 +3530,16 @@ impl Viewport<'_> {
         ViewportFlags::from_bits_truncate(self.ptr.Flags)
     }
     pub fn pos(&self) -> Vector2 {
-        self.ptr.Pos.into()
+        im_to_v2(self.ptr.Pos)
     }
     pub fn size(&self) -> Vector2 {
-        self.ptr.Size.into()
+        im_to_v2(self.ptr.Size)
     }
     pub fn work_pos(&self) -> Vector2 {
-        self.ptr.WorkPos.into()
+        im_to_v2(self.ptr.WorkPos)
     }
     pub fn work_size(&self) -> Vector2 {
-        self.ptr.WorkSize.into()
+        im_to_v2(self.ptr.WorkSize)
     }
 }
 
@@ -3464,7 +3553,7 @@ decl_builder_with_opt!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: Int
     )
     {
         decl_builder_setter!{flags: TableFlags}
-        decl_builder_setter_into!{outer_size: Vector2}
+        decl_builder_setter_vector2!{outer_size: Vector2}
         decl_builder_setter!{inner_width: f32}
     }
     {
@@ -3473,7 +3562,7 @@ decl_builder_with_opt!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: Int
                 str_id: str_id.into(),
                 column,
                 flags: TableFlags::None,
-                outer_size: ImVec2::zero(),
+                outer_size: im_vec2(0.0, 0.0),
                 inner_width: 0.0,
                 push: (),
             }

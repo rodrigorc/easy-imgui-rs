@@ -93,7 +93,7 @@ impl<'a> StylePtr<'a> {
         c
     }
     pub fn frame_padding(&self) -> Vector2 {
-        self.ptr.FramePadding.into()
+        im_to_v2(self.ptr.FramePadding)
     }
     pub fn frame_rounding(&self) -> f32 {
         self.ptr.FrameRounding
@@ -102,9 +102,9 @@ impl<'a> StylePtr<'a> {
         self.ptr.FrameBorderSize
     }
     pub fn item_spacing(&self) -> Vector2 {
-        self.ptr.ItemSpacing.into()
+        im_to_v2(self.ptr.ItemSpacing)
     }
     pub fn item_inner_spacing(&self) -> Vector2 {
-        self.ptr.ItemInnerSpacing.into()
+        im_to_v2(self.ptr.ItemInnerSpacing)
     }
 }

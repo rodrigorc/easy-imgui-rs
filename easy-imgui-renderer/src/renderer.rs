@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use glow::HasContext;
 
 use easy_imgui as imgui;
-use imgui::{TextureId, Color};
+use imgui::{TextureId, Color, Vector2};
 use crate::glr;
 
 /// The main `Renderer` type.

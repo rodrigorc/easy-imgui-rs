@@ -14,7 +14,7 @@ fn main() {
     // Adding an imconfig.h file outside of the source dir could break compilation of third-party
     // imgui modules, those that use $DEP_IMGUI_THIRD_PARTY.
     // It is safer to copy the source files into $OUT_DIR and write a new imconfig.h file there and
-    // set %DEP_IMGUI_THIRD_PARTY to point to that.
+    // set $DEP_IMGUI_THIRD_PARTY to point to that.
 
     let sh = Shell::new().unwrap();
     let imgui_ori = if cfg!(feature="docking") {

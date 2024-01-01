@@ -84,7 +84,11 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .allowlist_file(".*/imgui_internal.h")
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
-        .newtype_enum(".*");
+        .newtype_enum(".*")
+        // This is needed in Win32 mode for the "thiscall_abi" used by the C++ bindgen.
+        // There is no actually need for a nightly compiler, thiscall_abi is stabilized in Rust 1.74,
+        // but `RustTarget::Stable_1_74` doesn't exist yet.
+        .rust_target(bindgen::RustTarget::Nightly);
 
     if let Some(freetype) = &freetype {
         bindings = bindings.clang_arg("-DIMGUI_ENABLE_FREETYPE=1");

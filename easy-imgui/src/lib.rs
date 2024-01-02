@@ -279,6 +279,11 @@ pub struct Context {
     pending_atlas: bool,
 }
 
+pub struct CurrentContext<'a> {
+    ctx: &'a mut Context,
+}
+
+
 impl Context {
     pub unsafe fn new() -> Context {
         let imgui = unsafe {
@@ -302,6 +307,19 @@ impl Context {
             pending_atlas: true,
         }
     }
+    /// Makes this context the current one.
+    ///
+    /// SAFETY: Do not make two different contexts current at the same time
+    /// in the same thread.
+    pub unsafe fn set_current(&mut self) -> CurrentContext<'_> {
+        ImGui_SetCurrentContext(self.imgui);
+        CurrentContext {
+            ctx: self
+        }
+    }
+}
+
+impl CurrentContext<'_> {
     pub fn set_allow_user_scaling(&mut self, val: bool) {
         unsafe {
             let io = ImGui_GetIO();
@@ -326,6 +344,16 @@ impl Context {
             io.WantTextInput
         }
     }
+    pub fn io(&self) -> &ImGuiIO {
+        unsafe {
+            &*ImGui_GetIO()
+        }
+    }
+    pub fn io_mut(&mut self) -> &mut ImGuiIO {
+        unsafe {
+            &mut *ImGui_GetIO()
+        }
+    }
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
     pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
@@ -345,9 +373,6 @@ impl Context {
         unsafe {
             self.add_config_flags(ConfigFlags::NavEnableGamepad);
         }
-    }
-    pub unsafe fn set_current(&self) {
-        ImGui_SetCurrentContext(self.imgui);
     }
     pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
         let io = ImGui_GetIO();
@@ -369,12 +394,12 @@ impl Context {
     /// The next time [`Self::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
     pub fn invalidate_font_atlas(&mut self) {
-        self.pending_atlas = true;
+        self.ctx.pending_atlas = true;
     }
     // I like to be explicit about this particular lifetime
     #[allow(clippy::needless_lifetimes)]
     pub unsafe fn update_atlas<'ui, A>(&'ui mut self) -> Option<FontAtlasMut<'ui, A>> {
-        if !std::mem::take(&mut self.pending_atlas) {
+        if !std::mem::take(&mut self.ctx.pending_atlas) {
             return None;
         }
         let io = ImGui_GetIO();
@@ -409,7 +434,7 @@ impl Context {
 
         let io = ImGui_GetIO();
         (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
-        let _guard = UiPtrToNullGuard(self);
+        let _guard = UiPtrToNullGuard(self.ctx);
         ImGui_NewFrame();
 
         app.do_ui(&ui);

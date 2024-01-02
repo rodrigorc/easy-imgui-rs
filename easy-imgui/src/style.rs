@@ -1,6 +1,6 @@
 use super::*;
 
-impl Context {
+impl CurrentContext<'_> {
     pub fn style(&mut self) -> StyleMut<'_> {
         let ptr = unsafe {
             &mut *ImGui_GetStyle()

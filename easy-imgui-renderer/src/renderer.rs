@@ -127,29 +127,27 @@ impl Renderer {
     /// Sets the UI size, in logical units, and the scale factor.
     pub fn set_size(&mut self, size: Vector2, scale: f32) {
         unsafe {
-            self.imgui.set_current();
-            self.imgui.set_size(size, scale);
+            self.imgui.set_current().set_size(size, scale);
         }
     }
     /// Gets the UI size, in logical units.
-    pub fn size(&self) -> Vector2 {
+    pub fn size(&mut self) -> Vector2 {
         unsafe {
-            self.imgui.set_current();
-            self.imgui.size()
+            self.imgui.set_current().size()
         }
     }
     /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
         unsafe {
-            self.imgui.set_current();
+            let mut imgui = self.imgui.set_current();
 
-            if let Some(mut atlas) = self.imgui.update_atlas() {
+            if let Some(mut atlas) = imgui.update_atlas() {
                 app.build_custom_atlas(&mut atlas);
                 atlas.build_custom_rects(app);
                 Self::update_atlas(&self.gl, &self.objs.atlas);
             }
 
-            self.imgui.do_frame(
+            imgui.do_frame(
                 app,
                 || {
                     let io = &*ImGui_GetIO();

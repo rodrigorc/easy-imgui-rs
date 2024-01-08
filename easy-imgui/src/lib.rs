@@ -2803,6 +2803,69 @@ impl<A> Ui<A> {
             }
         }
     }
+
+    /// Gets information about a glyph for a font.
+    ///
+    /// This s a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
+    /// built, and in `build_custom_atlas` it is not yet. The only way to ensure a fully built
+    /// atlas is by requiring a `&Ui`.
+    pub fn find_glyph(&self, font_id: FontId, c: char) -> FontGlyph<'_> {
+        unsafe {
+            let font = font_ptr(font_id);
+            FontGlyph(&*ImFont_FindGlyph(font, ImWchar::from(c)))
+        }
+    }
+    pub fn find_glyph_no_fallback(&self, font_id: FontId, c: char) -> Option<FontGlyph<'_>> {
+        unsafe {
+            let font = font_ptr(font_id);
+            let p = ImFont_FindGlyphNoFallback(font, ImWchar::from(c));
+            p.as_ref().map(FontGlyph)
+        }
+    }
+}
+
+pub struct FontGlyph<'a>(&'a ImFontGlyph);
+
+impl FontGlyph<'_> {
+    pub fn p0(&self) -> Vector2 {
+        Vector2::new(self.0.X0, self.0.Y0)
+    }
+    pub fn p1(&self) -> Vector2 {
+        Vector2::new(self.0.X1, self.0.Y1)
+    }
+    pub fn uv0(&self) -> Vector2 {
+        Vector2::new(self.0.U0, self.0.V0)
+    }
+    pub fn uv1(&self) -> Vector2 {
+        Vector2::new(self.0.U1, self.0.V1)
+    }
+    pub fn advance_x(&self) -> f32 {
+        self.0.AdvanceX
+    }
+    pub fn visible(&self) -> bool {
+        self.0.Visible() != 0
+    }
+    pub fn colored(&self) -> bool {
+        self.0.Colored() != 0
+    }
+    pub fn codepoint(&self) -> char {
+        char::try_from(self.0.Codepoint()).unwrap()
+    }
+}
+
+impl std::fmt::Debug for FontGlyph<'_> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("FontGlyph")
+            .field("p0", &self.p0())
+            .field("p1", &self.p1())
+            .field("uv0", &self.uv0())
+            .field("uv1", &self.uv1())
+            .field("advance_x", &self.advance_x())
+            .field("visible", &self.visible())
+            .field("colored", &self.colored())
+            .field("codepoint", &self.codepoint())
+            .finish()
+    }
 }
 
 

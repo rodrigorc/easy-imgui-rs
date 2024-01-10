@@ -141,9 +141,7 @@ impl Renderer {
         unsafe {
             let mut imgui = self.imgui.set_current();
 
-            if let Some(mut atlas) = imgui.update_atlas() {
-                app.build_custom_atlas(&mut atlas);
-                atlas.build_custom_rects(app);
+            if imgui.update_atlas(app) {
                 Self::update_atlas(&self.gl, &self.objs.atlas);
             }
 
@@ -168,12 +166,12 @@ impl Renderer {
         }
     }
     unsafe fn update_atlas(gl: &glr::GlContext, atlas_tex: &glr::Texture) {
-        let io = &mut *ImGui_GetIO();
+        let io = ImGui_GetIO();
         let mut data = std::ptr::null_mut();
         let mut width = 0;
         let mut height = 0;
         let mut pixel_size = 0;
-        ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
+        ImFontAtlas_GetTexDataAsRGBA32((*io).Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
 
         gl.bind_texture(glow::TEXTURE_2D, Some(atlas_tex.id()));
 
@@ -190,10 +188,10 @@ impl Renderer {
         gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
-        (*io.Fonts).TexID = Self::map_tex(atlas_tex.id()).id();
+        (*(*io).Fonts).TexID = Self::map_tex(atlas_tex.id()).id();
 
         // We keep this, no need for imgui to hold a copy
-        ImFontAtlas_ClearTexData(io.Fonts);
+        ImFontAtlas_ClearTexData((*io).Fonts);
     }
     unsafe fn render(gl: &glow::Context, objs: &GlObjects, draw_data: &ImDrawData) {
         gl.bind_vertex_array(Some(objs.vao.id()));
@@ -340,8 +338,8 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::ne
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            let io = &mut *ImGui_GetIO();
-            ImFontAtlas_Clear(io.Fonts);
+            let io = ImGui_GetIO();
+            ImFontAtlas_Clear((*io).Fonts);
         }
     }
 }

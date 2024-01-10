@@ -398,21 +398,24 @@ impl CurrentContext<'_> {
     }
     // I like to be explicit about this particular lifetime
     #[allow(clippy::needless_lifetimes)]
-    pub unsafe fn update_atlas<'ui, A>(&'ui mut self) -> Option<FontAtlasMut<'ui, A>> {
+    pub unsafe fn update_atlas<'ui, A: UiBuilder>(&'ui mut self, app: &mut A) -> bool {
         if !std::mem::take(&mut self.ctx.pending_atlas) {
-            return None;
+            return false;
         }
         let io = ImGui_GetIO();
         ImFontAtlas_Clear((*io).Fonts);
         (*(*io).Fonts).TexPixelsUseColors = true;
 
         let scale = (*io).DisplayFramebufferScale.x;
-        Some(FontAtlasMut {
+        let mut atlas = FontAtlasMut {
             ptr: FontAtlasPtr { ptr: &mut *(*io).Fonts },
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
-        })
+        };
+        app.build_custom_atlas(&mut atlas);
+        atlas.build_custom_rects(app);
+        true
     }
     /// Builds and renders a UI frame.
     ///
@@ -3048,7 +3051,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         }
         self.custom_rects[idx] = Some(f);
     }
-    pub unsafe fn build_custom_rects(self, app: &mut A) {
+    unsafe fn build_custom_rects(self, app: &mut A) {
         let mut tex_data = std::ptr::null_mut();
         let mut tex_width = 0;
         let mut tex_height = 0;

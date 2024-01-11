@@ -341,6 +341,11 @@ pub trait UniformProvider {
     fn apply(&self, gl: &GlContext, u: &Uniform);
 }
 
+impl UniformProvider for () {
+    fn apply(&self, _gl: &GlContext, _u: &Uniform) {
+    }
+}
+
 /// # Safety
 ///
 /// This trait returns offsets from Self that will be used to index the raw memory of a
@@ -358,6 +363,10 @@ pub trait AttribProviderList {
     }
 }
 
+/// This vertex attrib provides the given count of vertices, but without data.
+///
+/// It is useful if all the vertex data is included in the shader and anly the gl_VertexID is
+/// needed.
 #[derive(Debug, Copy, Clone)]
 pub struct NilVertexAttrib(pub usize);
 
@@ -370,8 +379,9 @@ impl AttribProviderList for NilVertexAttrib {
     }
 }
 
-// This is quite inefficient, but easy to use
-#[cfg(xxx)]
+/// Uses a normal array as attrib provider.
+///
+/// This is quite inefficient, but easy to use.
 impl<A: AttribProvider> AttribProviderList for &[A] {
     type KeepType = (Buffer, SmallVec<[EnablerVertexAttribArray; 8]>);
 
@@ -379,16 +389,16 @@ impl<A: AttribProvider> AttribProviderList for &[A] {
         <[A]>::len(self)
     }
     fn bind(&self, p: &Program) -> (Buffer, SmallVec<[EnablerVertexAttribArray; 8]>) {
-        let buf = Buffer::generate();
+        let buf = Buffer::generate(&p.gl).unwrap();
         let mut vas = SmallVec::new();
         unsafe {
-            gl.bind_buffer(glow::ARRAY_BUFFER, buf.id());
-            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_u8_slice(self), glow::STATIC_DRAW);
+            p.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buf.id()));
+            p.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_u8_slice(self), glow::STATIC_DRAW);
             for a in &p.attribs {
-                if let Some((size, ty, offs)) = A::apply(a) {
-                    let loc = a.location() as u32;
-                    vas.push(EnablerVertexAttribArray::enable(loc));
-                    gl.vertex_attrib_pointer(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
+                if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
+                    let loc = a.location();
+                    vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
+                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
                 }
             }
         }

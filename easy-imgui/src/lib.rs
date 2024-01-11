@@ -2876,7 +2876,7 @@ impl std::fmt::Debug for FontGlyph<'_> {
 impl<A> Ui<A> {
     pub fn dock_space(&self, id: ImGuiID, size: Vector2, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
         unsafe {
-            ImGui_DockSpace(id, &size.into().into(), flags.bits(), std::ptr::null())
+            ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null())
         }
     }
     pub fn dock_space_over_viewport(&self, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {

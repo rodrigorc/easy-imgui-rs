@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 links = "imgui"
+description = "Low level bindings for the Dear ImGui C++ library"
+license = "MIT"
 
 [build-dependencies]
 bindgen = "0.69"

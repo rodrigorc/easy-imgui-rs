@@ -2,6 +2,8 @@
 name = "easy-imgui-window"
 version = "0.1.0"
 edition = "2021"
+description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
+license = "MIT"
 
 [features]
 default = ["clipboard"]
@@ -9,9 +11,9 @@ clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
 
 [dependencies]
-easy-imgui-sys = { path = "../easy-imgui-sys" }
-easy-imgui = { path = "../easy-imgui" }
-easy-imgui-renderer = { path = "../easy-imgui-renderer" }
+easy-imgui-sys = "=0.1.0"
+easy-imgui = "=0.1.0"
+easy-imgui-renderer = "=0.1.0"
 
 anyhow = "1"
 
@@ -20,8 +22,3 @@ glutin-winit = "0.4"
 raw-window-handle = "0.5"
 arboard = { version = "3", optional = true, default_features = false }
 winit = { version = "0.29", features = ["x11", "mint"] }
-
-[dev-dependencies]
-cstr = "*"
-image = "*"
-gilrs = "*"

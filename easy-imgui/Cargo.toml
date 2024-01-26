@@ -2,9 +2,11 @@
 name = "easy-imgui"
 version = "0.1.0"
 edition = "2021"
+description = "Rust wrapper for the Dear ImGui library"
+license = "MIT"
 
 [dependencies]
-easy-imgui-sys = { path = "../easy-imgui-sys" }
+easy-imgui-sys = "=0.1.0"
 paste = "1"
 bitflags = "2"
 cstr = "0.2"
@@ -20,5 +22,5 @@ docking = ["easy-imgui-sys/docking"]
 # For the examples
 [dev-dependencies]
 gilrs = "0.10"
-easy-imgui-window = { version="*", path="../easy-imgui-window" }
+easy-imgui-window = "0.1.0"
 anyhow = "1"

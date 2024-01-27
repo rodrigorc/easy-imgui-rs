@@ -1,9 +1,13 @@
 [package]
 name = "easy-imgui-window"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
 license = "MIT"
+readme = "../README.md"
+repository = "https://github.com/rodrigorc/easy-imgui-rs"
+categories = ["gui"]
+keywords = ["imgui", "ui", "graphics"]
 
 [features]
 default = ["clipboard"]
@@ -11,9 +15,9 @@ clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
 
 [dependencies]
-easy-imgui-sys = "=0.1.0"
-easy-imgui = "=0.1.0"
-easy-imgui-renderer = "=0.1.0"
+easy-imgui-sys = "=0.1.1"
+easy-imgui = "=0.1.1"
+easy-imgui-renderer = "=0.1.1"
 
 anyhow = "1"
 

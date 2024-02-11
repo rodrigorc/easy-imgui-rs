@@ -569,6 +569,7 @@ imgui_flags!{
         MouseButtonMiddle,
         MouseButtonMask_,
         MouseButtonDefault_,
+        NoReopen,
         NoOpenOverExistingPopup,
         NoOpenOverItems,
         AnyPopupId,

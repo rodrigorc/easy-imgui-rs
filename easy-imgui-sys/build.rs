@@ -35,11 +35,15 @@ fn main() {
             "imgui.cpp", "imgui_widgets.cpp", "imgui_draw.cpp", "imgui_tables.cpp", "imgui_demo.cpp"
         ]
     {
-        sh.copy_file(imgui_ori.join(ori), &imgui_src).unwrap();
-        println!("cargo:rerun-if-changed={}/{}", imgui_ori.display(), ori);
+        let src = imgui_ori.join(ori);
+        sh.copy_file(&src, &imgui_src).unwrap();
+        println!("cargo:rerun-if-changed={}", src.display());
     }
-    sh.copy_file(imgui_ori.join("misc/freetype/imgui_freetype.cpp"), &imgui_misc_ft).unwrap();
-    sh.copy_file(imgui_ori.join("misc/freetype/imgui_freetype.h"), &imgui_misc_ft).unwrap();
+    for ori in [ "imgui_freetype.cpp", "imgui_freetype.h" ] {
+        let src = imgui_ori.join("misc/freetype").join(ori);
+        sh.copy_file(&src, &imgui_misc_ft).unwrap();
+        println!("cargo:rerun-if-changed={}", src.display());
+    }
     sh.write_file(imgui_src.join("imconfig.h"), r"
 // This only works on windows, the arboard crate has better cross-support
 #define IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS

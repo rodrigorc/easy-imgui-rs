@@ -16,10 +16,10 @@
  *     MainWindowWithRenderer,
  *     winit::event_loop::EventLoopBuilder,
  * };
- * 
+ *
  * // The App type, this will do the actual app. stuff.
  * struct App;
- * 
+ *
  * impl imgui::UiBuilder for App {
  *     // There are other function in this trait, but this is the only one
  *     // mandatory and the most important: it build the UI.
@@ -35,10 +35,10 @@
  *     let main_window = MainWindow::new(&event_loop, "Example").unwrap();
  *     // Create a `easy-imgui` window.
  *     let mut window = MainWindowWithRenderer::new(main_window);
- * 
+ *
  *     // Create the app object.
  *     let mut app = App;
- * 
+ *
  *     // Run the loop.
  *     event_loop.run(move |event, w| {
  *         // Do the magic!
@@ -131,7 +131,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::{null, null_mut};
 use std::mem::MaybeUninit;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::borrow::Cow;
 use cstr::cstr;
 use easy_imgui_sys::*;
@@ -317,6 +317,11 @@ impl Context {
             ctx: self
         }
     }
+    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
+    /// [`UiBuilder::build_custom_atlas`].
+    pub fn invalidate_font_atlas(&mut self) {
+        self.pending_atlas = true;
+    }
 }
 
 impl CurrentContext<'_> {
@@ -391,10 +396,10 @@ impl CurrentContext<'_> {
         let io = ImGui_GetIO();
         (*io).DisplayFramebufferScale.x
     }
-    /// The next time [`Self::do_frame()`] is called, it will trigger a call to
+    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
     pub fn invalidate_font_atlas(&mut self) {
-        self.ctx.pending_atlas = true;
+        self.ctx.invalidate_font_atlas();
     }
     // I like to be explicit about this particular lifetime
     #[allow(clippy::needless_lifetimes)]
@@ -433,6 +438,7 @@ impl CurrentContext<'_> {
             data: std::ptr::null_mut(),
             generation: ImGui_GetFrameCount() as usize,
             callbacks: RefCell::new(Vec::new()),
+            pending_atlas: Cell::new(false),
         };
 
         let io = ImGui_GetIO();
@@ -455,6 +461,8 @@ impl CurrentContext<'_> {
 
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
+
+        _guard.0.pending_atlas |= ui.pending_atlas.get();
     }
 }
 
@@ -625,6 +633,7 @@ pub struct Ui<A>
     data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
     callbacks: RefCell<Vec<UiCallback<A>>>,
+    pending_atlas: Cell<bool>,
 }
 
 /// Callbacks called during `A::do_ui()` will have the first argument as null, because the app value
@@ -1985,6 +1994,12 @@ impl<A> Ui<A> {
         let mut x = MaybeUninit::new(x);
         cb(&mut *ui.data, x.as_mut_ptr() as *mut c_void);
     }
+    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
+    /// [`UiBuilder::build_custom_atlas`].
+    pub fn invalidate_font_atlas(&self) {
+        self.pending_atlas.set(true);
+    }
+
     pub fn display_size(&self) -> Vector2 {
         unsafe {
             let io = ImGui_GetIO();

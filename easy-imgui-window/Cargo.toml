@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-window"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
 license = "MIT"
@@ -15,9 +15,9 @@ clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
 
 [dependencies]
-easy-imgui-sys = "=0.1.1"
-easy-imgui = "=0.1.1"
-easy-imgui-renderer = "=0.1.1"
+easy-imgui-sys = "=0.2.0"
+easy-imgui = "=0.2.0"
+easy-imgui-renderer = "=0.2.0"
 
 anyhow = "1"
 

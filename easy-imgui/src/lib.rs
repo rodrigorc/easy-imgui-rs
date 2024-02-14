@@ -2824,7 +2824,7 @@ impl<A> Ui<A> {
 
     /// Gets information about a glyph for a font.
     ///
-    /// This s a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
+    /// This is a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
     /// built, and in `build_custom_atlas` it is not yet. The only way to ensure a fully built
     /// atlas is by requiring a `&Ui`.
     pub fn find_glyph(&self, font_id: FontId, c: char) -> FontGlyph<'_> {
@@ -2833,11 +2833,21 @@ impl<A> Ui<A> {
             FontGlyph(&*ImFont_FindGlyph(font, ImWchar::from(c)))
         }
     }
+    /// Just like `find_glyph` but doesn't use the fallback character for unavailable glyphs.
     pub fn find_glyph_no_fallback(&self, font_id: FontId, c: char) -> Option<FontGlyph<'_>> {
         unsafe {
             let font = font_ptr(font_id);
             let p = ImFont_FindGlyphNoFallback(font, ImWchar::from(c));
             p.as_ref().map(FontGlyph)
+        }
+    }
+    /// Gets the font details for a `FontId`.
+    ///
+    /// TODO: do a proper ImFont wrapper?
+    pub fn get_font(&self, font_id: FontId) -> &ImFont {
+        unsafe {
+            let font = font_ptr(font_id);
+            &*font
         }
     }
 }

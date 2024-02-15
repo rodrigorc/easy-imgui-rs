@@ -23,9 +23,3 @@ default = []
 freetype = ["easy-imgui-sys/freetype"]
 docking = ["easy-imgui-sys/docking"]
 
-# For the examples
-[dev-dependencies]
-gilrs = "0.10"
-easy-imgui-window = "0.2.0"
-anyhow = "1"
-image = { version = "0.24" }

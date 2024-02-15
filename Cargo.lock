@@ -476,13 +476,10 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 name = "easy-imgui"
 version = "0.2.0"
 dependencies = [
- "anyhow",
  "bitflags 2.4.2",
  "cgmath",
  "cstr",
  "easy-imgui-sys",
- "easy-imgui-window",
- "gilrs",
  "image",
  "mint",
  "paste",
@@ -517,11 +514,14 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "arboard",
+ "cstr",
  "easy-imgui",
  "easy-imgui-renderer",
  "easy-imgui-sys",
+ "gilrs",
  "glutin",
  "glutin-winit",
+ "image",
  "raw-window-handle 0.5.2",
  "winit",
 ]

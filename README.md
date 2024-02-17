@@ -7,7 +7,7 @@ There are several crates in this repository:
  * [`easy-imgui-renderer`](https://crates.io/crates/easy-imgui-renderer): A UI renderer using OpenGL and [`glow`][glow].
  * [`easy-imgui-window`](https://crates.io/crates/easy-imgui-window): A fully integrated and easy to use GUI framework based on [`winit`][winit].
 
-See some examples at the [examples][https://github.com/rodrigorc/easy-imgui-rs/tree/main/easy-imgui/examples] directory. The simplest one is just a few lines of code:
+See some examples at the [examples](https://github.com/rodrigorc/easy-imgui-rs/tree/main/easy-imgui-window/examples) directory. The simplest one is just a few lines of code:
 ```rust
 use easy_imgui_window::{MainWindow, MainWindowWithRenderer,
     winit::event_loop::EventLoopBuilder,

@@ -14,6 +14,9 @@ default = ["clipboard"]
 clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
 
+# This is not really needed except for the examples/demo
+# docking = ["easy-imgui/docking"]
+
 [dependencies]
 easy-imgui-sys = "=0.2.1"
 easy-imgui = "=0.2.1"

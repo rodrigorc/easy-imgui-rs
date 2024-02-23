@@ -24,7 +24,12 @@ impl<T> Deref for ImVector<T> {
     type Target = [T];
     fn deref(&self) -> &[T] {
         unsafe {
-            std::slice::from_raw_parts(self.Data, self.Size as usize)
+            if self.Size == 0 {
+                // self.Data may be null, and that will not do for `from_raw_parts`
+                &[]
+            } else {
+                std::slice::from_raw_parts(self.Data, self.Size as usize)
+            }
         }
     }
 }

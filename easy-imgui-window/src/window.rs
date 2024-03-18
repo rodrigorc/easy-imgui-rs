@@ -56,8 +56,7 @@ impl MainWindow {
     /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
     /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
     pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
-        let window_builder = WindowBuilder::new()
-            .with_enabled_buttons(winit::window::WindowButtons::empty());
+        let window_builder = WindowBuilder::new();
         let template = ConfigTemplateBuilder::new()
             .prefer_hardware_accelerated(Some(true))
             .with_depth_size(0)

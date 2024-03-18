@@ -2,12 +2,12 @@
  * Crate for easy integration of the [Dear ImGui][dearimgui] library.
  *
  * This crate is a bind to the Dear ImGui library only. There is also a matching rendering
- * library, [`easy-imgui-renderer`], that renders the UI using OpenGl, and a matching
- * window-integrated library, [`easy-imgui-window`], that enables to build a full desktop
+ * library, [`easy-imgui-renderer`](../easy-imgui-renderer/), that renders the UI using OpenGl, and a matching
+ * window-integrated library, [`easy-imgui-window`](../easy-imgui-window/), that enables to build a full desktop
  * application in just a few lines.
  *
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
- * The simplest easy-imgui program would be something like this:
+ * The simplest `easy-imgui` program would be something like this:
  *
  * ```rust
  * use easy_imgui_window::{

@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "Rust wrapper for the Dear ImGui library"
 license = "MIT"
@@ -10,7 +10,7 @@ categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
-easy-imgui-sys = "=0.2.2"
+easy-imgui-sys = "=0.2.3"
 paste = "1"
 bitflags = "2"
 cstr = "0.2"

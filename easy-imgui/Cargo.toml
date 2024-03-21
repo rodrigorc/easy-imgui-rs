@@ -10,7 +10,7 @@ categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
-easy-imgui-sys = "=0.2.3"
+easy-imgui-sys = { version = "=0.2.3", path = "../easy-imgui-sys" }
 paste = "1"
 bitflags = "2"
 cstr = "0.2"

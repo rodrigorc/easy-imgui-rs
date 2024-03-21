@@ -471,7 +471,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "easy-imgui"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "bitflags 2.4.2",
  "cgmath",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-renderer"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sys"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "bindgen",
  "cc",
@@ -507,7 +507,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-window"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "arboard",

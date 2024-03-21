@@ -18,9 +18,9 @@ freetype = ["easy-imgui/freetype"]
 # docking = ["easy-imgui/docking"]
 
 [dependencies]
-easy-imgui-sys = "=0.2.3"
-easy-imgui = "=0.2.3"
-easy-imgui-renderer = "=0.2.3"
+easy-imgui-sys = { version = "=0.2.3", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.2.3", path = "../easy-imgui" }
+easy-imgui-renderer = { version = "=0.2.3", path = "../easy-imgui-renderer" }
 
 anyhow = "1"
 

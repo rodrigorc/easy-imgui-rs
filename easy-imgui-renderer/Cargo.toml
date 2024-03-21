@@ -12,8 +12,8 @@ keywords = ["imgui", "ui", "graphics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-easy-imgui-sys = "=0.2.3"
-easy-imgui = "=0.2.3"
+easy-imgui-sys = { version = "=0.2.3", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.2.3", path = "../easy-imgui" }
 
 anyhow = "1"
 cgmath = "0.18"

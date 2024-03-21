@@ -1,6 +1,6 @@
 /*!
 * This crate contains a `Renderer` that uses OpenGL, via the [`glow`] crate, to render an
-* [`easy-imgui`](../easy-imgui/) user interface.
+* [`easy-imgui`](https://docs.rs/easy-imgui) user interface.
 */
 
 mod renderer;

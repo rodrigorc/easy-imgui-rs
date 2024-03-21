@@ -2,8 +2,8 @@
  * Crate for easy integration of the [Dear ImGui][dearimgui] library.
  *
  * This crate is a bind to the Dear ImGui library only. There is also a matching rendering
- * library, [`easy-imgui-renderer`](../easy-imgui-renderer/), that renders the UI using OpenGl, and a matching
- * window-integrated library, [`easy-imgui-window`](../easy-imgui-window/), that enables to build a full desktop
+ * library, [`easy-imgui-renderer`](https://docs.rs/easy-imgui-renderer), that renders the UI using OpenGl, and a matching
+ * window-integrated library, [`easy-imgui-window`](https://docs.rs/easy-imgui-window/), that enables to build a full desktop
  * application in just a few lines.
  *
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
@@ -82,7 +82,7 @@
  *  * [`UiBuilder`]: A trait that your application implements do build your user interface.
  *
  * If you want to use this library directly, just create a [`Context`], set up its properties, and
- * when you want to render a frame do [`Context::set_current`] and then [`Context::do_frame`].
+ * when you want to render a frame do [`Context::set_current`] and then [`CurrentContext::do_frame`].
  *
  * If you use one of the helper crates then you will just implement `UiBuilder` and get a `Ui` for
  * free.

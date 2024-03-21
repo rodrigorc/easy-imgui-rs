@@ -1,0 +1,43 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
+
+
+jobs:
+  Linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Apt
+        run: |
+          sudo apt-get install libudev-dev
+      - name: Build examples
+        run: |
+          cargo build --examples
+
+  Windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Build examples
+        run: |
+          cargo build --examples
+
+  MacOS:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - name: Build examples
+        run: |
+          cargo build --examples
+

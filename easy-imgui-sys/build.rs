@@ -80,6 +80,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     bindings = bindings
         .clang_args(["-I", &imgui_src.to_string_lossy()])
         .clang_args(["-x", "c++"])
+        .clang_args(["-std=c++20"])
         .clang_args(["-D", "IMGUI_DISABLE_SSE"]) // that is only for inline functions
         .header(imgui_src.join("imgui.h").to_string_lossy())
         .header(imgui_src.join("imgui_internal.h").to_string_lossy())
@@ -111,7 +112,8 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     let mut build = cc::Build::new();
     if target_arch != "wasm32" {
         build
-            .cpp(true);
+            .cpp(true)
+            .std("c++20");
     }
     build
         .file("wrapper.cpp")

@@ -83,9 +83,9 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .clang_args(["-D", "IMGUI_DISABLE_SSE"]) // that is only for inline functions
         .header(imgui_src.join("imgui.h").to_string_lossy())
         .header(imgui_src.join("imgui_internal.h").to_string_lossy())
-        .allowlist_file(".*/imgui.h")
+        .allowlist_file(".*[/\\\\]imgui.h")
         // many people use the internals, so better to expose those, just do not use them lightly
-        .allowlist_file(".*/imgui_internal.h")
+        .allowlist_file(".*[/\\\\]imgui_internal.h")
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
         .newtype_enum(".*")

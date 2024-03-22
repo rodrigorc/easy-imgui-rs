@@ -22,8 +22,9 @@ pub struct MainWindow {
 }
 
 /// This is a [`MainWindow`] plus a [`Renderer`]. It is the ultimate `easy-imgui` object.
-pub struct MainWindowWithRenderer {
-    main_window: MainWindow,
+/// Instead of a literal `MainWindow` you can use any type that implements [`MainWindowRef`].
+pub struct MainWindowWithRenderer<W> {
+    main_window: W,
     renderer: Renderer,
 
     idle_time: Duration,
@@ -150,19 +151,86 @@ impl MainWindow {
     }
 }
 
-impl MainWindowWithRenderer {
+impl MainWindowWithRenderer<MainWindow> {
     /// Creates a new [`Renderer`] and attaches it to the given window.
-    pub fn new(main_window: MainWindow) -> MainWindowWithRenderer {
+    pub fn new(main_window: MainWindow) -> Self {
         let gl = main_window.create_gl_context();
         let renderer = Renderer::new(Rc::new(gl)).unwrap();
         Self::new_with_renderer(main_window, renderer)
     }
-    /// Attaches the given window and renderer together.
-    pub fn new_with_renderer(main_window: MainWindow, mut renderer: Renderer) -> MainWindowWithRenderer {
-        let size = main_window.window.inner_size();
-        let scale = main_window.window.scale_factor();
+}
+
+pub trait MainWindowRef {
+    fn window(&self) -> &Window;
+    fn pre_render(&self);
+    fn post_render(&self);
+    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32>;
+
+    fn set_cursor_position(&self, pos: LogicalPosition<f32>) {
+        let _ = self.window().set_cursor_position(pos);
+    }
+
+    fn request_redraw(&self) {
+         self.window().request_redraw();
+    }
+
+    fn matches_window_id(&self, id: winit::window::WindowId) -> bool {
+         self.window().id() == id
+    }
+
+    fn set_cursor(&self, cursor: Option<CursorIcon>) {
+        let w = self.window();
+        match cursor {
+            None => w.set_cursor_visible(false),
+            Some(c) => {
+                w.set_cursor_icon(c);
+                w.set_cursor_visible(true);
+            }
+        }
+    }
+
+    fn size_and_scale(&self) -> (LogicalSize<f32>, f32) {
+        let w = self.window();
+        let size = w.inner_size();
+        let scale = w.scale_factor();
         let l_size = size.to_logical::<f32>(scale);
-        renderer.set_size(Vector2::from(mint::Vector2::from(l_size)), scale as f32);
+        (l_size, scale as f32)
+    }
+    fn to_logical_pos(&self, pos: PhysicalPosition<f64>) -> LogicalPosition<f32> {
+        let scale = self.window().scale_factor();
+        pos.to_logical(scale)
+    }
+}
+
+impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
+    fn window(&self) -> &Window {
+        &self.borrow().window
+    }
+
+    fn pre_render(&self) {
+        let this = self.borrow();
+        this.gl_context.make_current(&this.surface).unwrap();
+    }
+
+    fn post_render(&self) {
+        let this = self.borrow();
+        this.window.pre_present_notify();
+        this.surface.swap_buffers(&this.gl_context).unwrap();
+    }
+    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+        let this = self.borrow();
+        let width = NonZeroU32::new(size.width.max(1)).unwrap();
+        let height = NonZeroU32::new(size.height.max(1)).unwrap();
+        this.surface.resize(&this.gl_context, width, height);
+        this.to_logical_size::<_, f32>(size)
+    }
+}
+
+impl<W: MainWindowRef> MainWindowWithRenderer<W> {
+    /// Attaches the given window and renderer together.
+    pub fn new_with_renderer(main_window: W, mut renderer: Renderer) -> Self {
+        let (size, scale) = main_window.size_and_scale();
+        renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale);
 
         let mut imgui = unsafe { renderer.imgui().set_current() };
         clipboard::maybe_setup_clipboard(&mut imgui);
@@ -194,7 +262,7 @@ impl MainWindowWithRenderer {
         &mut self.renderer
     }
     /// Gets a reference to the inner window.
-    pub fn main_window(&mut self) -> &mut MainWindow {
+    pub fn main_window(&mut self) -> &mut W {
         &mut self.main_window
     }
     /// Forces a rebuild of the UI.
@@ -204,7 +272,7 @@ impl MainWindowWithRenderer {
     pub fn ping_user_input(&mut self) {
         self.last_input_time = Instant::now();
         self.last_input_frame = 0;
-        self.main_window.window.request_redraw();
+        //TODO self.main_window.request_redraw();
     }
     /// The main event function, to be called from your event loop.
     ///
@@ -226,7 +294,7 @@ impl MainWindowWithRenderer {
                 if io.WantSetMousePos {
                     let pos = io.MousePos;
                     let pos = winit::dpi::LogicalPosition { x: pos.x, y: pos.y };
-                    let _ = self.main_window.window.set_cursor_position(pos);
+                    self.main_window.set_cursor_position(pos);
                 }
                 let now = Instant::now();
                 // If the mouse is down, redraw all the time, maybe the user is dragging.
@@ -235,13 +303,13 @@ impl MainWindowWithRenderer {
                 if mouse || now.duration_since(self.last_input_time) < self.idle_time || self.last_input_frame < self.idle_frame_count {
                     // No need to call set_control_flow(): doing a redraw will force extra Poll.
                     // Not doing it will default to Wait.
-                    self.main_window.window.request_redraw();
+                    self.main_window.request_redraw();
                 }
             }
             Event::WindowEvent {
                 window_id,
                 event
-            } if *window_id == self.main_window.window.id() => {
+            } if self.main_window.matches_window_id(*window_id) => {
                 use winit::event::WindowEvent::*;
                 match event {
                     CloseRequested => {
@@ -261,33 +329,25 @@ impl MainWindowWithRenderer {
                                     from_imgui_cursor(cursor)
                                 };
                                 if cursor != self.current_cursor {
-                                    match cursor {
-                                        None => self.main_window.window.set_cursor_visible(false),
-                                        Some(c) => {
-                                            self.main_window.window.set_cursor_icon(c);
-                                            self.main_window.window.set_cursor_visible(true);
-                                        }
-                                    }
+                                    self.main_window.set_cursor(cursor);
                                     self.current_cursor = cursor;
                                 }
                             }
-                            self.main_window.gl_context.make_current(&self.main_window.surface).unwrap();
+                            self.main_window.pre_render();
                             self.renderer.do_frame(app);
                         }
-                        self.main_window.window.pre_present_notify();
-                        self.main_window.surface.swap_buffers(&self.main_window.gl_context).unwrap();
+                        self.main_window.post_render();
                     }
                     Resized(size) => {
                         self.ping_user_input();
                         // GL surface in physical pixels, imgui in logical
-                        if let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) {
-                            self.main_window.surface.resize(&self.main_window.gl_context, w, h);
-                        }
-                        let mut imgui = unsafe { self.renderer.imgui().set_current() };
-                        let io = imgui.io_mut();
-                        let size = self.main_window.to_logical_size::<_, f32>(*size);
-                        let size = Vector2::from(mint::Vector2::from(size));
-                        io.DisplaySize = imgui::v2_to_im(size);
+                        //if let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) {
+                            let size = self.main_window.resize(*size);
+                            let mut imgui = unsafe { self.renderer.imgui().set_current() };
+                            let io = imgui.io_mut();
+                            let size = Vector2::from(mint::Vector2::from(size));
+                            io.DisplaySize = imgui::v2_to_im(size);
+                        //}
                     }
                     ScaleFactorChanged { scale_factor, .. } => {
                         self.ping_user_input();

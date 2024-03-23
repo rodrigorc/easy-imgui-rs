@@ -256,6 +256,18 @@ impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
     }
 }
 
+/// Default implementation for quick'n'dirty code, probably you'll want to refine it a bit.
+impl MainWindowRef for Window {
+    fn window(&self) -> &Window {
+        self
+    }
+    fn pre_render(&self) { }
+    fn post_render(&self) { }
+    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+        size.to_logical(1.0)
+    }
+}
+
 impl<W> MainWindowWithRenderer<W> {
     /// Sets the time after which the UI will stop rendering, if there is no user input.
     pub fn set_idle_time(&mut self, time: Duration) {
@@ -304,14 +316,14 @@ impl<W: MainWindowRef> MainWindowWithRenderer<W> {
     /// It returns [`std::ops::ControlFlow::Break`] for the event [`winit::event::WindowEvent::CloseRequested`] as a convenience. You can
     /// use it to break the main loop, or ignore it, as you see fit.
     #[must_use]
-    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
-        do_event(&mut self.main_window, &mut self.renderer, &mut self.status, app, event, w)
+    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
+        do_event(&self.main_window, &mut self.renderer, &mut self.status, app, event)
     }
 }
 
 /// Just like [`MainWindowWithRenderer::do_event`] but using all the pieces separately.
 #[must_use]
-pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut Renderer, status: &mut MainWindowStatus, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
+pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut Renderer, status: &mut MainWindowStatus, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> std::ops::ControlFlow<()> {
     match event {
         Event::NewEvents(_) => {
             let now = Instant::now();

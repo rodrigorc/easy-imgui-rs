@@ -8,7 +8,7 @@ use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color, vec2, Vector2};
 use easy_imgui_window::{
     MainWindow,
     MainWindowWithRenderer,
-    winit::{self, event_loop::{EventLoopBuilder, EventLoopProxy}},
+    winit::event_loop::{EventLoopBuilder, EventLoopProxy},
 };
 
 use anyhow::Result;

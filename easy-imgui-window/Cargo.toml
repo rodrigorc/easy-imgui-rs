@@ -36,3 +36,4 @@ gilrs = "0.10"
 anyhow = "1"
 image = { version = "0.24" }
 cstr = "0.2"
+game-loop = { version = "1", features = ["winit"] }

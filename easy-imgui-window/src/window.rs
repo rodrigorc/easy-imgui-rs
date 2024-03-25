@@ -22,25 +22,26 @@ pub struct MainWindow {
 }
 
 pub struct MainWindowStatus {
+    last_frame: Instant,
+    current_cursor: Option<CursorIcon>,
+
     idle_time: Duration,
     idle_frame_count: u32,
-
-    last_frame: Instant,
     last_input_time: Instant,
     last_input_frame: u32,
-    current_cursor: Option<CursorIcon>,
 }
 
 impl Default for MainWindowStatus {
     fn default() -> MainWindowStatus {
         let now = Instant::now();
         MainWindowStatus {
+            last_frame: now,
+            current_cursor: Some(CursorIcon::Default),
+
             idle_time: Duration::from_secs(1),
             idle_frame_count: 60,
-            last_frame: now,
             last_input_time: now,
             last_input_frame: 0,
-            current_cursor: Some(CursorIcon::Default),
         }
     }
 }
@@ -147,6 +148,9 @@ impl MainWindow {
             surface,
         })
     }
+    pub unsafe fn into_pieces(self) -> (Window, Surface<WindowSurface>, PossiblyCurrentContext) {
+        (self.window, self.surface, self.gl_context)
+    }
     pub fn glutin_context(&self) -> &glutin::context::PossiblyCurrentContext {
         &self.gl_context
     }
@@ -192,20 +196,17 @@ impl MainWindowWithRenderer<MainWindow> {
 
 pub trait MainWindowRef {
     fn window(&self) -> &Window;
-    fn pre_render(&self);
-    fn post_render(&self);
-    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32>;
 
-    fn set_cursor_position(&self, pos: LogicalPosition<f32>) {
-        let _ = self.window().set_cursor_position(pos);
+    fn pre_render(&self) {}
+    fn post_render(&self) {}
+
+    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+        let scale = self.window().scale_factor();
+        size.to_logical(scale)
     }
 
     fn request_redraw(&self) {
          self.window().request_redraw();
-    }
-
-    fn matches_window_id(&self, id: winit::window::WindowId) -> bool {
-         self.window().id() == id
     }
 
     fn set_cursor(&self, cursor: Option<CursorIcon>) {
@@ -217,18 +218,6 @@ pub trait MainWindowRef {
                 w.set_cursor_visible(true);
             }
         }
-    }
-
-    fn size_and_scale(&self) -> (LogicalSize<f32>, f32) {
-        let w = self.window();
-        let size = w.inner_size();
-        let scale = w.scale_factor();
-        let l_size = size.to_logical::<f32>(scale);
-        (l_size, scale as f32)
-    }
-    fn to_logical_pos(&self, pos: PhysicalPosition<f64>) -> LogicalPosition<f32> {
-        let scale = self.window().scale_factor();
-        pos.to_logical(scale)
     }
 }
 
@@ -260,11 +249,6 @@ impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
 impl MainWindowRef for Window {
     fn window(&self) -> &Window {
         self
-    }
-    fn pre_render(&self) { }
-    fn post_render(&self) { }
-    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
-        size.to_logical(1.0)
     }
 }
 
@@ -299,8 +283,11 @@ impl<W> MainWindowWithRenderer<W> {
 impl<W: MainWindowRef> MainWindowWithRenderer<W> {
     /// Attaches the given window and renderer together.
     pub fn new_with_renderer(main_window: W, mut renderer: Renderer) -> Self {
-        let (size, scale) = main_window.size_and_scale();
-        renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale);
+        let w = main_window.window();
+        let size = w.inner_size();
+        let scale = w.scale_factor();
+        let size = size.to_logical::<f32>(scale);
+        renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
         let mut imgui = unsafe { renderer.imgui().set_current() };
         clipboard::maybe_setup_clipboard(&mut imgui);
@@ -316,14 +303,21 @@ impl<W: MainWindowRef> MainWindowWithRenderer<W> {
     /// It returns [`std::ops::ControlFlow::Break`] for the event [`winit::event::WindowEvent::CloseRequested`] as a convenience. You can
     /// use it to break the main loop, or ignore it, as you see fit.
     #[must_use]
-    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<()> {
+    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<(), EventContinue> {
         do_event(&self.main_window, &mut self.renderer, &mut self.status, app, event)
     }
 }
 
+#[derive(Debug, Default)]
+pub struct EventContinue {
+    pub want_capture_mouse: bool,
+    pub want_capture_keyboard: bool,
+    pub want_text_input: bool,
+}
+
 /// Just like [`MainWindowWithRenderer::do_event`] but using all the pieces separately.
 #[must_use]
-pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut Renderer, status: &mut MainWindowStatus, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> std::ops::ControlFlow<()> {
+pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut Renderer, status: &mut MainWindowStatus, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> std::ops::ControlFlow<(), EventContinue> {
     match event {
         Event::NewEvents(_) => {
             let now = Instant::now();
@@ -338,7 +332,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
             if io.WantSetMousePos {
                 let pos = io.MousePos;
                 let pos = winit::dpi::LogicalPosition { x: pos.x, y: pos.y };
-                main_window.set_cursor_position(pos);
+                let _ = main_window.window().set_cursor_position(pos);
             }
             let now = Instant::now();
             // If the mouse is down, redraw all the time, maybe the user is dragging.
@@ -353,7 +347,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
         Event::WindowEvent {
             window_id,
             event
-        } if main_window.matches_window_id(*window_id) => {
+        } if main_window.window().id() == *window_id => {
             use winit::event::WindowEvent::*;
             match event {
                 CloseRequested => {
@@ -379,8 +373,8 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                         }
                         main_window.pre_render();
                         renderer.do_frame(app);
+                        main_window.post_render();
                     }
-                    main_window.post_render();
                 }
                 Resized(size) => {
                     status.ping_user_input();
@@ -477,7 +471,8 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
-                        let position = main_window.to_logical_pos(*position);
+                        let scale = main_window.window().scale_factor();
+                        let position = position.to_logical(scale);
                         ImGuiIO_AddMousePosEvent(io, position.x, position.y);
                     }
                 }
@@ -534,7 +529,15 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
         }
         _ => { }
     }
-    std::ops::ControlFlow::Continue(())
+    let res = unsafe {
+        let imgui = renderer.imgui().set_current();
+        EventContinue {
+            want_capture_mouse: imgui.want_capture_mouse(),
+            want_capture_keyboard: imgui.want_capture_keyboard(),
+            want_text_input: imgui.want_text_input(),
+        }
+    };
+    std::ops::ControlFlow::Continue(res)
 }
 
 #[cfg(not(feature="clipboard"))]

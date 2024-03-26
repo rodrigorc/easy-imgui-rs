@@ -196,8 +196,8 @@ impl MainWindowWithRenderer<MainWindow> {
 
 pub trait MainWindowRef {
     fn window(&self) -> &Window;
-
-    fn pre_render(&self) {}
+    /// Returns whether to do the actual rendering of the frame in case of a RequestRender.
+    fn pre_render(&self) -> bool { false }
     fn post_render(&self) {}
 
     fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
@@ -225,12 +225,11 @@ impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
     fn window(&self) -> &Window {
         &self.borrow().window
     }
-
-    fn pre_render(&self) {
+    fn pre_render(&self) -> bool {
         let this = self.borrow();
         this.gl_context.make_current(&this.surface).unwrap();
+        true
     }
-
     fn post_render(&self) {
         let this = self.borrow();
         this.window.pre_present_notify();
@@ -245,10 +244,36 @@ impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
     }
 }
 
+pub struct MainWindowPieces<'a> {
+    pub window: &'a Window,
+    pub surface: &'a Surface<WindowSurface>,
+    pub gl_context: &'a PossiblyCurrentContext,
+    pub do_render: bool,
+}
+
 /// Default implementation for quick'n'dirty code, probably you'll want to refine it a bit.
-impl MainWindowRef for Window {
+impl<'a> MainWindowRef for MainWindowPieces<'a> {
     fn window(&self) -> &Window {
-        self
+        self.window
+    }
+    fn pre_render(&self) -> bool {
+        if self.do_render {
+            self.gl_context.make_current(&self.surface).unwrap();
+            true
+        } else {
+            false
+        }
+    }
+    fn post_render(&self) {
+        self.window.pre_present_notify();
+        self.surface.swap_buffers(&self.gl_context).unwrap();
+    }
+    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+        let width = NonZeroU32::new(size.width.max(1)).unwrap();
+        let height = NonZeroU32::new(size.height.max(1)).unwrap();
+        self.surface.resize(&self.gl_context, width, height);
+        let scale = self.window.scale_factor();
+        size.to_logical(scale)
     }
 }
 
@@ -371,21 +396,20 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                                 status.current_cursor = cursor;
                             }
                         }
-                        main_window.pre_render();
-                        renderer.do_frame(app);
-                        main_window.post_render();
+                        if main_window.pre_render() {
+                            renderer.do_frame(app);
+                            main_window.post_render();
+                        }
                     }
                 }
                 Resized(size) => {
                     status.ping_user_input();
                     // GL surface in physical pixels, imgui in logical
-                    //if let (Some(w), Some(h)) = (NonZeroU32::new(size.width), NonZeroU32::new(size.height)) {
-                        let size = main_window.resize(*size);
-                        let mut imgui = unsafe { renderer.imgui().set_current() };
-                        let io = imgui.io_mut();
-                        let size = Vector2::from(mint::Vector2::from(size));
-                        io.DisplaySize = imgui::v2_to_im(size);
-                    //}
+                    let size = main_window.resize(*size);
+                    let mut imgui = unsafe { renderer.imgui().set_current() };
+                    let io = imgui.io_mut();
+                    let size = Vector2::from(mint::Vector2::from(size));
+                    io.DisplaySize = imgui::v2_to_im(size);
                 }
                 ScaleFactorChanged { scale_factor, .. } => {
                     status.ping_user_input();

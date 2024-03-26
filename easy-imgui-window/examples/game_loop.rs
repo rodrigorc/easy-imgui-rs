@@ -27,6 +27,8 @@ fn main() {
 
     let game = Game {
         gl: gl.clone(),
+        surface,
+        gl_context,
         renderer,
         app: App { r: 0.1, g: 0.1, b: 0.1 },
     };
@@ -39,24 +41,31 @@ fn main() {
         //update
         |_| {},
         //render
-        move |g| {
+        |g| {
             unsafe {
                 g.game.gl.clear_color(g.game.app.r, g.game.app.g, g.game.app.b, 1.0);
                 g.game.gl.clear(glow::COLOR_BUFFER_BIT);
                 g.game.renderer.do_frame(&mut g.game.app);
-                surface.swap_buffers(&gl_context).unwrap();
+                g.game.surface.swap_buffers(&g.game.gl_context).unwrap();
             }
         },
         //handle
         move |g, ev| {
-            let res = easy_imgui_window::do_event(&*g.window, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev);
-            let std::ops::ControlFlow::Continue(imgui_wants) = res else {
-                g.exit();
-                return;
-            };
             use winit::{
                 keyboard::{PhysicalKey, KeyCode},
                 event::{Event, WindowEvent, KeyEvent},
+            };
+            let wr = easy_imgui_window::MainWindowPieces {
+                window: &*g.window,
+                surface: &g.game.surface,
+                gl_context: &g.game.gl_context,
+                // game_loop renders in the other callback, not here
+                do_render: false,
+            };
+            let res = easy_imgui_window::do_event(&wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev);
+            let std::ops::ControlFlow::Continue(imgui_wants) = res else {
+                g.exit();
+                return;
             };
             match ev {
                 Event::WindowEvent {
@@ -105,6 +114,8 @@ fn main() {
 struct Game {
     gl: Rc<Context>,
     renderer: Renderer,
+    surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    gl_context: glutin::context::PossiblyCurrentContext,
     app: App,
 }
 

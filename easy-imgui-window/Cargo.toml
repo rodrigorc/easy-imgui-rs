@@ -21,6 +21,7 @@ freetype = ["easy-imgui/freetype"]
 easy-imgui-sys = { version = "=0.2.4", path = "../easy-imgui-sys" }
 easy-imgui = { version = "=0.2.4", path = "../easy-imgui" }
 easy-imgui-renderer = { version = "=0.2.4", path = "../easy-imgui-renderer" }
+easy-imgui-winit = { version = "=0.2.4", path = "../easy-imgui-winit" }
 
 anyhow = "1"
 

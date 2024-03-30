@@ -515,12 +515,23 @@ dependencies = [
  "easy-imgui",
  "easy-imgui-renderer",
  "easy-imgui-sys",
+ "easy-imgui-winit",
  "game-loop",
  "gilrs",
  "glutin",
  "glutin-winit",
  "image",
  "raw-window-handle 0.5.2",
+ "winit",
+]
+
+[[package]]
+name = "easy-imgui-winit"
+version = "0.2.4"
+dependencies = [
+ "anyhow",
+ "easy-imgui",
+ "easy-imgui-sys",
  "winit",
 ]
 

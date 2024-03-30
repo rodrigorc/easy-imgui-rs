@@ -1,0 +1,18 @@
+[package]
+name = "easy-imgui-winit"
+version = "0.2.4"
+edition = "2021"
+description = "Default winit handler for the easy-imgui crate using winit and easy-imgui-renderer"
+license = "MIT"
+readme = "../README.md"
+repository = "https://github.com/rodrigorc/easy-imgui-rs"
+categories = ["gui"]
+keywords = ["imgui", "ui", "graphics"]
+
+[dependencies]
+easy-imgui-sys = { version = "=0.2.4", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.2.4", path = "../easy-imgui" }
+
+anyhow = "1"
+
+winit = { version = "0.29", features = ["x11", "mint"] }

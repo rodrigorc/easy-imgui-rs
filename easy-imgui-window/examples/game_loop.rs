@@ -23,7 +23,7 @@ fn main() {
     let size = easy_imgui::Vector2::new(size.width, size.height);
     renderer.set_size(size, scale as f32);
 
-    let mut window_status = easy_imgui_window::MainWindowStatus::default();
+    let mut window_state = easy_imgui_winit::WinitState::init();
 
     let game = Game {
         gl: gl.clone(),
@@ -62,7 +62,7 @@ fn main() {
                 // game_loop renders in the other callback, not here
                 do_render: false,
             };
-            let res = easy_imgui_window::do_event(&wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev);
+            let res = easy_imgui_window::do_event(&wr,&mut window_state, &mut g.game.renderer, &mut g.game.app, ev);
             let std::ops::ControlFlow::Continue(imgui_wants) = res else {
                 g.exit();
                 return;

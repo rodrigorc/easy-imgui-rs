@@ -7,7 +7,6 @@
 *  shared library.
 */
 mod window;
-pub mod conv;
 
 pub use window::*;
 pub use easy_imgui_renderer;

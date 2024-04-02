@@ -436,7 +436,8 @@ impl MainWindowWithRenderer {
 
 #[cfg(not(feature="clipboard"))]
 mod clipboard {
-    pub fn maybe_setup_clipboard(imgui: &mut imgui::CurrentContext<'_>) { }
+    use easy_imgui as imgui;
+    pub fn maybe_setup_clipboard(_imgui: &mut imgui::CurrentContext<'_>) { }
 }
 #[cfg(feature="clipboard")]
 mod clipboard {

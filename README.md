@@ -1,4 +1,7 @@
 # easy-imgui-rs
+
+[![build](https://github.com/rodrigorc/easy-imgui-rs/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/rodrigorc/easy-imgui-rs/actions/workflows/build.yaml)
+
 Build full GUI applications with Rust and [Dear ImGui][dearimgui]. It currently uses version v1.90.4.
 
 There are several crates in this repository:

@@ -1,19 +1,28 @@
 use std::num::NonZeroU32;
-use std::rc::Rc;
 use std::time::{Instant, Duration};
-use glutin_winit::DisplayBuilder;
-use winit::keyboard::PhysicalKey;
-use winit::event::Ime::Commit;
-use winit::{window::{Window, CursorIcon, WindowBuilder}, event::Event, dpi::{PhysicalSize, LogicalSize, Pixel, PhysicalPosition, LogicalPosition}, event_loop::EventLoopWindowTarget};
+use winit::{
+    keyboard::PhysicalKey,
+    window::{Window, CursorIcon},
+    event::{Event, Ime::Commit},
+    dpi::{PhysicalSize, LogicalSize},
+    event_loop::EventLoopWindowTarget
+};
 use easy_imgui_sys::*;
 use easy_imgui::{self as imgui, mint, Vector2};
-use glutin::{prelude::*, config::{Config, ConfigTemplateBuilder}, display::GetGlDisplay, surface::{SurfaceAttributesBuilder, WindowSurface, Surface}, context::{ContextAttributesBuilder, ContextApi, PossiblyCurrentContext}};
-use raw_window_handle::HasRawWindowHandle;
-use anyhow::{Result, anyhow};
-use easy_imgui_renderer::{Renderer, glow};
+use glutin::{
+    prelude::*,
+    surface::{WindowSurface, Surface},
+    context::PossiblyCurrentContext,
+};
+use easy_imgui_renderer::Renderer;
 use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 
+// Only used with the main-window feature
+#[allow(unused_imports)]
+use winit::dpi::{Pixel, PhysicalPosition, LogicalPosition};
+
 /// This type represents a `winit` window and an OpenGL context.
+#[cfg(feature="main-window")]
 pub struct MainWindow {
     gl_context: PossiblyCurrentContext,
     // The surface must be dropped before the window.
@@ -67,11 +76,12 @@ pub struct MainWindowWithRenderer<W> {
     status: MainWindowStatus,
 }
 
+#[cfg(feature="main-window")]
 impl MainWindow {
     /// Creates a `MainWindow` with default values.
-    pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
+    pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> anyhow::Result<MainWindow> {
         // For standard UI, we need as few fancy things as available
-        let score = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
+        let score = |c: &glutin::config::Config| (c.num_samples(), c.depth_size(), c.stencil_size());
         Self::with_gl_chooser(
             event_loop,
             title,
@@ -87,7 +97,18 @@ impl MainWindow {
     ///
     /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
     /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
-    pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
+    pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(glutin::config::Config, glutin::config::Config) -> glutin::config::Config) -> anyhow::Result<MainWindow> {
+        use winit::window::WindowBuilder;
+        use glutin::{
+            config::ConfigTemplateBuilder,
+            display::GetGlDisplay,
+            surface::SurfaceAttributesBuilder,
+            context::{ContextAttributesBuilder, ContextApi},
+        };
+        use glutin_winit::DisplayBuilder;
+        use raw_window_handle::HasRawWindowHandle;
+        use anyhow::anyhow;
+
         let window_builder = WindowBuilder::new();
         let template = ConfigTemplateBuilder::new()
             .prefer_hardware_accelerated(Some(true))
@@ -155,9 +176,10 @@ impl MainWindow {
         &self.gl_context
     }
     /// Creates a new `glow` OpenGL context for this window and the selected configuration.
-    pub fn create_gl_context(&self) -> glow::Context {
+    pub fn create_gl_context(&self) -> easy_imgui_renderer::glow::Context {
+        use glutin::display::GetGlDisplay;
         let dsp = self.gl_context.display();
-        unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) }
+        unsafe { easy_imgui_renderer::glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) }
     }
     /// Gets a reference to the `winit` window.
     pub fn window(&self) -> &Window {
@@ -185,11 +207,12 @@ impl MainWindow {
     }
 }
 
+#[cfg(feature="main-window")]
 impl MainWindowWithRenderer<MainWindow> {
     /// Creates a new [`Renderer`] and attaches it to the given window.
     pub fn new(main_window: MainWindow) -> Self {
         let gl = main_window.create_gl_context();
-        let renderer = Renderer::new(Rc::new(gl)).unwrap();
+        let renderer = Renderer::new(std::rc::Rc::new(gl)).unwrap();
         Self::new_with_renderer(main_window, renderer)
     }
 }
@@ -221,6 +244,7 @@ pub trait MainWindowRef {
     }
 }
 
+#[cfg(feature="main-window")]
 impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
     fn window(&self) -> &Window {
         &self.borrow().window
@@ -315,7 +339,7 @@ impl<W: MainWindowRef> MainWindowWithRenderer<W> {
         renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
         let mut imgui = unsafe { renderer.imgui().set_current() };
-        clipboard::maybe_setup_clipboard(&mut imgui);
+        clipboard::setup(&mut imgui);
 
         MainWindowWithRenderer {
             main_window,
@@ -565,15 +589,18 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
 }
 
 #[cfg(not(feature="clipboard"))]
-mod clipboard {
-    pub fn maybe_setup_clipboard(imgui: &mut imgui::CurrentContext<'_>) { }
+pub mod clipboard {
+    use easy_imgui as imgui;
+    /// This does nothing. Enable the `clipboard` feature to get a working clipboard.
+    pub fn setup(_imgui: &mut imgui::CurrentContext<'_>) { }
 }
 #[cfg(feature="clipboard")]
-mod clipboard {
+pub mod clipboard {
     use std::ffi::{CString, CStr, c_void, c_char};
     use easy_imgui as imgui;
 
-    pub fn maybe_setup_clipboard(imgui: &mut imgui::CurrentContext<'_>) {
+    /// Sets up the ImGui clipboard using the `arboard` crate.
+    pub fn setup(imgui: &mut imgui::CurrentContext<'_>) {
         if let Ok(ctx) = arboard::Clipboard::new() {
             let clip = MyClipboard {
                 ctx,

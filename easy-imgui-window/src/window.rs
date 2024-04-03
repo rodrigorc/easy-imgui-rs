@@ -169,8 +169,11 @@ impl MainWindow {
             surface,
         })
     }
-    pub unsafe fn into_pieces(self) -> (Window, Surface<WindowSurface>, PossiblyCurrentContext) {
-        (self.window, self.surface, self.gl_context)
+    /// Splits this window into its parts.
+    ///
+    /// SAFETY: Do not drop the `window` without dropping the `surface` first.
+    pub unsafe fn into_pieces(self) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
+        (self.gl_context, self.surface, self.window)
     }
     pub fn glutin_context(&self) -> &glutin::context::PossiblyCurrentContext {
         &self.gl_context
@@ -245,26 +248,23 @@ pub trait MainWindowRef {
 }
 
 #[cfg(feature="main-window")]
-impl<W: std::borrow::Borrow<MainWindow>> MainWindowRef for W {
+impl MainWindowRef for MainWindow {
     fn window(&self) -> &Window {
-        &self.borrow().window
+        &self.window
     }
     fn pre_render(&self) -> bool {
-        let this = self.borrow();
-        this.gl_context.make_current(&this.surface).unwrap();
+        self.gl_context.make_current(&self.surface).unwrap();
         true
     }
     fn post_render(&self) {
-        let this = self.borrow();
-        this.window.pre_present_notify();
-        this.surface.swap_buffers(&this.gl_context).unwrap();
+        self.window.pre_present_notify();
+        self.surface.swap_buffers(&self.gl_context).unwrap();
     }
     fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
-        let this = self.borrow();
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
         let height = NonZeroU32::new(size.height.max(1)).unwrap();
-        this.surface.resize(&this.gl_context, width, height);
-        this.to_logical_size::<_, f32>(size)
+        self.surface.resize(&self.gl_context, width, height);
+        self.to_logical_size::<_, f32>(size)
     }
 }
 

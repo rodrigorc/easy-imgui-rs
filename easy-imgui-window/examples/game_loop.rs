@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use easy_imgui_window::{
     MainWindow,
-    winit::{event_loop::{EventLoopBuilder}},
+    winit::event_loop::EventLoopBuilder,
     easy_imgui_renderer::{Renderer, glow::{self, Context, HasContext}},
     glutin::prelude::GlSurface,
 };
@@ -13,8 +13,9 @@ fn main() {
     let window = MainWindow::new(&event_loop, "game_loop").unwrap();
     let gl = Rc::new(window.create_gl_context());
 
-    let (window, surface, gl_context) = unsafe { window.into_pieces() };
+    let (gl_context, surface, window) = unsafe { window.into_pieces() };
     let window = Arc::new(window);
+
 
     let mut renderer = Renderer::new(gl.clone()).unwrap();
     renderer.set_background_color(None);

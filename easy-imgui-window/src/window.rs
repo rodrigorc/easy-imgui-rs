@@ -28,16 +28,12 @@ pub struct MainWindow {
     // The surface must be dropped before the window.
     surface: Surface<WindowSurface>,
     window: Window,
+    idler: MainWindowIdler,
 }
 
 pub struct MainWindowStatus {
     last_frame: Instant,
     current_cursor: Option<CursorIcon>,
-
-    idle_time: Duration,
-    idle_frame_count: u32,
-    last_input_time: Instant,
-    last_input_frame: u32,
 }
 
 impl Default for MainWindowStatus {
@@ -46,7 +42,21 @@ impl Default for MainWindowStatus {
         MainWindowStatus {
             last_frame: now,
             current_cursor: Some(CursorIcon::Default),
+        }
+    }
+}
 
+pub struct MainWindowIdler {
+    idle_time: Duration,
+    idle_frame_count: u32,
+    last_input_time: Instant,
+    last_input_frame: u32,
+}
+
+impl Default for MainWindowIdler {
+    fn default() -> MainWindowIdler {
+        let now = Instant::now();
+        MainWindowIdler {
             idle_time: Duration::from_secs(1),
             idle_frame_count: 60,
             last_input_time: now,
@@ -55,7 +65,7 @@ impl Default for MainWindowStatus {
     }
 }
 
-impl MainWindowStatus {
+impl MainWindowIdler {
     pub fn set_idle_time(&mut self, time: Duration) {
         self.idle_time = time;
     }
@@ -167,6 +177,7 @@ impl MainWindow {
             gl_context,
             window,
             surface,
+            idler: MainWindowIdler::default(),
         })
     }
     /// Splits this window into its parts.
@@ -218,24 +229,38 @@ impl MainWindowWithRenderer<MainWindow> {
         let renderer = Renderer::new(std::rc::Rc::new(gl)).unwrap();
         Self::new_with_renderer(main_window, renderer)
     }
+    /// Sets the time after which the UI will stop rendering, if there is no user input.
+    pub fn set_idle_time(&mut self, time: Duration) {
+        self.main_window.idler.set_idle_time(time);
+    }
+    /// Sets the frame count after which the UI will stop rendering, if there is no user input.
+    ///
+    /// Note that by default V-Sync is enabled, and that will affect the frame rate.
+    pub fn set_idle_frame_count(&mut self, frame_count: u32) {
+        self.main_window.idler.set_idle_frame_count(frame_count);
+    }
+    /// Forces a rebuild of the UI.
+    ///
+    /// By default the window will stop rendering the UI after a while without user input. Use this
+    /// function to force a redraw because of some external factor.
+    pub fn ping_user_input(&mut self) {
+        self.main_window.idler.ping_user_input();
+    }
 }
 
 pub trait MainWindowRef {
     fn window(&self) -> &Window;
     /// Returns whether to do the actual rendering of the frame in case of a RequestRender.
-    fn pre_render(&self) -> bool { false }
-    fn post_render(&self) {}
+    fn pre_render(&mut self) {}
+    fn post_render(&mut self) {}
+    fn ping_user_input(&mut self) {}
+    fn about_to_wait(&mut self, _pinged: bool) {}
 
-    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+    fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let scale = self.window().scale_factor();
         size.to_logical(scale)
     }
-
-    fn request_redraw(&self) {
-         self.window().request_redraw();
-    }
-
-    fn set_cursor(&self, cursor: Option<CursorIcon>) {
+    fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
         let w = self.window();
         match cursor {
             None => w.set_cursor_visible(false),
@@ -252,27 +277,45 @@ impl MainWindowRef for MainWindow {
     fn window(&self) -> &Window {
         &self.window
     }
-    fn pre_render(&self) -> bool {
+    fn pre_render(&mut self) {
         self.gl_context.make_current(&self.surface).unwrap();
-        true
     }
-    fn post_render(&self) {
+    fn post_render(&mut self) {
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.gl_context).unwrap();
     }
-    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+    fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
         let height = NonZeroU32::new(size.height.max(1)).unwrap();
         self.surface.resize(&self.gl_context, width, height);
         self.to_logical_size::<_, f32>(size)
     }
+    fn ping_user_input(&mut self) {
+        self.idler.ping_user_input();
+    }
+    fn about_to_wait(&mut self, pinged: bool) {
+        let now = Instant::now();
+        self.idler.last_input_frame += 1;
+        if pinged || now.duration_since(self.idler.last_input_time) < self.idler.idle_time || self.idler.last_input_frame < self.idler.idle_frame_count {
+            // No need to call set_control_flow(): doing a redraw will force extra Poll.
+            // Not doing it will default to Wait.
+            self.window.request_redraw();
+        }
+    }
 }
 
+bitflags::bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct EventFlags: u32 {
+        const DoNotRender = 1;
+        const DoNotFixFocusGainedBug = 2;
+    }
+
+}
 pub struct MainWindowPieces<'a> {
     pub window: &'a Window,
     pub surface: &'a Surface<WindowSurface>,
     pub gl_context: &'a PossiblyCurrentContext,
-    pub do_render: bool,
 }
 
 /// Default implementation for quick'n'dirty code, probably you'll want to refine it a bit.
@@ -280,25 +323,14 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
     fn window(&self) -> &Window {
         self.window
     }
-    fn pre_render(&self) -> bool {
-        if self.do_render {
-            self.gl_context.make_current(&self.surface).unwrap();
-            true
-        } else {
-            false
-        }
+    fn pre_render(&mut self) {
+        self.gl_context.make_current(&self.surface).unwrap();
     }
-    fn post_render(&self) {
-        // No need to check do_render, only called if pre_render returned true
+    fn post_render(&mut self) {
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.gl_context).unwrap();
     }
-    fn request_redraw(&self) {
-        if self.do_render {
-            self.window().request_redraw();
-        }
-    }
-    fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+    fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
         let height = NonZeroU32::new(size.height.max(1)).unwrap();
         self.surface.resize(&self.gl_context, width, height);
@@ -308,16 +340,6 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
 }
 
 impl<W> MainWindowWithRenderer<W> {
-    /// Sets the time after which the UI will stop rendering, if there is no user input.
-    pub fn set_idle_time(&mut self, time: Duration) {
-        self.status.set_idle_time(time);
-    }
-    /// Sets the frame count after which the UI will stop rendering, if there is no user input.
-    ///
-    /// Note that by default V-Sync is enabled, and that will affect the frame rate.
-    pub fn set_idle_frame_count(&mut self, frame_count: u32) {
-        self.status.set_idle_frame_count(frame_count);
-    }
     /// Gets a reference to the inner renderer.
     pub fn renderer(&mut self) -> &mut Renderer {
         &mut self.renderer
@@ -325,13 +347,6 @@ impl<W> MainWindowWithRenderer<W> {
     /// Gets a reference to the inner window.
     pub fn main_window(&mut self) -> &mut W {
         &mut self.main_window
-    }
-    /// Forces a rebuild of the UI.
-    ///
-    /// By default the window will stop rendering the UI after a while without user input. Use this
-    /// function to force a redraw because of some external factor.
-    pub fn ping_user_input(&mut self) {
-        self.status.ping_user_input();
     }
 }
 
@@ -359,7 +374,7 @@ impl<W: MainWindowRef> MainWindowWithRenderer<W> {
     /// use it to break the main loop, or ignore it, as you see fit.
     #[must_use]
     pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<(), EventContinue> {
-        do_event(&self.main_window, &mut self.renderer, &mut self.status, app, event)
+        do_event(&mut self.main_window, &mut self.renderer, &mut self.status, app, event, EventFlags::empty())
     }
 }
 
@@ -372,9 +387,32 @@ pub struct EventContinue {
 
 /// Just like [`MainWindowWithRenderer::do_event`] but using all the pieces separately.
 #[must_use]
-pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut Renderer, status: &mut MainWindowStatus, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> std::ops::ControlFlow<(), EventContinue> {
+pub fn do_event<EventUserType>(
+    main_window: &mut impl MainWindowRef,
+    renderer: &mut Renderer,
+    status: &mut MainWindowStatus,
+    app: &mut impl imgui::UiBuilder,
+    event: &Event<EventUserType>,
+    flags: EventFlags,
+) -> std::ops::ControlFlow<(), EventContinue> {
     match event {
-        Event::NewEvents(_) => {
+        Event::NewEvents(x) => {
+            if x == &winit::event::StartCause::Init
+                && !flags.contains(EventFlags::DoNotFixFocusGainedBug)
+            {
+                // This fixes "keyboard non-responsive on startup because it doesn't detect FocusGained...":
+                // https://github.com/rust-windowing/winit/issues/2841
+                use winit::raw_window_handle::{
+                    HasWindowHandle,
+                    RawWindowHandle::{Xcb, Xlib},
+                };
+                if let Ok(h) = main_window.window().window_handle() {
+                        if matches!(h.as_raw(), Xcb(_) | Xlib(_)) {
+                        main_window.window().set_visible(false);
+                        main_window.window().set_visible(true);
+                    }
+                }
+            }
             let now = Instant::now();
             let mut imgui = unsafe { renderer.imgui().set_current() };
             let io = imgui.io_mut();
@@ -389,15 +427,9 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                 let pos = winit::dpi::LogicalPosition { x: pos.x, y: pos.y };
                 let _ = main_window.window().set_cursor_position(pos);
             }
-            let now = Instant::now();
             // If the mouse is down, redraw all the time, maybe the user is dragging.
             let mouse = unsafe { ImGui_IsAnyMouseDown() };
-            status.last_input_frame += 1;
-            if mouse || now.duration_since(status.last_input_time) < status.idle_time || status.last_input_frame < status.idle_frame_count {
-                // No need to call set_control_flow(): doing a redraw will force extra Poll.
-                // Not doing it will default to Wait.
-                main_window.request_redraw();
-            }
+            main_window.about_to_wait(mouse);
         }
         Event::WindowEvent {
             window_id,
@@ -426,14 +458,15 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                                 status.current_cursor = cursor;
                             }
                         }
-                        if main_window.pre_render() {
+                        if !flags.contains(EventFlags::DoNotRender) {
+                            main_window.pre_render();
                             renderer.do_frame(app);
                             main_window.post_render();
                         }
                     }
                 }
                 Resized(size) => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     // GL surface in physical pixels, imgui in logical
                     let size = main_window.resize(*size);
                     let mut imgui = unsafe { renderer.imgui().set_current() };
@@ -442,7 +475,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     io.DisplaySize = imgui::v2_to_im(size);
                 }
                 ScaleFactorChanged { scale_factor, .. } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     let scale_factor = *scale_factor as f32;
                     let mut imgui = unsafe { renderer.imgui().set_current() };
                     let io = imgui.io_mut();
@@ -455,7 +488,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     renderer.set_size(size, scale_factor);
                 }
                 ModifiersChanged(mods) => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
@@ -475,7 +508,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     is_synthetic: false,
                     ..
                 } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     let pressed = *state == winit::event::ElementState::Pressed;
                     if let Some(key) = to_imgui_key(*physical_key) {
                         unsafe {
@@ -511,7 +544,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     }
                 }
                 Ime(Commit(text)) => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
@@ -521,7 +554,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     }
                 }
                 CursorMoved { position, .. } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
@@ -535,7 +568,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     phase: winit::event::TouchPhase::Moved,
                     ..
                 } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     let mut imgui = unsafe { renderer.imgui().set_current() };
                     let io = imgui.io_mut();
                     let (h, v) = match delta {
@@ -552,7 +585,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     }
                 }
                 MouseInput { state, button, .. } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
@@ -563,7 +596,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     }
                 }
                 CursorLeft { .. } => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
@@ -571,7 +604,7 @@ pub fn do_event<EventUserType>(main_window: &impl MainWindowRef, renderer: &mut 
                     }
                 }
                 Focused(focused) => {
-                    status.ping_user_input();
+                    main_window.ping_user_input();
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();

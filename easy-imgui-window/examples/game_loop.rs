@@ -2,10 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use easy_imgui_window::{
-    MainWindow,
-    winit::event_loop::EventLoopBuilder,
-    easy_imgui_renderer::{Renderer, glow::{self, Context, HasContext}},
-    glutin::prelude::GlSurface,
+    easy_imgui_renderer::{glow::{self, Context, HasContext}, Renderer}, glutin::prelude::GlSurface, winit::event_loop::EventLoopBuilder, EventFlags, MainWindow
 };
 
 fn main() {
@@ -31,7 +28,7 @@ fn main() {
         surface,
         gl_context,
         renderer,
-        app: App { r: 0.1, g: 0.1, b: 0.1 },
+        app: App { r: 0.1, g: 0.1, b: 0.1, show_demo: true },
     };
     game_loop::game_loop(
         event_loop,
@@ -44,26 +41,35 @@ fn main() {
         //render
         |g| {
             unsafe {
+                // GL preparation
+                use glutin::context::PossiblyCurrentGlContext;
+
+                // This should be the game scene render
+                g.game.gl_context.make_current(&g.game.surface).unwrap();
                 g.game.gl.clear_color(g.game.app.r, g.game.app.g, g.game.app.b, 1.0);
                 g.game.gl.clear(glow::COLOR_BUFFER_BIT);
+
+                // And this is the ImGui render, optional
                 g.game.renderer.do_frame(&mut g.game.app);
+
+                // GL presentation
+                g.window.pre_present_notify();
                 g.game.surface.swap_buffers(&g.game.gl_context).unwrap();
             }
         },
         //handle
         move |g, ev| {
             use winit::{
-                keyboard::{PhysicalKey, KeyCode},
-                event::{Event, WindowEvent, KeyEvent},
+                keyboard::{PhysicalKey, KeyCode, },
+                event::{Event, WindowEvent, KeyEvent, ElementState},
             };
-            let wr = easy_imgui_window::MainWindowPieces {
+            let mut wr = easy_imgui_window::MainWindowPieces {
                 window: &*g.window,
                 surface: &g.game.surface,
                 gl_context: &g.game.gl_context,
-                // game_loop renders in the other callback, not here
-                do_render: false,
             };
-            let res = easy_imgui_window::do_event(&wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev);
+            // game_loop renders in the other callback, not here
+            let res = easy_imgui_window::do_event(&mut wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev, EventFlags::DoNotRender);
             let std::ops::ControlFlow::Continue(imgui_wants) = res else {
                 g.exit();
                 return;
@@ -77,6 +83,7 @@ fn main() {
                         WindowEvent::KeyboardInput {
                             event: KeyEvent {
                                 physical_key: PhysicalKey::Code(code),
+                                state: ElementState::Pressed,
                                 ..
                             },
                             ..
@@ -87,6 +94,9 @@ fn main() {
                                 }
                                 KeyCode::ArrowRight => {
                                     g.game.app.b = (g.game.app.b + 0.1).min(1.0);
+                                }
+                                KeyCode::Escape => {
+                                    g.game.app.show_demo ^= true;
                                 }
                                 _ => {}
                             }
@@ -124,20 +134,23 @@ struct App {
     r: f32,
     g: f32,
     b: f32,
+    show_demo: bool,
 }
 
 impl easy_imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &easy_imgui::Ui<Self>) {
         use easy_imgui::*;
-
         ui.set_next_window_pos((10.0, 10.0).into(), Cond::Always, (0.0, 0.0).into());
         ui.window_config("Instructions")
-            .flags(WindowFlags::NoMove | WindowFlags::NoResize | WindowFlags::NoMouseInputs)
+            .flags(WindowFlags::NoMove | WindowFlags::NoResize | WindowFlags::NoMouseInputs | WindowFlags::NoNav | WindowFlags::NoCollapse)
             .with(|| {
                 ui.text("Use left-right arrow keys to change blue channel");
                 ui.text("Use the mouse to change red and green channels");
+                ui.text("Press ESC to show/hide the demo");
             });
 
-        ui.show_demo_window(None);
+            if self.show_demo {
+                ui.show_demo_window(Some(&mut self.show_demo));
+            }
     }
 }

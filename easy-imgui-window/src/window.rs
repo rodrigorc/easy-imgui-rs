@@ -310,15 +310,15 @@ bitflags::bitflags! {
         const DoNotRender = 1;
         const DoNotFixFocusGainedBug = 2;
     }
-
 }
+
 pub struct MainWindowPieces<'a> {
     pub window: &'a Window,
     pub surface: &'a Surface<WindowSurface>,
     pub gl_context: &'a PossiblyCurrentContext,
 }
 
-/// Default implementation for quick'n'dirty code, probably you'll want to refine it a bit.
+/// Default implementation if you have all the pieces.
 impl<'a> MainWindowRef for MainWindowPieces<'a> {
     fn window(&self) -> &Window {
         self.window
@@ -336,6 +336,13 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         self.surface.resize(&self.gl_context, width, height);
         let scale = self.window.scale_factor();
         size.to_logical(scale)
+    }
+}
+
+/// Default implementation if you only have a window, no pre/post render, no resize.
+impl<'a> MainWindowRef for &'a Window {
+    fn window(&self) -> &Window {
+        self
     }
 }
 

@@ -289,8 +289,14 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         }
     }
     fn post_render(&self) {
+        // No need to check do_render, only called if pre_render returned true
         self.window.pre_present_notify();
         self.surface.swap_buffers(&self.gl_context).unwrap();
+    }
+    fn request_redraw(&self) {
+        if self.do_render {
+            self.window().request_redraw();
+        }
     }
     fn resize(&self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();

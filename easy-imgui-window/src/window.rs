@@ -248,18 +248,34 @@ impl MainWindowWithRenderer<MainWindow> {
     }
 }
 
+/// This traits grants access to a Window.
+///
+/// Usually you will have a [`MainWindow`], but if you create the `Window` with an external
+/// crate, maybe you don't own it.
 pub trait MainWindowRef {
+    /// Gets the [`Window`].
     fn window(&self) -> &Window;
-    /// Returns whether to do the actual rendering of the frame in case of a RequestRender.
+    /// This runs just before rendering.
+    ///
+    /// The intended use is to make the GL context current, if needed.
+    /// Clearing the background is usually done in [`easy_imgui::UiBuilder::pre_render`], or by the renderer if it has a background color.
     fn pre_render(&mut self) {}
+    /// This runs just after rendering.
+    ///
+    /// The intended use is to present the screen buffer.
     fn post_render(&mut self) {}
+    /// Notifies of a user interaction, for idling purposes.
     fn ping_user_input(&mut self) {}
+    /// There are no more messages, going to idle.
     fn about_to_wait(&mut self, _pinged: bool) {}
-
+    /// The window has been resized.
+    ///
+    /// Takes the new physical size. It should return the new logical size.
     fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let scale = self.window().scale_factor();
         size.to_logical(scale)
     }
+    /// Changes the mouse cursor.
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
         let w = self.window();
         match cursor {
@@ -272,6 +288,7 @@ pub trait MainWindowRef {
     }
 }
 
+/// Main implementation of the `MainWindowRef` trait for an owned `MainWindow`.
 #[cfg(feature="main-window")]
 impl MainWindowRef for MainWindow {
     fn window(&self) -> &Window {
@@ -305,13 +322,19 @@ impl MainWindowRef for MainWindow {
 }
 
 bitflags::bitflags! {
+    /// These flags can be used to customize the [`do_event`] function.
     #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
     pub struct EventFlags: u32 {
+        /// Do not render the UI
         const DoNotRender = 1;
+        /// Do not run the focus gained workaround.
+        ///
+        /// https://github.com/rust-windowing/winit/issues/2841
         const DoNotFixFocusGainedBug = 2;
     }
 }
 
+/// Helper struct to call [`do_event`] without owning the Window.
 pub struct MainWindowPieces<'a> {
     pub window: &'a Window,
     pub surface: &'a Surface<WindowSurface>,
@@ -339,7 +362,7 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
     }
 }
 
-/// Default implementation if you only have a window, no pre/post render, no resize.
+/// Simple implementation if you only have a window, no pre/post render, no resize.
 impl<'a> MainWindowRef for &'a Window {
     fn window(&self) -> &Window {
         self

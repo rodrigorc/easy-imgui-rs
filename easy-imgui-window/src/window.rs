@@ -5,7 +5,6 @@ use winit::{
     window::{Window, CursorIcon},
     event::{Event, Ime::Commit},
     dpi::{PhysicalSize, LogicalSize},
-    event_loop::EventLoopWindowTarget
 };
 use easy_imgui_sys::*;
 use easy_imgui::{self as imgui, mint, Vector2};
@@ -20,16 +19,6 @@ use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
 // Only used with the main-window feature
 #[allow(unused_imports)]
 use winit::dpi::{Pixel, PhysicalPosition, LogicalPosition};
-
-/// This type represents a `winit` window and an OpenGL context.
-#[cfg(feature="main-window")]
-pub struct MainWindow {
-    gl_context: PossiblyCurrentContext,
-    // The surface must be dropped before the window.
-    surface: Surface<WindowSurface>,
-    window: Window,
-    idler: MainWindowIdler,
-}
 
 pub struct MainWindowStatus {
     last_frame: Instant,
@@ -78,176 +67,6 @@ impl MainWindowIdler {
     }
 }
 
-/// This is a [`MainWindow`] plus a [`Renderer`]. It is the ultimate `easy-imgui` object.
-/// Instead of a literal `MainWindow` you can use any type that implements [`MainWindowRef`].
-pub struct MainWindowWithRenderer<W> {
-    main_window: W,
-    renderer: Renderer,
-    status: MainWindowStatus,
-}
-
-#[cfg(feature="main-window")]
-impl MainWindow {
-    /// Creates a `MainWindow` with default values.
-    pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> anyhow::Result<MainWindow> {
-        // For standard UI, we need as few fancy things as available
-        let score = |c: &glutin::config::Config| (c.num_samples(), c.depth_size(), c.stencil_size());
-        Self::with_gl_chooser(
-            event_loop,
-            title,
-            |cfg1, cfg2| {
-                if score(&cfg2) < score(&cfg1) {
-                    cfg2
-                } else {
-                    cfg1
-                }
-            })
-    }
-    /// Creates a `MainWindow` with your own OpenGL context chooser.
-    ///
-    /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
-    /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
-    pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(glutin::config::Config, glutin::config::Config) -> glutin::config::Config) -> anyhow::Result<MainWindow> {
-        use winit::window::WindowBuilder;
-        use glutin::{
-            config::ConfigTemplateBuilder,
-            display::GetGlDisplay,
-            surface::SurfaceAttributesBuilder,
-            context::{ContextAttributesBuilder, ContextApi},
-        };
-        use glutin_winit::DisplayBuilder;
-        use raw_window_handle::HasRawWindowHandle;
-        use anyhow::anyhow;
-
-        let window_builder = WindowBuilder::new();
-        let template = ConfigTemplateBuilder::new()
-            .prefer_hardware_accelerated(Some(true))
-            .with_depth_size(0)
-            .with_stencil_size(0)
-        ;
-
-        let display_builder = DisplayBuilder::new()
-            .with_window_builder(Some(window_builder));
-
-        let (window, gl_config) = display_builder
-            .build(event_loop, template, |configs| {
-                configs.reduce(f_choose_cfg).unwrap()
-            })
-            .map_err(|e| anyhow!("{:#?}", e))?;
-        let window = window.unwrap();
-        window.set_title(title);
-        window.set_ime_allowed(true);
-        let raw_window_handle = Some(window.raw_window_handle());
-        let gl_display = gl_config.display();
-        let context_attributes = ContextAttributesBuilder::new()
-            .build(raw_window_handle);
-        let fallback_context_attributes = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::Gles(None))
-            .build(raw_window_handle);
-
-        let mut not_current_gl_context = Some(unsafe {
-            gl_display
-                .create_context(&gl_config, &context_attributes)
-                .or_else(|_| {
-                    gl_display
-                        .create_context(&gl_config, &fallback_context_attributes)
-                })?
-        });
-
-        let size = window.inner_size();
-
-        let (width, height): (u32, u32) = size.into();
-        let raw_window_handle = window.raw_window_handle();
-        let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
-            raw_window_handle,
-            NonZeroU32::new(width).unwrap(),
-            NonZeroU32::new(height).unwrap(),
-        );
-
-        let surface = unsafe { gl_config.display().create_window_surface(&gl_config, &attrs)? };
-        let gl_context = not_current_gl_context
-            .take()
-            .unwrap()
-            .make_current(&surface)?;
-
-        // Enable v-sync to avoid consuming too much CPU
-        let _ = surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()));
-
-        Ok(MainWindow {
-            gl_context,
-            window,
-            surface,
-            idler: MainWindowIdler::default(),
-        })
-    }
-    /// Splits this window into its parts.
-    ///
-    /// SAFETY: Do not drop the `window` without dropping the `surface` first.
-    pub unsafe fn into_pieces(self) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
-        (self.gl_context, self.surface, self.window)
-    }
-    pub fn glutin_context(&self) -> &glutin::context::PossiblyCurrentContext {
-        &self.gl_context
-    }
-    /// Creates a new `glow` OpenGL context for this window and the selected configuration.
-    pub fn create_gl_context(&self) -> easy_imgui_renderer::glow::Context {
-        use glutin::display::GetGlDisplay;
-        let dsp = self.gl_context.display();
-        unsafe { easy_imgui_renderer::glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) }
-    }
-    /// Gets a reference to the `winit` window.
-    pub fn window(&self) -> &Window {
-        &self.window
-    }
-    /// Converts the given physical size to a logical size, using the window scale factor.
-    pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
-        let scale = self.window.scale_factor();
-        size.to_logical(scale)
-    }
-    /// Converts the given logical size to a physical size, using the window scale factor.
-    pub fn to_physical_size<X: Pixel, Y: Pixel>(&self, size: LogicalSize<X>) -> PhysicalSize<Y> {
-        let scale = self.window.scale_factor();
-        size.to_physical(scale)
-    }
-    /// Converts the given physical position to a logical position, using the window scale factor.
-    pub fn to_logical_pos<X: Pixel, Y: Pixel>(&self, pos: PhysicalPosition<X>) -> LogicalPosition<Y> {
-        let scale = self.window.scale_factor();
-        pos.to_logical(scale)
-    }
-    /// Converts the given logical position to a physical position, using the window scale factor.
-    pub fn to_physical_pos<X: Pixel, Y: Pixel>(&self, pos: LogicalPosition<X>) -> PhysicalPosition<Y> {
-        let scale = self.window.scale_factor();
-        pos.to_physical(scale)
-    }
-}
-
-#[cfg(feature="main-window")]
-impl MainWindowWithRenderer<MainWindow> {
-    /// Creates a new [`Renderer`] and attaches it to the given window.
-    pub fn new(main_window: MainWindow) -> Self {
-        let gl = main_window.create_gl_context();
-        let renderer = Renderer::new(std::rc::Rc::new(gl)).unwrap();
-        Self::new_with_renderer(main_window, renderer)
-    }
-    /// Sets the time after which the UI will stop rendering, if there is no user input.
-    pub fn set_idle_time(&mut self, time: Duration) {
-        self.main_window.idler.set_idle_time(time);
-    }
-    /// Sets the frame count after which the UI will stop rendering, if there is no user input.
-    ///
-    /// Note that by default V-Sync is enabled, and that will affect the frame rate.
-    pub fn set_idle_frame_count(&mut self, frame_count: u32) {
-        self.main_window.idler.set_idle_frame_count(frame_count);
-    }
-    /// Forces a rebuild of the UI.
-    ///
-    /// By default the window will stop rendering the UI after a while without user input. Use this
-    /// function to force a redraw because of some external factor.
-    pub fn ping_user_input(&mut self) {
-        self.main_window.idler.ping_user_input();
-    }
-}
-
 /// This traits grants access to a Window.
 ///
 /// Usually you will have a [`MainWindow`], but if you create the `Window` with an external
@@ -288,39 +107,6 @@ pub trait MainWindowRef {
     }
 }
 
-/// Main implementation of the `MainWindowRef` trait for an owned `MainWindow`.
-#[cfg(feature="main-window")]
-impl MainWindowRef for MainWindow {
-    fn window(&self) -> &Window {
-        &self.window
-    }
-    fn pre_render(&mut self) {
-        self.gl_context.make_current(&self.surface).unwrap();
-    }
-    fn post_render(&mut self) {
-        self.window.pre_present_notify();
-        self.surface.swap_buffers(&self.gl_context).unwrap();
-    }
-    fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
-        let width = NonZeroU32::new(size.width.max(1)).unwrap();
-        let height = NonZeroU32::new(size.height.max(1)).unwrap();
-        self.surface.resize(&self.gl_context, width, height);
-        self.to_logical_size::<_, f32>(size)
-    }
-    fn ping_user_input(&mut self) {
-        self.idler.ping_user_input();
-    }
-    fn about_to_wait(&mut self, pinged: bool) {
-        let now = Instant::now();
-        self.idler.last_input_frame += 1;
-        if pinged || now.duration_since(self.idler.last_input_time) < self.idler.idle_time || self.idler.last_input_frame < self.idler.idle_frame_count {
-            // No need to call set_control_flow(): doing a redraw will force extra Poll.
-            // Not doing it will default to Wait.
-            self.window.request_redraw();
-        }
-    }
-}
-
 bitflags::bitflags! {
     /// These flags can be used to customize the [`do_event`] function.
     #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -347,16 +133,16 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         self.window
     }
     fn pre_render(&mut self) {
-        self.gl_context.make_current(&self.surface).unwrap();
+        self.gl_context.make_current(self.surface).unwrap();
     }
     fn post_render(&mut self) {
         self.window.pre_present_notify();
-        self.surface.swap_buffers(&self.gl_context).unwrap();
+        self.surface.swap_buffers(self.gl_context).unwrap();
     }
     fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
         let height = NonZeroU32::new(size.height.max(1)).unwrap();
-        self.surface.resize(&self.gl_context, width, height);
+        self.surface.resize(self.gl_context, width, height);
         let scale = self.window.scale_factor();
         size.to_logical(scale)
     }
@@ -369,54 +155,15 @@ impl<'a> MainWindowRef for &'a Window {
     }
 }
 
-impl<W> MainWindowWithRenderer<W> {
-    /// Gets a reference to the inner renderer.
-    pub fn renderer(&mut self) -> &mut Renderer {
-        &mut self.renderer
-    }
-    /// Gets a reference to the inner window.
-    pub fn main_window(&mut self) -> &mut W {
-        &mut self.main_window
-    }
-}
-
-impl<W: MainWindowRef> MainWindowWithRenderer<W> {
-    /// Attaches the given window and renderer together.
-    pub fn new_with_renderer(main_window: W, mut renderer: Renderer) -> Self {
-        let w = main_window.window();
-        let size = w.inner_size();
-        let scale = w.scale_factor();
-        let size = size.to_logical::<f32>(scale);
-        renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
-
-        let mut imgui = unsafe { renderer.imgui().set_current() };
-        clipboard::setup(&mut imgui);
-
-        MainWindowWithRenderer {
-            main_window,
-            renderer,
-            status: MainWindowStatus::default(),
-        }
-    }
-    /// The main event function, to be called from your event loop.
-    ///
-    /// It returns [`std::ops::ControlFlow::Break`] for the event [`winit::event::WindowEvent::CloseRequested`] as a convenience. You can
-    /// use it to break the main loop, or ignore it, as you see fit.
-    #[must_use]
-    pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>, _w: &EventLoopWindowTarget<EventUserType>) -> std::ops::ControlFlow<(), EventContinue> {
-        do_event(&mut self.main_window, &mut self.renderer, &mut self.status, app, event, EventFlags::empty())
-    }
-}
-
 #[derive(Debug, Default)]
-pub struct EventContinue {
+pub struct EventResult {
+    pub window_closed: bool,
     pub want_capture_mouse: bool,
     pub want_capture_keyboard: bool,
     pub want_text_input: bool,
 }
 
 /// Just like [`MainWindowWithRenderer::do_event`] but using all the pieces separately.
-#[must_use]
 pub fn do_event<EventUserType>(
     main_window: &mut impl MainWindowRef,
     renderer: &mut Renderer,
@@ -424,7 +171,8 @@ pub fn do_event<EventUserType>(
     app: &mut impl imgui::UiBuilder,
     event: &Event<EventUserType>,
     flags: EventFlags,
-) -> std::ops::ControlFlow<(), EventContinue> {
+) -> EventResult {
+    let mut window_closed = false;
     match event {
         Event::NewEvents(x) => {
             if x == &winit::event::StartCause::Init
@@ -468,7 +216,7 @@ pub fn do_event<EventUserType>(
             use winit::event::WindowEvent::*;
             match event {
                 CloseRequested => {
-                    return std::ops::ControlFlow::Break(());
+                    window_closed = true;
                 }
                 RedrawRequested => {
                     unsafe {
@@ -648,13 +396,14 @@ pub fn do_event<EventUserType>(
     }
     let res = unsafe {
         let imgui = renderer.imgui().set_current();
-        EventContinue {
+        EventResult {
+            window_closed,
             want_capture_mouse: imgui.want_capture_mouse(),
             want_capture_keyboard: imgui.want_capture_keyboard(),
             want_text_input: imgui.want_text_input(),
         }
     };
-    std::ops::ControlFlow::Continue(res)
+    res
 }
 
 #[cfg(not(feature="clipboard"))]
@@ -710,3 +459,252 @@ pub mod clipboard {
         text: CString,
     }
 }
+
+#[cfg(feature="main-window")]
+mod main_window {
+    use super::*;
+    use easy_imgui_renderer::glow;
+    use anyhow::{anyhow, Result};
+    use winit::{event_loop::EventLoopWindowTarget, window::WindowBuilder};
+    use glutin::{
+        config::{Config, ConfigTemplateBuilder},
+        display::GetGlDisplay,
+        surface::SurfaceAttributesBuilder,
+        context::{ContextAttributesBuilder, ContextApi},
+    };
+    use glutin_winit::DisplayBuilder;
+    use raw_window_handle::HasRawWindowHandle;
+
+    /// This type represents a `winit` window and an OpenGL context.
+    pub struct MainWindow {
+        gl_context: PossiblyCurrentContext,
+        // The surface must be dropped before the window.
+        surface: Surface<WindowSurface>,
+        window: Window,
+        idler: MainWindowIdler,
+    }
+
+    /// This is a [`MainWindow`] plus a [`Renderer`]. It is the ultimate `easy-imgui` object.
+    /// Instead of a literal `MainWindow` you can use any type that implements [`MainWindowRef`].
+    pub struct MainWindowWithRenderer {
+        main_window: MainWindow,
+        renderer: Renderer,
+        status: MainWindowStatus,
+    }
+
+    impl MainWindow {
+        /// Creates a `MainWindow` with default values.
+        pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
+            // For standard UI, we need as few fancy things as available
+            let score = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
+            Self::with_gl_chooser(
+                event_loop,
+                title,
+                |cfg1, cfg2| {
+                    if score(&cfg2) < score(&cfg1) {
+                        cfg2
+                    } else {
+                        cfg1
+                    }
+                })
+        }
+        /// Creates a `MainWindow` with your own OpenGL context chooser.
+        ///
+        /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
+        /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
+        pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
+            let window_builder = WindowBuilder::new();
+            let template = ConfigTemplateBuilder::new()
+                .prefer_hardware_accelerated(Some(true))
+                .with_depth_size(0)
+                .with_stencil_size(0)
+            ;
+
+            let display_builder = DisplayBuilder::new()
+                .with_window_builder(Some(window_builder));
+
+            let (window, gl_config) = display_builder
+                .build(event_loop, template, |configs| {
+                    configs.reduce(f_choose_cfg).unwrap()
+                })
+                .map_err(|e| anyhow!("{:#?}", e))?;
+            let window = window.unwrap();
+            window.set_title(title);
+            window.set_ime_allowed(true);
+            let raw_window_handle = Some(window.raw_window_handle());
+            let gl_display = gl_config.display();
+            let context_attributes = ContextAttributesBuilder::new()
+                .build(raw_window_handle);
+            let fallback_context_attributes = ContextAttributesBuilder::new()
+                .with_context_api(ContextApi::Gles(None))
+                .build(raw_window_handle);
+
+            let mut not_current_gl_context = Some(unsafe {
+                gl_display
+                    .create_context(&gl_config, &context_attributes)
+                    .or_else(|_| {
+                        gl_display
+                            .create_context(&gl_config, &fallback_context_attributes)
+                    })?
+            });
+
+            let size = window.inner_size();
+
+            let (width, height): (u32, u32) = size.into();
+            let raw_window_handle = window.raw_window_handle();
+            let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
+                raw_window_handle,
+                NonZeroU32::new(width).unwrap(),
+                NonZeroU32::new(height).unwrap(),
+            );
+
+            let surface = unsafe { gl_config.display().create_window_surface(&gl_config, &attrs)? };
+            let gl_context = not_current_gl_context
+                .take()
+                .unwrap()
+                .make_current(&surface)?;
+
+            // Enable v-sync to avoid consuming too much CPU
+            let _ = surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()));
+
+            Ok(MainWindow {
+                gl_context,
+                window,
+                surface,
+                idler: MainWindowIdler::default(),
+            })
+        }
+        /// Splits this window into its parts.
+        ///
+        /// # Safety
+        /// Do not drop the `window` without dropping the `surface` first.
+        pub unsafe fn into_pieces(self) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
+            (self.gl_context, self.surface, self.window)
+        }
+        pub fn glutin_context(&self) -> &PossiblyCurrentContext {
+            &self.gl_context
+        }
+        /// Creates a new `glow` OpenGL context for this window and the selected configuration.
+        pub fn create_gl_context(&self) -> glow::Context {
+            let dsp = self.gl_context.display();
+            unsafe { glow::Context::from_loader_function_cstr(|s| dsp.get_proc_address(s)) }
+        }
+        /// Gets a reference to the `winit` window.
+        pub fn window(&self) -> &Window {
+            &self.window
+        }
+        /// Converts the given physical size to a logical size, using the window scale factor.
+        pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
+            let scale = self.window.scale_factor();
+            size.to_logical(scale)
+        }
+        /// Converts the given logical size to a physical size, using the window scale factor.
+        pub fn to_physical_size<X: Pixel, Y: Pixel>(&self, size: LogicalSize<X>) -> PhysicalSize<Y> {
+            let scale = self.window.scale_factor();
+            size.to_physical(scale)
+        }
+        /// Converts the given physical position to a logical position, using the window scale factor.
+        pub fn to_logical_pos<X: Pixel, Y: Pixel>(&self, pos: PhysicalPosition<X>) -> LogicalPosition<Y> {
+            let scale = self.window.scale_factor();
+            pos.to_logical(scale)
+        }
+        /// Converts the given logical position to a physical position, using the window scale factor.
+        pub fn to_physical_pos<X: Pixel, Y: Pixel>(&self, pos: LogicalPosition<X>) -> PhysicalPosition<Y> {
+            let scale = self.window.scale_factor();
+            pos.to_physical(scale)
+        }
+    }
+
+    impl MainWindowWithRenderer {
+        /// Creates a new [`Renderer`] and attaches it to the given window.
+        pub fn new(main_window: MainWindow) -> Self {
+            let gl = main_window.create_gl_context();
+            let renderer = Renderer::new(std::rc::Rc::new(gl)).unwrap();
+            Self::new_with_renderer(main_window, renderer)
+        }
+        /// Sets the time after which the UI will stop rendering, if there is no user input.
+        pub fn set_idle_time(&mut self, time: Duration) {
+            self.main_window.idler.set_idle_time(time);
+        }
+        /// Sets the frame count after which the UI will stop rendering, if there is no user input.
+        ///
+        /// Note that by default V-Sync is enabled, and that will affect the frame rate.
+        pub fn set_idle_frame_count(&mut self, frame_count: u32) {
+            self.main_window.idler.set_idle_frame_count(frame_count);
+        }
+        /// Forces a rebuild of the UI.
+        ///
+        /// By default the window will stop rendering the UI after a while without user input. Use this
+        /// function to force a redraw because of some external factor.
+        pub fn ping_user_input(&mut self) {
+            self.main_window.idler.ping_user_input();
+        }
+        /// Gets a reference to the inner renderer.
+        pub fn renderer(&mut self) -> &mut Renderer {
+            &mut self.renderer
+        }
+        /// Gets a reference to the inner window.
+        pub fn main_window(&mut self) -> &mut MainWindow {
+            &mut self.main_window
+        }
+        /// Attaches the given window and renderer together.
+        pub fn new_with_renderer(main_window: MainWindow, mut renderer: Renderer) -> Self {
+            let w = main_window.window();
+            let size = w.inner_size();
+            let scale = w.scale_factor();
+            let size = size.to_logical::<f32>(scale);
+            renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
+
+            let mut imgui = unsafe { renderer.imgui().set_current() };
+            clipboard::setup(&mut imgui);
+
+            MainWindowWithRenderer {
+                main_window,
+                renderer,
+                status: MainWindowStatus::default(),
+            }
+        }
+        /// The main event function, to be called from your event loop.
+        ///
+        /// It returns [`EventResult`]. You can use it to break the main loop, or ignore it, as you see fit.
+        /// It also informs of whether ImGui want the monopoly of the user input.
+        pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> EventResult {
+            do_event(&mut self.main_window, &mut self.renderer, &mut self.status, app, event, EventFlags::empty())
+        }
+    }
+
+    /// Main implementation of the `MainWindowRef` trait for an owned `MainWindow`.
+    impl MainWindowRef for MainWindow {
+        fn window(&self) -> &Window {
+            &self.window
+        }
+        fn pre_render(&mut self) {
+            self.gl_context.make_current(&self.surface).unwrap();
+        }
+        fn post_render(&mut self) {
+            self.window.pre_present_notify();
+            self.surface.swap_buffers(&self.gl_context).unwrap();
+        }
+        fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
+            let width = NonZeroU32::new(size.width.max(1)).unwrap();
+            let height = NonZeroU32::new(size.height.max(1)).unwrap();
+            self.surface.resize(&self.gl_context, width, height);
+            self.to_logical_size::<_, f32>(size)
+        }
+        fn ping_user_input(&mut self) {
+            self.idler.ping_user_input();
+        }
+        fn about_to_wait(&mut self, pinged: bool) {
+            let now = Instant::now();
+            self.idler.last_input_frame += 1;
+            if pinged || now.duration_since(self.idler.last_input_time) < self.idler.idle_time || self.idler.last_input_frame < self.idler.idle_frame_count {
+                // No need to call set_control_flow(): doing a redraw will force extra Poll.
+                // Not doing it will default to Wait.
+                self.window.request_redraw();
+            }
+        }
+    }
+}
+
+#[cfg(feature="main-window")]
+pub use main_window::*;

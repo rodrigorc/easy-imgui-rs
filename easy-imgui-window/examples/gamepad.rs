@@ -26,8 +26,8 @@ fn main() {
     let mut app = MyApp::new();
 
     event_loop.run(move |event, w| {
-        let res = window.do_event(&mut app, &event, w);
-        if res.is_break() {
+        let res = window.do_event(&mut app, &event);
+        if res.window_closed {
             w.exit();
         }
         if let winit::event::Event::UserEvent(e) = event {

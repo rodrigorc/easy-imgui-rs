@@ -64,16 +64,16 @@ fn main() {
                 event::{Event, WindowEvent, KeyEvent, ElementState},
             };
             let mut wr = easy_imgui_window::MainWindowPieces {
-                window: &*g.window,
+                window: &g.window,
                 surface: &g.game.surface,
                 gl_context: &g.game.gl_context,
             };
             // game_loop renders in the other callback, not here
-            let res = easy_imgui_window::do_event(&mut wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev, EventFlags::DoNotRender);
-            let std::ops::ControlFlow::Continue(imgui_wants) = res else {
+            let imgui_wants = easy_imgui_window::do_event(&mut wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev, EventFlags::DoNotRender);
+            if imgui_wants.window_closed {
                 g.exit();
                 return;
-            };
+            }
             match ev {
                 Event::WindowEvent {
                     window_id,

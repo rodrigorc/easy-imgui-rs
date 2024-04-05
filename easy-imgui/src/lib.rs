@@ -283,7 +283,6 @@ pub struct CurrentContext<'a> {
     ctx: &'a mut Context,
 }
 
-
 impl Context {
     pub unsafe fn new() -> Context {
         let imgui = unsafe {

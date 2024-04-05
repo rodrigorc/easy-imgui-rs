@@ -10,9 +10,10 @@ categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
 [features]
-default = ["clipboard"]
+default = ["clipboard", "main-window"]
 clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
+main-window = ["dep:glutin-winit"]
 
 # This is not really needed except for the examples/demo
 # docking = ["easy-imgui/docking"]
@@ -23,9 +24,10 @@ easy-imgui = { version = "=0.2.4", path = "../easy-imgui" }
 easy-imgui-renderer = { version = "=0.2.4", path = "../easy-imgui-renderer" }
 
 anyhow = "1"
+bitflags = "2"
 
 glutin = "0.31"
-glutin-winit = "0.4"
+glutin-winit = { version = "0.4", optional = true }
 raw-window-handle = "0.5"
 arboard = { version = "3", optional = true, default_features = false }
 winit = { version = "0.29", features = ["x11", "mint"] }
@@ -36,3 +38,5 @@ gilrs = "0.10"
 anyhow = "1"
 image = { version = "0.24" }
 cstr = "0.2"
+game-loop = { version = "1", features = ["winit"] }
+

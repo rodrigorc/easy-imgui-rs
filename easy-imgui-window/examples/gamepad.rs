@@ -8,7 +8,7 @@ use easy_imgui::{UiBuilder, WindowFlags, DrawFlags, Cond, Color, vec2, Vector2};
 use easy_imgui_window::{
     MainWindow,
     MainWindowWithRenderer,
-    winit::{self, event_loop::{EventLoopBuilder, EventLoopProxy}},
+    winit::event_loop::{EventLoopBuilder, EventLoopProxy},
 };
 
 use anyhow::Result;
@@ -26,8 +26,8 @@ fn main() {
     let mut app = MyApp::new();
 
     event_loop.run(move |event, w| {
-        let res = window.do_event(&mut app, &event, w);
-        if res.is_break() {
+        let res = window.do_event(&mut app, &event);
+        if res.window_closed {
             w.exit();
         }
         if let winit::event::Event::UserEvent(e) = event {

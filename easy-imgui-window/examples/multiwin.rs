@@ -2,7 +2,7 @@ use std::rc::Rc;
 use easy_imgui_window::{
     MainWindow, MainWindowWithRenderer,
     easy_imgui_renderer::Renderer,
-    winit::{event_loop::EventLoopBuilder},
+    winit::event_loop::EventLoopBuilder,
     easy_imgui as imgui,
 };
 
@@ -14,16 +14,16 @@ fn main() {
 
     // The GL context can be reused, but the imgui context cannot
     let main_window_2 = MainWindow::new(&event_loop, "Example #2").unwrap();
-    let mut renderer_2 = Renderer::new(Rc::clone(&window.renderer().gl_context())).unwrap();
+    let mut renderer_2 = Renderer::new(Rc::clone(window.renderer().gl_context())).unwrap();
     renderer_2.set_background_color(Some(imgui::Color::GREEN));
     let mut window_2 = MainWindowWithRenderer::new_with_renderer(main_window_2, renderer_2);
 
     let mut app = App;
 
     event_loop.run(move |event, w| {
-        let res_1 = window.do_event(&mut app, &event, w);
-        let res_2 = window_2.do_event(&mut app, &event, w);
-        if res_1.is_break() || res_2.is_break() {
+        let res_1 = window.do_event(&mut app, &event);
+        let res_2 = window_2.do_event(&mut app, &event);
+        if res_1.window_closed || res_2.window_closed {
             w.exit();
         }
     }).unwrap();

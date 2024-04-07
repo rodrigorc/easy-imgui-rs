@@ -20,6 +20,8 @@ use winit::{
 #[allow(unused_imports)]
 use winit::dpi::{LogicalPosition, PhysicalPosition, Pixel};
 
+/// This struct maintains basic window info to be kept across events.
+#[derive(Debug, Clone)]
 pub struct MainWindowStatus {
     last_frame: Instant,
     current_cursor: Option<CursorIcon>,
@@ -35,6 +37,7 @@ impl Default for MainWindowStatus {
     }
 }
 
+/// This struct handles the main loop going to idle when there is no user input for a while.
 pub struct MainWindowIdler {
     idle_time: Duration,
     idle_frame_count: u32,
@@ -55,12 +58,26 @@ impl Default for MainWindowIdler {
 }
 
 impl MainWindowIdler {
+    /// Sets the maximum time that the window will be rendered without user input.
     pub fn set_idle_time(&mut self, time: Duration) {
         self.idle_time = time;
     }
+    /// Sets the maximum number of frames time that the window will be rendered without user input.
     pub fn set_idle_frame_count(&mut self, frame_count: u32) {
         self.idle_frame_count = frame_count;
     }
+    /// Call this when the window is renderer.
+    pub fn incr_frame(&mut self) {
+        // An u32 incrementing 60 values/second would overflow after about 2 years, better safe
+        // than sorry.
+        self.last_input_frame = self.last_input_frame.saturating_add(1);
+    }
+    /// Check whether the window should go to idle or keep on rendering.
+    pub fn has_to_render(&self) -> bool {
+        self.last_input_frame < self.idle_frame_count
+            || Instant::now().duration_since(self.last_input_time) < self.idle_time
+    }
+    /// Notify this struct that user input happened.
     pub fn ping_user_input(&mut self) {
         self.last_input_time = Instant::now();
         self.last_input_frame = 0;
@@ -155,11 +172,16 @@ impl<'a> MainWindowRef for &'a Window {
     }
 }
 
-#[derive(Debug, Default)]
+/// The result of processing an event in the ImGui loop.
+#[derive(Debug, Default, Clone)]
 pub struct EventResult {
+    /// The user requested to close the window. You can break the loop or ignore it, at will.
     pub window_closed: bool,
+    /// ImGui requests handling the mouse, your application should ignore mouse events.
     pub want_capture_mouse: bool,
+    /// ImGui requests handling the keyboard, your application should ignore keyboard events.
     pub want_capture_keyboard: bool,
+    /// ImGui requests handling text input, your application should ignore text events.
     pub want_text_input: bool,
 }
 
@@ -418,12 +440,6 @@ pub fn do_event<EventUserType>(
     res
 }
 
-#[cfg(not(feature = "clipboard"))]
-pub mod clipboard {
-    use easy_imgui as imgui;
-    /// This does nothing. Enable the `clipboard` feature to get a working clipboard.
-    pub fn setup(_imgui: &mut imgui::CurrentContext<'_>) {}
-}
 #[cfg(feature = "clipboard")]
 pub mod clipboard {
     use easy_imgui as imgui;
@@ -686,6 +702,8 @@ mod main_window {
             renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
             let mut imgui = unsafe { renderer.imgui().set_current() };
+
+            #[cfg(feature = "clipboard")]
             clipboard::setup(&mut imgui);
 
             MainWindowWithRenderer {
@@ -720,6 +738,7 @@ mod main_window {
             &self.window
         }
         fn pre_render(&mut self) {
+            self.idler.incr_frame();
             self.gl_context.make_current(&self.surface).unwrap();
         }
         fn post_render(&mut self) {
@@ -736,12 +755,7 @@ mod main_window {
             self.idler.ping_user_input();
         }
         fn about_to_wait(&mut self, pinged: bool) {
-            let now = Instant::now();
-            self.idler.last_input_frame += 1;
-            if pinged
-                || now.duration_since(self.idler.last_input_time) < self.idler.idle_time
-                || self.idler.last_input_frame < self.idler.idle_frame_count
-            {
+            if pinged || self.idler.has_to_render() {
                 // No need to call set_control_flow(): doing a redraw will force extra Poll.
                 // Not doing it will default to Wait.
                 self.window.request_redraw();

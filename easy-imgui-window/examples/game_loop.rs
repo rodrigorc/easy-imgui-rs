@@ -2,7 +2,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use easy_imgui_window::{
-    easy_imgui_renderer::{glow::{self, Context, HasContext}, Renderer}, glutin::prelude::GlSurface, winit::event_loop::EventLoopBuilder, EventFlags, MainWindow
+    easy_imgui_renderer::{
+        glow::{self, Context, HasContext},
+        Renderer,
+    },
+    glutin::prelude::GlSurface,
+    winit::event_loop::EventLoopBuilder,
+    EventFlags, MainWindow,
 };
 
 fn main() {
@@ -12,7 +18,6 @@ fn main() {
 
     let (gl_context, surface, window) = unsafe { window.into_pieces() };
     let window = Arc::new(window);
-
 
     let mut renderer = Renderer::new(gl.clone()).unwrap();
     renderer.set_background_color(None);
@@ -28,7 +33,12 @@ fn main() {
         surface,
         gl_context,
         renderer,
-        app: App { r: 0.1, g: 0.1, b: 0.1, show_demo: true },
+        app: App {
+            r: 0.1,
+            g: 0.1,
+            b: 0.1,
+            show_demo: true,
+        },
     };
     game_loop::game_loop(
         event_loop,
@@ -46,7 +56,9 @@ fn main() {
 
                 // This should be the game scene render
                 g.game.gl_context.make_current(&g.game.surface).unwrap();
-                g.game.gl.clear_color(g.game.app.r, g.game.app.g, g.game.app.b, 1.0);
+                g.game
+                    .gl
+                    .clear_color(g.game.app.r, g.game.app.g, g.game.app.b, 1.0);
                 g.game.gl.clear(glow::COLOR_BUFFER_BIT);
 
                 // And this is the ImGui render, optional
@@ -60,8 +72,8 @@ fn main() {
         //handle
         move |g, ev| {
             use winit::{
-                keyboard::{PhysicalKey, KeyCode, },
-                event::{Event, WindowEvent, KeyEvent, ElementState},
+                event::{ElementState, Event, KeyEvent, WindowEvent},
+                keyboard::{KeyCode, PhysicalKey},
             };
             let mut wr = easy_imgui_window::MainWindowPieces {
                 window: &g.window,
@@ -69,42 +81,44 @@ fn main() {
                 gl_context: &g.game.gl_context,
             };
             // game_loop renders in the other callback, not here
-            let imgui_wants = easy_imgui_window::do_event(&mut wr, &mut g.game.renderer, &mut window_status, &mut g.game.app, ev, EventFlags::DoNotRender);
+            let imgui_wants = easy_imgui_window::do_event(
+                &mut wr,
+                &mut g.game.renderer,
+                &mut window_status,
+                &mut g.game.app,
+                ev,
+                EventFlags::DoNotRender,
+            );
             if imgui_wants.window_closed {
                 g.exit();
                 return;
             }
             match ev {
-                Event::WindowEvent {
-                    window_id,
-                    event
-                } if g.window.id() == *window_id => {
+                Event::WindowEvent { window_id, event } if g.window.id() == *window_id => {
                     match event {
                         WindowEvent::KeyboardInput {
-                            event: KeyEvent {
-                                physical_key: PhysicalKey::Code(code),
-                                state: ElementState::Pressed,
-                                ..
-                            },
+                            event:
+                                KeyEvent {
+                                    physical_key: PhysicalKey::Code(code),
+                                    state: ElementState::Pressed,
+                                    ..
+                                },
                             ..
-                        } if !imgui_wants.want_capture_keyboard => {
-                            match code {
-                                KeyCode::ArrowLeft => {
-                                    g.game.app.b = (g.game.app.b - 0.1).max(0.0);
-                                }
-                                KeyCode::ArrowRight => {
-                                    g.game.app.b = (g.game.app.b + 0.1).min(1.0);
-                                }
-                                KeyCode::Escape => {
-                                    g.game.app.show_demo ^= true;
-                                }
-                                _ => {}
+                        } if !imgui_wants.want_capture_keyboard => match code {
+                            KeyCode::ArrowLeft => {
+                                g.game.app.b = (g.game.app.b - 0.1).max(0.0);
                             }
-                        }
-                        WindowEvent::CursorMoved {
-                            position,
-                            ..
-                        } if !imgui_wants.want_capture_mouse => {
+                            KeyCode::ArrowRight => {
+                                g.game.app.b = (g.game.app.b + 0.1).min(1.0);
+                            }
+                            KeyCode::Escape => {
+                                g.game.app.show_demo ^= true;
+                            }
+                            _ => {}
+                        },
+                        WindowEvent::CursorMoved { position, .. }
+                            if !imgui_wants.want_capture_mouse =>
+                        {
                             let scale = g.window.scale_factor();
                             let size = g.window.inner_size();
                             let size = size.to_logical::<f32>(scale);
@@ -113,13 +127,13 @@ fn main() {
                             g.game.app.g = (position.y / size.height).clamp(0.0, 1.0);
                         }
                         _ => {}
-
                     }
                 }
                 _ => {}
             }
         },
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 struct Game {
@@ -142,15 +156,21 @@ impl easy_imgui::UiBuilder for App {
         use easy_imgui::*;
         ui.set_next_window_pos((10.0, 10.0).into(), Cond::Always, (0.0, 0.0).into());
         ui.window_config("Instructions")
-            .flags(WindowFlags::NoMove | WindowFlags::NoResize | WindowFlags::NoMouseInputs | WindowFlags::NoNav | WindowFlags::NoCollapse)
+            .flags(
+                WindowFlags::NoMove
+                    | WindowFlags::NoResize
+                    | WindowFlags::NoMouseInputs
+                    | WindowFlags::NoNav
+                    | WindowFlags::NoCollapse,
+            )
             .with(|| {
                 ui.text("Use left-right arrow keys to change blue channel");
                 ui.text("Use the mouse to change red and green channels");
                 ui.text("Press ESC to show/hide the demo");
             });
 
-            if self.show_demo {
-                ui.show_demo_window(Some(&mut self.show_demo));
-            }
+        if self.show_demo {
+            ui.show_demo_window(Some(&mut self.show_demo));
+        }
     }
 }

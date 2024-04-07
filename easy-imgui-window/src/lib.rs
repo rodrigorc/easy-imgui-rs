@@ -6,12 +6,12 @@
 *  * `freetype`: use `libfreetype` for TTF font loading. It requires a precompiled native FreeType
 *  shared library.
 */
-mod window;
 pub mod conv;
+mod window;
 
-pub use window::*;
-pub use easy_imgui_renderer;
 pub use easy_imgui;
+pub use easy_imgui_renderer;
 pub use easy_imgui_sys;
-pub use winit;
 pub use glutin;
+pub use window::*;
+pub use winit;

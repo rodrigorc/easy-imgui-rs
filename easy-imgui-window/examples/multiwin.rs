@@ -1,10 +1,8 @@
-use std::rc::Rc;
 use easy_imgui_window::{
+    easy_imgui as imgui, easy_imgui_renderer::Renderer, winit::event_loop::EventLoopBuilder,
     MainWindow, MainWindowWithRenderer,
-    easy_imgui_renderer::Renderer,
-    winit::event_loop::EventLoopBuilder,
-    easy_imgui as imgui,
 };
+use std::rc::Rc;
 
 fn main() {
     let event_loop = EventLoopBuilder::new().build().unwrap();
@@ -20,21 +18,25 @@ fn main() {
 
     let mut app = App;
 
-    event_loop.run(move |event, w| {
-        let res_1 = window.do_event(&mut app, &event);
-        let res_2 = window_2.do_event(&mut app, &event);
-        if res_1.window_closed || res_2.window_closed {
-            w.exit();
-        }
-    }).unwrap();
+    event_loop
+        .run(move |event, w| {
+            let res_1 = window.do_event(&mut app, &event);
+            let res_2 = window_2.do_event(&mut app, &event);
+            if res_1.window_closed || res_2.window_closed {
+                w.exit();
+            }
+        })
+        .unwrap();
 }
 
 struct App;
 
 impl imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
-        #[cfg(feature="docking")]
-        { ui.dock_space_over_viewport(imgui::DockNodeFlags::None); }
+        #[cfg(feature = "docking")]
+        {
+            ui.dock_space_over_viewport(imgui::DockNodeFlags::None);
+        }
 
         ui.show_demo_window(None);
     }

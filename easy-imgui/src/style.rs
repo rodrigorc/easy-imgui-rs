@@ -2,23 +2,15 @@ use super::*;
 
 impl CurrentContext<'_> {
     pub fn style(&mut self) -> StyleMut<'_> {
-        let ptr = unsafe {
-            &mut *ImGui_GetStyle()
-        };
-        StyleMut(StylePtr {
-            ptr,
-        })
+        let ptr = unsafe { &mut *ImGui_GetStyle() };
+        StyleMut(StylePtr { ptr })
     }
 }
 
 impl<A> Ui<A> {
     pub fn style(&self) -> Style<'_> {
-        let ptr = unsafe {
-            &mut *ImGui_GetStyle()
-        };
-        Style(StylePtr {
-            ptr,
-        })
+        let ptr = unsafe { &mut *ImGui_GetStyle() };
+        Style(StylePtr { ptr })
     }
 }
 

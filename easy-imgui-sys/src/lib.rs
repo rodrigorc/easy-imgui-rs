@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 #![allow(clippy::all)]
 
-use std::ops::{Index, Deref};
+use std::ops::{Deref, Index};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -14,9 +14,7 @@ impl<T> Index<usize> for ImVector<T> {
         if index >= self.Size as usize {
             panic!("ImVector out of bounds");
         }
-        unsafe {
-            &*self.Data.add(index)
-        }
+        unsafe { &*self.Data.add(index) }
     }
 }
 

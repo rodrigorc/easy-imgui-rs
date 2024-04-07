@@ -17,7 +17,7 @@ fn main() {
     // set $DEP_IMGUI_THIRD_PARTY to point to that.
 
     let sh = Shell::new().unwrap();
-    let imgui_ori = if cfg!(feature="docking") {
+    let imgui_ori = if cfg!(feature = "docking") {
         manifest_dir.join("imgui-docking")
     } else {
         manifest_dir.join("imgui")
@@ -29,22 +29,30 @@ fn main() {
     sh.create_dir(&imgui_src).unwrap();
     sh.create_dir(&imgui_misc_ft).unwrap();
 
-    for ori in
-        [
-            "imgui.h", "imgui_internal.h", "imstb_textedit.h", "imstb_rectpack.h", "imstb_truetype.h",
-            "imgui.cpp", "imgui_widgets.cpp", "imgui_draw.cpp", "imgui_tables.cpp", "imgui_demo.cpp"
-        ]
-    {
+    for ori in [
+        "imgui.h",
+        "imgui_internal.h",
+        "imstb_textedit.h",
+        "imstb_rectpack.h",
+        "imstb_truetype.h",
+        "imgui.cpp",
+        "imgui_widgets.cpp",
+        "imgui_draw.cpp",
+        "imgui_tables.cpp",
+        "imgui_demo.cpp",
+    ] {
         let src = imgui_ori.join(ori);
         sh.copy_file(&src, &imgui_src).unwrap();
         println!("cargo:rerun-if-changed={}", src.display());
     }
-    for ori in [ "imgui_freetype.cpp", "imgui_freetype.h" ] {
+    for ori in ["imgui_freetype.cpp", "imgui_freetype.h"] {
         let src = imgui_ori.join("misc/freetype").join(ori);
         sh.copy_file(&src, &imgui_misc_ft).unwrap();
         println!("cargo:rerun-if-changed={}", src.display());
     }
-    sh.write_file(imgui_src.join("imconfig.h"), r"
+    sh.write_file(
+        imgui_src.join("imconfig.h"),
+        r"
 // This only works on windows, the arboard crate has better cross-support
 #define IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS
 
@@ -58,17 +66,22 @@ fn main() {
 struct ImGuiContext;
 extern thread_local ImGuiContext* MyImGuiTLS;
 #define GImGui MyImGuiTLS
-        ").unwrap();
+        ",
+    )
+    .unwrap();
 
-    println!(
-        "cargo:THIRD_PARTY={}",
-        imgui_src.display()
-    );
+    println!("cargo:THIRD_PARTY={}", imgui_src.display());
 
     println!("cargo:rerun-if-changed=wrapper.cpp");
 
-    println!("cargo:rerun-if-changed={}/imgui.cpp", imgui_ori.to_string_lossy());
-    println!("cargo:rerun-if-changed={}/imgui.h", imgui_ori.to_string_lossy());
+    println!(
+        "cargo:rerun-if-changed={}/imgui.cpp",
+        imgui_ori.to_string_lossy()
+    );
+    println!(
+        "cargo:rerun-if-changed={}/imgui.h",
+        imgui_ori.to_string_lossy()
+    );
 
     let freetype = if cfg!(feature = "freetype") {
         Some(pkg_config::probe_library("freetype2").unwrap())
@@ -101,9 +114,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
             bindings = bindings.clang_args(["-I", &include.display().to_string()]);
         }
     }
-    let bindings = bindings
-        .generate()
-        .expect("Unable to generate bindings");
+    let bindings = bindings.generate().expect("Unable to generate bindings");
 
     bindings
         .write_to_file(out_path.join("bindings.rs"))
@@ -111,19 +122,14 @@ extern thread_local ImGuiContext* MyImGuiTLS;
 
     let mut build = cc::Build::new();
     if target_arch != "wasm32" {
-        build
-            .cpp(true)
-            .std("c++20");
+        build.cpp(true).std("c++20");
     }
-    build
-        .file("wrapper.cpp")
-        .include(&imgui_src);
+    build.file("wrapper.cpp").include(&imgui_src);
     if let Some(freetype) = &freetype {
         build.define("IMGUI_ENABLE_FREETYPE", "1");
         for include in &freetype.include_paths {
             build.include(&include.display().to_string());
         }
     }
-    build
-        .compile("dear_imgui");
+    build.compile("dear_imgui");
 }

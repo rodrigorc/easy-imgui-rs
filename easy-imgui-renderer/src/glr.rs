@@ -4,8 +4,8 @@
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc)]
 
-use std::{cell::Cell, marker::PhantomData};
 use std::rc::Rc;
+use std::{cell::Cell, marker::PhantomData};
 
 use glow::{HasContext, UniformLocation};
 use smallvec::SmallVec;
@@ -13,8 +13,7 @@ use smallvec::SmallVec;
 #[derive(Debug, Clone)]
 pub struct GLError(u32);
 
-impl std::error::Error for GLError {
-}
+impl std::error::Error for GLError {}
 impl std::fmt::Display for GLError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:x}", self.0)
@@ -53,15 +52,13 @@ impl Drop for Texture {
 }
 
 impl Texture {
-    pub fn gl(&self) -> &GlContext { &self.gl }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn generate(gl: &GlContext) -> Result<Texture> {
         unsafe {
-            let id = gl.create_texture()
-                .map_err(|_| to_gl_err(gl))?;
-            Ok(Texture {
-                gl: gl.clone(),
-                id,
-            })
+            let id = gl.create_texture().map_err(|_| to_gl_err(gl))?;
+            Ok(Texture { gl: gl.clone(), id })
         }
     }
     pub fn id(&self) -> glow::Texture {
@@ -74,7 +71,6 @@ impl Texture {
     }
 }
 
-
 pub struct EnablerVertexAttribArray {
     gl: GlContext,
     id: u32,
@@ -85,10 +81,7 @@ impl EnablerVertexAttribArray {
         unsafe {
             gl.enable_vertex_attrib_array(id);
         }
-         EnablerVertexAttribArray {
-            gl: gl.clone(),
-            id,
-         }
+        EnablerVertexAttribArray { gl: gl.clone(), id }
     }
 }
 
@@ -131,7 +124,8 @@ impl PushViewport {
 impl Drop for PushViewport {
     fn drop(&mut self) {
         unsafe {
-            self.gl.viewport(self.prev[0], self.prev[1], self.prev[2], self.prev[3]);
+            self.gl
+                .viewport(self.prev[0], self.prev[1], self.prev[2], self.prev[3]);
         }
     }
 }
@@ -152,7 +146,12 @@ impl Drop for Program {
 }
 
 impl Program {
-    pub fn from_source(gl: &GlContext, vertex: &str, fragment: &str, geometry: Option<&str>) -> Result<Program> {
+    pub fn from_source(
+        gl: &GlContext,
+        vertex: &str,
+        fragment: &str,
+        geometry: Option<&str>,
+    ) -> Result<Program> {
         unsafe {
             // Purge error status
             gl.get_error();
@@ -162,8 +161,7 @@ impl Program {
                 Some(source) => Some(Shader::compile(gl, glow::GEOMETRY_SHADER, source)?),
                 None => None,
             };
-            let id = gl.create_program()
-                .map_err(|_| to_gl_err(gl))?;
+            let id = gl.create_program().map_err(|_| to_gl_err(gl))?;
             let mut prg = Program {
                 gl: gl.clone(),
                 id,
@@ -187,8 +185,12 @@ impl Program {
             let nu = gl.get_active_uniforms(prg.id);
             prg.uniforms = Vec::with_capacity(nu as usize);
             for u in 0..nu {
-                let Some(ac) = gl.get_active_uniform(prg.id, u) else { continue; };
-                let Some(location) = gl.get_uniform_location(prg.id, &ac.name) else { continue; };
+                let Some(ac) = gl.get_active_uniform(prg.id, u) else {
+                    continue;
+                };
+                let Some(location) = gl.get_uniform_location(prg.id, &ac.name) else {
+                    continue;
+                };
 
                 let u = Uniform {
                     name: ac.name,
@@ -201,8 +203,12 @@ impl Program {
             let na = gl.get_active_attributes(prg.id);
             prg.attribs = Vec::with_capacity(na as usize);
             for a in 0..na {
-                let Some(aa) = gl.get_active_attribute(prg.id, a) else { continue; };
-                let Some(location) = gl.get_attrib_location(prg.id, &aa.name) else { continue; };
+                let Some(aa) = gl.get_active_attribute(prg.id, a) else {
+                    continue;
+                };
+                let Some(location) = gl.get_attrib_location(prg.id, &aa.name) else {
+                    continue;
+                };
 
                 let a = Attribute {
                     name: aa.name,
@@ -226,9 +232,9 @@ impl Program {
         self.uniforms.iter().find(|u| u.name == name)
     }
     pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: u32)
-        where
-            U: UniformProvider,
-            AS: AttribProviderList,
+    where
+        U: UniformProvider,
+        AS: AttribProviderList,
     {
         if attribs.is_empty() {
             return;
@@ -265,12 +271,8 @@ impl Drop for Shader {
 impl Shader {
     fn compile(gl: &GlContext, ty: u32, source: &str) -> Result<Shader> {
         unsafe {
-            let id = gl.create_shader(ty)
-                .map_err(|_| to_gl_err(gl))?;
-            let sh = Shader{
-                gl: gl.clone(),
-                id,
-            };
+            let id = gl.create_shader(ty).map_err(|_| to_gl_err(gl))?;
+            let sh = Shader { gl: gl.clone(), id };
             //multiline
             gl.shader_source(sh.id, source);
             gl.compile_shader(sh.id);
@@ -342,8 +344,7 @@ pub trait UniformProvider {
 }
 
 impl UniformProvider for () {
-    fn apply(&self, _gl: &GlContext, _u: &Uniform) {
-    }
+    fn apply(&self, _gl: &GlContext, _u: &Uniform) {}
 }
 
 /// # Safety
@@ -375,8 +376,7 @@ impl AttribProviderList for NilVertexAttrib {
     fn len(&self) -> usize {
         self.0
     }
-    fn bind(&self, _p: &Program) {
-    }
+    fn bind(&self, _p: &Program) {}
 }
 
 /// Uses a normal array as attrib provider.
@@ -398,7 +398,14 @@ impl<A: AttribProvider> AttribProviderList for &[A] {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location();
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
-                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
+                    p.gl.vertex_attrib_pointer_f32(
+                        loc,
+                        size as i32,
+                        ty,
+                        false,
+                        std::mem::size_of::<A>() as i32,
+                        offs as i32,
+                    );
                 }
             }
         }
@@ -598,28 +605,29 @@ impl<A: AttribProvider> DynamicVertexArray<A> {
         &self.data[..]
     }
     pub fn sub(&self, range: std::ops::Range<usize>) -> DynamicVertexArraySub<'_, A> {
-        DynamicVertexArraySub {
-            array: self,
-            range,
-        }
+        DynamicVertexArraySub { array: self, range }
     }
     pub fn bind_buffer(&self) {
         if self.data.is_empty() {
             return;
         }
         unsafe {
-            self.buf.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.buf.id()));
+            self.buf
+                .gl
+                .bind_buffer(glow::ARRAY_BUFFER, Some(self.buf.id()));
             if self.dirty.get() {
                 if self.data.len() > self.buf_len.get() {
-                    self.buf.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER,
+                    self.buf.gl.buffer_data_u8_slice(
+                        glow::ARRAY_BUFFER,
                         as_u8_slice(&self.data),
-                        glow::DYNAMIC_DRAW
+                        glow::DYNAMIC_DRAW,
                     );
                     self.buf_len.set(self.data.len());
                 } else {
-                    self.buf.gl.buffer_sub_data_u8_slice(glow::ARRAY_BUFFER,
+                    self.buf.gl.buffer_sub_data_u8_slice(
+                        glow::ARRAY_BUFFER,
                         0,
-                        as_u8_slice(&self.data)
+                        as_u8_slice(&self.data),
                     );
                 }
                 self.dirty.set(false);
@@ -658,7 +666,14 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location();
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
-                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
+                    p.gl.vertex_attrib_pointer_f32(
+                        loc,
+                        size as i32,
+                        ty,
+                        false,
+                        std::mem::size_of::<A>() as i32,
+                        offs as i32,
+                    );
                 }
             }
         }
@@ -687,12 +702,18 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
                     let loc = a.location();
                     vas.push(EnablerVertexAttribArray::enable(&p.gl, loc));
                     let offs = offs + std::mem::size_of::<A>() * self.range.start;
-                    p.gl.vertex_attrib_pointer_f32(loc, size as i32, ty, false, std::mem::size_of::<A>() as i32, offs as i32);
+                    p.gl.vertex_attrib_pointer_f32(
+                        loc,
+                        size as i32,
+                        ty,
+                        false,
+                        std::mem::size_of::<A>() as i32,
+                        offs as i32,
+                    );
                 }
             }
         }
         vas
-
     }
 }
 
@@ -712,12 +733,8 @@ impl Drop for Buffer {
 impl Buffer {
     pub fn generate(gl: &GlContext) -> Result<Buffer> {
         unsafe {
-            let id = gl.create_buffer()
-                .map_err(|_| to_gl_err(gl))?;
-            Ok(Buffer {
-                gl: gl.clone(),
-                id,
-            })
+            let id = gl.create_buffer().map_err(|_| to_gl_err(gl))?;
+            Ok(Buffer { gl: gl.clone(), id })
         }
     }
     pub fn id(&self) -> glow::Buffer {
@@ -741,12 +758,8 @@ impl Drop for VertexArray {
 impl VertexArray {
     pub fn generate(gl: &GlContext) -> Result<VertexArray> {
         unsafe {
-            let id = gl.create_vertex_array()
-                .map_err(|_| to_gl_err(gl))?;
-            Ok(VertexArray {
-                gl: gl.clone(),
-                id,
-            })
+            let id = gl.create_vertex_array().map_err(|_| to_gl_err(gl))?;
+            Ok(VertexArray { gl: gl.clone(), id })
         }
     }
     pub fn id(&self) -> glow::VertexArray {
@@ -770,12 +783,8 @@ impl Drop for Renderbuffer {
 impl Renderbuffer {
     pub fn generate(gl: &GlContext) -> Result<Renderbuffer> {
         unsafe {
-            let id = gl.create_renderbuffer()
-                .map_err(|_| to_gl_err(gl))?;
-            Ok(Renderbuffer {
-                gl: gl.clone(),
-                id,
-            })
+            let id = gl.create_renderbuffer().map_err(|_| to_gl_err(gl))?;
+            Ok(Renderbuffer { gl: gl.clone(), id })
         }
     }
     pub fn id(&self) -> glow::Renderbuffer {
@@ -825,19 +834,14 @@ impl Drop for Framebuffer {
 impl Framebuffer {
     pub fn generate(gl: &GlContext) -> Result<Framebuffer> {
         unsafe {
-            let id = gl.create_framebuffer()
-                .map_err(|_| to_gl_err(gl))?;
-            Ok(Framebuffer {
-                gl: gl.clone(),
-                id
-            })
+            let id = gl.create_framebuffer().map_err(|_| to_gl_err(gl))?;
+            Ok(Framebuffer { gl: gl.clone(), id })
         }
     }
     pub fn id(&self) -> glow::Framebuffer {
         self.id
     }
 }
-
 
 pub trait BinderFBOTarget {
     const TARGET: u32;
@@ -852,17 +856,17 @@ pub struct BinderFramebuffer<TGT: BinderFBOTarget> {
 
 impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
     pub fn new(gl: &GlContext) -> Self {
-        #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_arch = "wasm32"))]
         let id = unsafe {
             let id = gl.get_parameter_i32(TGT::GET_BINDING) as u32;
             std::num::NonZeroU32::new(id).map(glow::NativeFramebuffer)
         };
-        #[cfg(target_arch="wasm32")]
+        #[cfg(target_arch = "wasm32")]
         let id = None;
         BinderFramebuffer {
             gl: gl.clone(),
             id,
-            _pd: PhantomData
+            _pd: PhantomData,
         }
     }
     pub fn target(&self) -> u32 {
@@ -875,7 +879,7 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
         BinderFramebuffer {
             gl: fb.gl.clone(),
             id: None,
-            _pd: PhantomData
+            _pd: PhantomData,
         }
     }
     pub fn rebind(&self, fb: &Framebuffer) {

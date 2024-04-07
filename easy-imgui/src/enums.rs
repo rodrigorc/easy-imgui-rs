@@ -72,7 +72,7 @@ macro_rules! imgui_flags {
         }
     };
 }
-imgui_flags!{
+imgui_flags! {
     pub DrawFlags: ImDrawFlags_ {
         None,
         Closed,
@@ -89,7 +89,7 @@ imgui_flags!{
     }
 }
 
-imgui_enum!{
+imgui_enum! {
     pub Cond: ImGuiCond_ {
         Always,
         Once,
@@ -98,7 +98,7 @@ imgui_enum!{
     }
 }
 
-imgui_enum!{
+imgui_enum! {
     pub ColorId: ImGuiCol_ {
         Text,
         TextDisabled,
@@ -160,7 +160,7 @@ imgui_enum!{
     }
 }
 
-imgui_enum!{
+imgui_enum! {
     pub StyleVar: ImGuiStyleVar_ {
         Alpha,
         DisabledAlpha,
@@ -195,7 +195,7 @@ imgui_enum!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub WindowFlags: ImGuiWindowFlags_ {
         None,
         NoTitleBar,
@@ -225,7 +225,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub ChildFlags: ImGuiChildFlags_ {
         None,
         Border,
@@ -238,7 +238,7 @@ imgui_flags!{
         FrameStyle,
     }
 }
-imgui_flags!{
+imgui_flags! {
     pub ButtonFlags: ImGuiButtonFlags_ {
         None,
         MouseButtonLeft,
@@ -247,7 +247,7 @@ imgui_flags!{
     }
 }
 
-imgui_enum!{
+imgui_enum! {
     pub Dir: ImGuiDir_ {
         Left,
         Right,
@@ -256,7 +256,7 @@ imgui_enum!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub ComboFlags: ImGuiComboFlags_ {
         None,
         PopupAlignLeft,
@@ -269,7 +269,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub SelectableFlags: ImGuiSelectableFlags_ {
         None,
         DontClosePopups,
@@ -280,7 +280,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub SliderFlags: ImGuiSliderFlags_ {
         None,
         AlwaysClamp,
@@ -290,7 +290,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub InputTextFlags: ImGuiInputTextFlags_ {
         None,
         CharsDecimal,
@@ -317,7 +317,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub HoveredFlags: ImGuiHoveredFlags_ {
         None,
         ChildWindows,
@@ -345,7 +345,6 @@ imgui_flags!{
     }
 }
 
-
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MouseButton {
@@ -359,14 +358,14 @@ impl MouseButton {
     pub fn bits(self) -> i32 {
         match self {
             MouseButton::Left => ImGuiMouseButton_::ImGuiMouseButton_Left.0 as i32,
-            MouseButton::Right =>  ImGuiMouseButton_::ImGuiMouseButton_Right.0 as i32,
-            MouseButton::Middle =>  ImGuiMouseButton_::ImGuiMouseButton_Middle.0 as i32,
-            MouseButton::Other(x) => x as i32
+            MouseButton::Right => ImGuiMouseButton_::ImGuiMouseButton_Right.0 as i32,
+            MouseButton::Middle => ImGuiMouseButton_::ImGuiMouseButton_Middle.0 as i32,
+            MouseButton::Other(x) => x as i32,
         }
     }
 }
 
-imgui_enum!{
+imgui_enum! {
     pub MouseCursor : ImGuiMouseCursor_ {
         None,
         Arrow,
@@ -382,7 +381,7 @@ imgui_enum!{
 }
 
 // ImGuiKey is named weirdly
-imgui_enum_ex!{
+imgui_enum_ex! {
     pub Key: ImGuiKey {
         None = ImGuiKey_None,
         Tab = ImGuiKey_Tab,
@@ -530,7 +529,7 @@ imgui_enum_ex!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub ViewportFlags: ImGuiViewportFlags_ {
         None,
         IsPlatformWindow,
@@ -561,7 +560,7 @@ imgui_flags!{
     }
 }
 
-imgui_flags!{
+imgui_flags! {
     pub PopupFlags: ImGuiPopupFlags_ {
         None,
         MouseButtonLeft,
@@ -797,7 +796,7 @@ imgui_enum! {
     }
 }
 
-#[cfg(feature="docking")]
+#[cfg(feature = "docking")]
 imgui_flags! {
     pub DockNodeFlags: ImGuiDockNodeFlags_ {
         None,

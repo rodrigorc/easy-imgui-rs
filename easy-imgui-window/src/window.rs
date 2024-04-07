@@ -1,24 +1,24 @@
-use std::num::NonZeroU32;
-use std::time::{Instant, Duration};
-use winit::{
-    keyboard::PhysicalKey,
-    window::{Window, CursorIcon},
-    event::{Event, Ime::Commit},
-    dpi::{PhysicalSize, LogicalSize},
-};
-use easy_imgui_sys::*;
+use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
 use easy_imgui::{self as imgui, mint, Vector2};
-use glutin::{
-    prelude::*,
-    surface::{WindowSurface, Surface},
-    context::PossiblyCurrentContext,
-};
 use easy_imgui_renderer::Renderer;
-use crate::conv::{from_imgui_cursor, to_imgui_key, to_imgui_button};
+use easy_imgui_sys::*;
+use glutin::{
+    context::PossiblyCurrentContext,
+    prelude::*,
+    surface::{Surface, WindowSurface},
+};
+use std::num::NonZeroU32;
+use std::time::{Duration, Instant};
+use winit::{
+    dpi::{LogicalSize, PhysicalSize},
+    event::{Event, Ime::Commit},
+    keyboard::PhysicalKey,
+    window::{CursorIcon, Window},
+};
 
 // Only used with the main-window feature
 #[allow(unused_imports)]
-use winit::dpi::{Pixel, PhysicalPosition, LogicalPosition};
+use winit::dpi::{LogicalPosition, PhysicalPosition, Pixel};
 
 pub struct MainWindowStatus {
     last_frame: Instant,
@@ -185,7 +185,7 @@ pub fn do_event<EventUserType>(
                     RawWindowHandle::{Xcb, Xlib},
                 };
                 if let Ok(h) = main_window.window().window_handle() {
-                        if matches!(h.as_raw(), Xcb(_) | Xlib(_)) {
+                    if matches!(h.as_raw(), Xcb(_) | Xlib(_)) {
                         main_window.window().set_visible(false);
                         main_window.window().set_visible(true);
                     }
@@ -209,40 +209,35 @@ pub fn do_event<EventUserType>(
             let mouse = unsafe { ImGui_IsAnyMouseDown() };
             main_window.about_to_wait(mouse);
         }
-        Event::WindowEvent {
-            window_id,
-            event
-        } if main_window.window().id() == *window_id => {
+        Event::WindowEvent { window_id, event } if main_window.window().id() == *window_id => {
             use winit::event::WindowEvent::*;
             match event {
                 CloseRequested => {
                     window_closed = true;
                 }
-                RedrawRequested => {
-                    unsafe {
-                        let imgui = renderer.imgui().set_current();
-                        let io = imgui.io();
-                        let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
-                        if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
-                            let cursor = if io.MouseDrawCursor {
-                                None
-                            } else {
-                                let cursor = imgui::MouseCursor::from_bits(ImGui_GetMouseCursor())
-                                    .unwrap_or(imgui::MouseCursor::Arrow);
-                                from_imgui_cursor(cursor)
-                            };
-                            if cursor != status.current_cursor {
-                                main_window.set_cursor(cursor);
-                                status.current_cursor = cursor;
-                            }
-                        }
-                        if !flags.contains(EventFlags::DoNotRender) {
-                            main_window.pre_render();
-                            renderer.do_frame(app);
-                            main_window.post_render();
+                RedrawRequested => unsafe {
+                    let imgui = renderer.imgui().set_current();
+                    let io = imgui.io();
+                    let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
+                    if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
+                        let cursor = if io.MouseDrawCursor {
+                            None
+                        } else {
+                            let cursor = imgui::MouseCursor::from_bits(ImGui_GetMouseCursor())
+                                .unwrap_or(imgui::MouseCursor::Arrow);
+                            from_imgui_cursor(cursor)
+                        };
+                        if cursor != status.current_cursor {
+                            main_window.set_cursor(cursor);
+                            status.current_cursor = cursor;
                         }
                     }
-                }
+                    if !flags.contains(EventFlags::DoNotRender) {
+                        main_window.pre_render();
+                        renderer.do_frame(app);
+                        main_window.post_render();
+                    }
+                },
                 Resized(size) => {
                     main_window.ping_user_input();
                     // GL surface in physical pixels, imgui in logical
@@ -270,19 +265,36 @@ pub fn do_event<EventUserType>(
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
-                        ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModCtrl.bits()), mods.state().control_key());
-                        ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModShift.bits()), mods.state().shift_key());
-                        ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModAlt.bits()), mods.state().alt_key());
-                        ImGuiIO_AddKeyEvent(io, ImGuiKey(imgui::Key::ModSuper.bits()), mods.state().super_key());
+                        ImGuiIO_AddKeyEvent(
+                            io,
+                            ImGuiKey(imgui::Key::ModCtrl.bits()),
+                            mods.state().control_key(),
+                        );
+                        ImGuiIO_AddKeyEvent(
+                            io,
+                            ImGuiKey(imgui::Key::ModShift.bits()),
+                            mods.state().shift_key(),
+                        );
+                        ImGuiIO_AddKeyEvent(
+                            io,
+                            ImGuiKey(imgui::Key::ModAlt.bits()),
+                            mods.state().alt_key(),
+                        );
+                        ImGuiIO_AddKeyEvent(
+                            io,
+                            ImGuiKey(imgui::Key::ModSuper.bits()),
+                            mods.state().super_key(),
+                        );
                     }
                 }
                 KeyboardInput {
-                    event: winit::event::KeyEvent {
-                        physical_key,
-                        text,
-                        state,
-                        ..
-                    },
+                    event:
+                        winit::event::KeyEvent {
+                            physical_key,
+                            text,
+                            state,
+                            ..
+                        },
                     is_synthetic: false,
                     ..
                 } => {
@@ -301,7 +313,7 @@ pub fn do_event<EventUserType>(
                                     ShiftLeft | ShiftRight => Some(imgui::Key::ModShift),
                                     AltLeft | AltRight => Some(imgui::Key::ModAlt),
                                     SuperLeft | SuperRight => Some(imgui::Key::ModSuper),
-                                    _ => None
+                                    _ => None,
                                 };
                                 if let Some(kmod) = kmod {
                                     ImGuiIO_AddKeyEvent(io, ImGuiKey(kmod.bits()), pressed);
@@ -392,7 +404,7 @@ pub fn do_event<EventUserType>(
                 _ => {}
             }
         }
-        _ => { }
+        _ => {}
     }
     let res = unsafe {
         let imgui = renderer.imgui().set_current();
@@ -406,16 +418,16 @@ pub fn do_event<EventUserType>(
     res
 }
 
-#[cfg(not(feature="clipboard"))]
+#[cfg(not(feature = "clipboard"))]
 pub mod clipboard {
     use easy_imgui as imgui;
     /// This does nothing. Enable the `clipboard` feature to get a working clipboard.
-    pub fn setup(_imgui: &mut imgui::CurrentContext<'_>) { }
+    pub fn setup(_imgui: &mut imgui::CurrentContext<'_>) {}
 }
-#[cfg(feature="clipboard")]
+#[cfg(feature = "clipboard")]
 pub mod clipboard {
-    use std::ffi::{CString, CStr, c_void, c_char};
     use easy_imgui as imgui;
+    use std::ffi::{c_char, c_void, CStr, CString};
 
     /// Sets up the ImGui clipboard using the `arboard` crate.
     pub fn setup(imgui: &mut imgui::CurrentContext<'_>) {
@@ -460,20 +472,20 @@ pub mod clipboard {
     }
 }
 
-#[cfg(feature="main-window")]
+#[cfg(feature = "main-window")]
 mod main_window {
     use super::*;
-    use easy_imgui_renderer::glow;
     use anyhow::{anyhow, Result};
-    use winit::{event_loop::EventLoopWindowTarget, window::WindowBuilder};
+    use easy_imgui_renderer::glow;
     use glutin::{
         config::{Config, ConfigTemplateBuilder},
+        context::{ContextApi, ContextAttributesBuilder},
         display::GetGlDisplay,
         surface::SurfaceAttributesBuilder,
-        context::{ContextAttributesBuilder, ContextApi},
     };
     use glutin_winit::DisplayBuilder;
     use raw_window_handle::HasRawWindowHandle;
+    use winit::{event_loop::EventLoopWindowTarget, window::WindowBuilder};
 
     /// This type represents a `winit` window and an OpenGL context.
     pub struct MainWindow {
@@ -494,34 +506,36 @@ mod main_window {
 
     impl MainWindow {
         /// Creates a `MainWindow` with default values.
-        pub fn new<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str) -> Result<MainWindow> {
+        pub fn new<EventUserType>(
+            event_loop: &EventLoopWindowTarget<EventUserType>,
+            title: &str,
+        ) -> Result<MainWindow> {
             // For standard UI, we need as few fancy things as available
             let score = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
-            Self::with_gl_chooser(
-                event_loop,
-                title,
-                |cfg1, cfg2| {
-                    if score(&cfg2) < score(&cfg1) {
-                        cfg2
-                    } else {
-                        cfg1
-                    }
-                })
+            Self::with_gl_chooser(event_loop, title, |cfg1, cfg2| {
+                if score(&cfg2) < score(&cfg1) {
+                    cfg2
+                } else {
+                    cfg1
+                }
+            })
         }
         /// Creates a `MainWindow` with your own OpenGL context chooser.
         ///
         /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
         /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
-        pub fn with_gl_chooser<EventUserType>(event_loop: &EventLoopWindowTarget<EventUserType>, title: &str, f_choose_cfg: impl FnMut(Config, Config) -> Config) -> Result<MainWindow> {
+        pub fn with_gl_chooser<EventUserType>(
+            event_loop: &EventLoopWindowTarget<EventUserType>,
+            title: &str,
+            f_choose_cfg: impl FnMut(Config, Config) -> Config,
+        ) -> Result<MainWindow> {
             let window_builder = WindowBuilder::new();
             let template = ConfigTemplateBuilder::new()
                 .prefer_hardware_accelerated(Some(true))
                 .with_depth_size(0)
-                .with_stencil_size(0)
-            ;
+                .with_stencil_size(0);
 
-            let display_builder = DisplayBuilder::new()
-                .with_window_builder(Some(window_builder));
+            let display_builder = DisplayBuilder::new().with_window_builder(Some(window_builder));
 
             let (window, gl_config) = display_builder
                 .build(event_loop, template, |configs| {
@@ -533,8 +547,7 @@ mod main_window {
             window.set_ime_allowed(true);
             let raw_window_handle = Some(window.raw_window_handle());
             let gl_display = gl_config.display();
-            let context_attributes = ContextAttributesBuilder::new()
-                .build(raw_window_handle);
+            let context_attributes = ContextAttributesBuilder::new().build(raw_window_handle);
             let fallback_context_attributes = ContextAttributesBuilder::new()
                 .with_context_api(ContextApi::Gles(None))
                 .build(raw_window_handle);
@@ -543,8 +556,7 @@ mod main_window {
                 gl_display
                     .create_context(&gl_config, &context_attributes)
                     .or_else(|_| {
-                        gl_display
-                            .create_context(&gl_config, &fallback_context_attributes)
+                        gl_display.create_context(&gl_config, &fallback_context_attributes)
                     })?
             });
 
@@ -558,14 +570,21 @@ mod main_window {
                 NonZeroU32::new(height).unwrap(),
             );
 
-            let surface = unsafe { gl_config.display().create_window_surface(&gl_config, &attrs)? };
+            let surface = unsafe {
+                gl_config
+                    .display()
+                    .create_window_surface(&gl_config, &attrs)?
+            };
             let gl_context = not_current_gl_context
                 .take()
                 .unwrap()
                 .make_current(&surface)?;
 
             // Enable v-sync to avoid consuming too much CPU
-            let _ = surface.set_swap_interval(&gl_context, glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()));
+            let _ = surface.set_swap_interval(
+                &gl_context,
+                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            );
 
             Ok(MainWindow {
                 gl_context,
@@ -578,7 +597,9 @@ mod main_window {
         ///
         /// # Safety
         /// Do not drop the `window` without dropping the `surface` first.
-        pub unsafe fn into_pieces(self) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
+        pub unsafe fn into_pieces(
+            self,
+        ) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
             (self.gl_context, self.surface, self.window)
         }
         pub fn glutin_context(&self) -> &PossiblyCurrentContext {
@@ -599,17 +620,26 @@ mod main_window {
             size.to_logical(scale)
         }
         /// Converts the given logical size to a physical size, using the window scale factor.
-        pub fn to_physical_size<X: Pixel, Y: Pixel>(&self, size: LogicalSize<X>) -> PhysicalSize<Y> {
+        pub fn to_physical_size<X: Pixel, Y: Pixel>(
+            &self,
+            size: LogicalSize<X>,
+        ) -> PhysicalSize<Y> {
             let scale = self.window.scale_factor();
             size.to_physical(scale)
         }
         /// Converts the given physical position to a logical position, using the window scale factor.
-        pub fn to_logical_pos<X: Pixel, Y: Pixel>(&self, pos: PhysicalPosition<X>) -> LogicalPosition<Y> {
+        pub fn to_logical_pos<X: Pixel, Y: Pixel>(
+            &self,
+            pos: PhysicalPosition<X>,
+        ) -> LogicalPosition<Y> {
             let scale = self.window.scale_factor();
             pos.to_logical(scale)
         }
         /// Converts the given logical position to a physical position, using the window scale factor.
-        pub fn to_physical_pos<X: Pixel, Y: Pixel>(&self, pos: LogicalPosition<X>) -> PhysicalPosition<Y> {
+        pub fn to_physical_pos<X: Pixel, Y: Pixel>(
+            &self,
+            pos: LogicalPosition<X>,
+        ) -> PhysicalPosition<Y> {
             let scale = self.window.scale_factor();
             pos.to_physical(scale)
         }
@@ -668,8 +698,19 @@ mod main_window {
         ///
         /// It returns [`EventResult`]. You can use it to break the main loop, or ignore it, as you see fit.
         /// It also informs of whether ImGui want the monopoly of the user input.
-        pub fn do_event<EventUserType>(&mut self, app: &mut impl imgui::UiBuilder, event: &Event<EventUserType>) -> EventResult {
-            do_event(&mut self.main_window, &mut self.renderer, &mut self.status, app, event, EventFlags::empty())
+        pub fn do_event<EventUserType>(
+            &mut self,
+            app: &mut impl imgui::UiBuilder,
+            event: &Event<EventUserType>,
+        ) -> EventResult {
+            do_event(
+                &mut self.main_window,
+                &mut self.renderer,
+                &mut self.status,
+                app,
+                event,
+                EventFlags::empty(),
+            )
         }
     }
 
@@ -697,7 +738,10 @@ mod main_window {
         fn about_to_wait(&mut self, pinged: bool) {
             let now = Instant::now();
             self.idler.last_input_frame += 1;
-            if pinged || now.duration_since(self.idler.last_input_time) < self.idler.idle_time || self.idler.last_input_frame < self.idler.idle_frame_count {
+            if pinged
+                || now.duration_since(self.idler.last_input_time) < self.idler.idle_time
+                || self.idler.last_input_frame < self.idler.idle_frame_count
+            {
                 // No need to call set_control_flow(): doing a redraw will force extra Poll.
                 // Not doing it will default to Wait.
                 self.window.request_redraw();
@@ -706,5 +750,5 @@ mod main_window {
     }
 }
 
-#[cfg(feature="main-window")]
+#[cfg(feature = "main-window")]
 pub use main_window::*;

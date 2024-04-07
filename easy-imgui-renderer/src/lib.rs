@@ -3,11 +3,11 @@
 * [`easy-imgui`](https://docs.rs/easy-imgui) user interface.
 */
 
-mod renderer;
 pub mod glr;
-pub use glow;
+mod renderer;
 pub use easy_imgui;
 pub use easy_imgui_sys;
+pub use glow;
 
 pub use renderer::*;
 
@@ -47,7 +47,6 @@ macro_rules! uniform {
     (@NAME $f:ident : [ $ft:ty; $n:literal ]) => { concat!(stringify!($f), "[0]") };
     (@NAME $f:ident : $ft:ty) => { stringify!($f) };
 }
-
 
 #[macro_export]
 macro_rules! attrib {

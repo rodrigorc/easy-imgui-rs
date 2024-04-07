@@ -1,12 +1,12 @@
 use std::mem::size_of;
 
+use anyhow::{anyhow, Result};
 use easy_imgui_sys::*;
-use anyhow::{Result, anyhow};
 use glow::HasContext;
 
-use easy_imgui as imgui;
-use imgui::{TextureId, Color, Vector2};
 use crate::glr;
+use easy_imgui as imgui;
+use imgui::{Color, TextureId, Vector2};
 
 /// The main `Renderer` type.
 pub struct Renderer {
@@ -47,19 +47,18 @@ impl Renderer {
         let imgui = unsafe { imgui::Context::new() };
 
         unsafe {
-            if !cfg!(target_arch="wasm32") {
+            if !cfg!(target_arch = "wasm32") {
                 let io = &mut *ImGui_GetIO();
-                io.BackendFlags |= (
-                    imgui::BackendFlags::HasMouseCursors |
-                    imgui::BackendFlags::HasSetMousePos |
-                    imgui::BackendFlags::RendererHasVtxOffset
-                    ).bits();
+                io.BackendFlags |= (imgui::BackendFlags::HasMouseCursors
+                    | imgui::BackendFlags::HasSetMousePos
+                    | imgui::BackendFlags::RendererHasVtxOffset)
+                    .bits();
             }
 
             atlas = glr::Texture::generate(&gl)?;
-            #[cfg(not(target_arch="wasm32"))]
+            #[cfg(not(target_arch = "wasm32"))]
             let shader_source = include_str!("shader.glsl");
-            #[cfg(target_arch="wasm32")]
+            #[cfg(target_arch = "wasm32")]
             let shader_source = include_str!("shader_es.glsl");
             program = gl_program_from_source(&gl, shader_source)?;
             vao = glr::VertexArray::generate(&gl)?;
@@ -101,7 +100,7 @@ impl Renderer {
                 a_color_location,
                 u_matrix_location,
                 u_tex_location,
-            }
+            },
         })
     }
     /// Gets a reference to the OpenGL context.
@@ -132,9 +131,7 @@ impl Renderer {
     }
     /// Gets the UI size, in logical units.
     pub fn size(&mut self) -> Vector2 {
-        unsafe {
-            self.imgui.set_current().size()
-        }
+        unsafe { self.imgui.set_current().size() }
     }
     /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
@@ -150,9 +147,10 @@ impl Renderer {
                 || {
                     let io = &*ImGui_GetIO();
                     self.gl.viewport(
-                        0, 0,
+                        0,
+                        0,
                         (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
-                        (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32
+                        (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32,
                     );
                     if let Some(bg) = self.bg_color {
                         self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
@@ -161,7 +159,7 @@ impl Renderer {
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data);
-                }
+                },
             );
         }
     }
@@ -171,20 +169,52 @@ impl Renderer {
         let mut width = 0;
         let mut height = 0;
         let mut pixel_size = 0;
-        ImFontAtlas_GetTexDataAsRGBA32((*io).Fonts, &mut data, &mut width, &mut height, &mut pixel_size);
+        ImFontAtlas_GetTexDataAsRGBA32(
+            (*io).Fonts,
+            &mut data,
+            &mut width,
+            &mut height,
+            &mut pixel_size,
+        );
 
         gl.bind_texture(glow::TEXTURE_2D, Some(atlas_tex.id()));
 
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_S,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_T,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MIN_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MAG_FILTER,
+            glow::LINEAR as i32,
+        );
         gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
-        gl.tex_image_2d(glow::TEXTURE_2D, 0, glow::RGBA as i32, //glow::RED as i32,
-                       width, height, 0,
-                       glow::RGBA, glow::UNSIGNED_BYTE,
-                       //glow::RED, glow::UNSIGNED_BYTE,
-                       Some(std::slice::from_raw_parts(data, (width * height * pixel_size) as usize)));
+        gl.tex_image_2d(
+            glow::TEXTURE_2D,
+            0,
+            glow::RGBA as i32, //glow::RED as i32,
+            width,
+            height,
+            0,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            //glow::RED, glow::UNSIGNED_BYTE,
+            Some(std::slice::from_raw_parts(
+                data,
+                (width * height * pixel_size) as usize,
+            )),
+        );
         gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
@@ -199,7 +229,12 @@ impl Renderer {
         gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));
         gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(objs.ibuf.id()));
         gl.enable(glow::BLEND);
-        gl.blend_func_separate(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA, glow::ONE, glow::ONE_MINUS_SRC_ALPHA);
+        gl.blend_func_separate(
+            glow::SRC_ALPHA,
+            glow::ONE_MINUS_SRC_ALPHA,
+            glow::ONE,
+            glow::ONE_MINUS_SRC_ALPHA,
+        );
         gl.disable(glow::CULL_FACE);
         gl.disable(glow::DEPTH_TEST);
         gl.enable(glow::SCISSOR_TEST);
@@ -208,15 +243,26 @@ impl Renderer {
         gl.uniform_1_i32(Some(&objs.u_tex_location), 0);
 
         let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
-        let ImVec2 { x: width, y: height } = draw_data.DisplaySize;
+        let ImVec2 {
+            x: width,
+            y: height,
+        } = draw_data.DisplaySize;
         let right = left + width;
         let bottom = top + height;
-        gl.uniform_matrix_3_f32_slice(Some(&objs.u_matrix_location), false,
+        gl.uniform_matrix_3_f32_slice(
+            Some(&objs.u_matrix_location),
+            false,
             &[
-                2.0 / width, 0.0, 0.0,
-                0.0, -2.0 / height, 0.0,
-                -(right + left) / width, (top + bottom) / height, 1.0,
-            ]
+                2.0 / width,
+                0.0,
+                0.0,
+                0.0,
+                -2.0 / height,
+                0.0,
+                -(right + left) / width,
+                (top + bottom) / height,
+                1.0,
+            ],
         );
 
         for cmd_list in &draw_data.CmdLists {
@@ -225,25 +271,25 @@ impl Renderer {
             gl.buffer_data_u8_slice(
                 glow::ARRAY_BUFFER,
                 glr::as_u8_slice(&cmd_list.VtxBuffer),
-                glow::DYNAMIC_DRAW
-                );
+                glow::DYNAMIC_DRAW,
+            );
             gl.buffer_data_u8_slice(
                 glow::ELEMENT_ARRAY_BUFFER,
                 glr::as_u8_slice(&cmd_list.IdxBuffer),
-                glow::DYNAMIC_DRAW
-                );
+                glow::DYNAMIC_DRAW,
+            );
             let stride = size_of::<ImDrawVert>() as i32;
             gl.vertex_attrib_pointer_f32(
                 objs.a_pos_location,
-                2 /*xy*/,
+                2, /*xy*/
                 glow::FLOAT,
                 false,
                 stride,
-                0
+                0,
             );
             gl.vertex_attrib_pointer_f32(
                 objs.a_uv_location,
-                2 /*xy*/,
+                2, /*xy*/
                 glow::FLOAT,
                 false,
                 stride,
@@ -251,7 +297,7 @@ impl Renderer {
             );
             gl.vertex_attrib_pointer_f32(
                 objs.a_color_location,
-                4 /*rgba*/,
+                4, /*rgba*/
                 glow::UNSIGNED_BYTE,
                 true,
                 stride,
@@ -267,29 +313,39 @@ impl Renderer {
                     (clip_x * draw_data.FramebufferScale.x) as i32,
                     ((height - (clip_y + clip_h)) * draw_data.FramebufferScale.y) as i32,
                     (clip_w * draw_data.FramebufferScale.x) as i32,
-                    (clip_h * draw_data.FramebufferScale.y) as i32
-                    );
-
+                    (clip_h * draw_data.FramebufferScale.y) as i32,
+                );
 
                 match cmd.UserCallback {
                     Some(cb) => {
                         cb(cmd_list, cmd);
                     }
                     None => {
-                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(TextureId::from_id(cmd.TextureId)));
+                        gl.bind_texture(
+                            glow::TEXTURE_2D,
+                            Self::unmap_tex(TextureId::from_id(cmd.TextureId)),
+                        );
 
-                        if cfg!(target_arch="wasm32") {
+                        if cfg!(target_arch = "wasm32") {
                             gl.draw_elements(
                                 glow::TRIANGLES,
                                 cmd.ElemCount as i32,
-                                if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
+                                if size_of::<ImDrawIdx>() == 2 {
+                                    glow::UNSIGNED_SHORT
+                                } else {
+                                    glow::UNSIGNED_INT
+                                },
                                 (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
                             );
                         } else {
                             gl.draw_elements_base_vertex(
                                 glow::TRIANGLES,
                                 cmd.ElemCount as i32,
-                                if size_of::<ImDrawIdx>() == 2 { glow::UNSIGNED_SHORT } else { glow::UNSIGNED_INT },
+                                if size_of::<ImDrawIdx>() == 2 {
+                                    glow::UNSIGNED_SHORT
+                                } else {
+                                    glow::UNSIGNED_INT
+                                },
                                 (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
                                 cmd.VtxOffset as i32,
                             );
@@ -297,7 +353,6 @@ impl Renderer {
                     }
                 }
             }
-
         }
         gl.use_program(None);
         gl.bind_vertex_array(None);
@@ -305,34 +360,36 @@ impl Renderer {
     }
     /// Maps an OpenGL texture to an ImGui texture.
     pub fn map_tex(ntex: glow::Texture) -> TextureId {
-        #[cfg(target_arch="wasm32")]
+        #[cfg(target_arch = "wasm32")]
         {
             let mut tex_map = WASM_TEX_MAP.lock().unwrap();
             let id = tex_map.len();
             tex_map.push(ntex);
             unsafe { TextureId::from_id(id as *mut std::ffi::c_void) }
         }
-        #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             unsafe { TextureId::from_id(ntex.0.get() as ImTextureID) }
         }
     }
     /// Gets an OpenGL texture from an ImGui texture.
     pub fn unmap_tex(tex: TextureId) -> Option<glow::Texture> {
-        #[cfg(target_arch="wasm32")]
+        #[cfg(target_arch = "wasm32")]
         {
             let tex_map = WASM_TEX_MAP.lock().unwrap();
             let id = tex.id() as usize;
             tex_map.get(id).cloned()
         }
-        #[cfg(not(target_arch="wasm32"))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            Some(glow::NativeTexture(std::num::NonZeroU32::new(tex.id() as u32)?))
+            Some(glow::NativeTexture(std::num::NonZeroU32::new(
+                tex.id() as u32
+            )?))
         }
     }
 }
 
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::new(Vec::new());
 
 impl Drop for Renderer {
@@ -345,18 +402,24 @@ impl Drop for Renderer {
 }
 
 pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr::Program> {
-    let split = shaders.find("###").ok_or_else(|| anyhow!("shader marker not found"))?;
-    let vertex = &shaders[.. split];
-    let frag = &shaders[split ..];
-    let split_2 = frag.find('\n').ok_or_else(|| anyhow!("shader marker not valid"))?;
+    let split = shaders
+        .find("###")
+        .ok_or_else(|| anyhow!("shader marker not found"))?;
+    let vertex = &shaders[..split];
+    let frag = &shaders[split..];
+    let split_2 = frag
+        .find('\n')
+        .ok_or_else(|| anyhow!("shader marker not valid"))?;
 
-    let mut frag = &frag[split_2 + 1 ..];
+    let mut frag = &frag[split_2 + 1..];
 
     let geom = if let Some(split) = frag.find("###") {
-        let geom = &frag[split ..];
-        frag = &frag[.. split];
-        let split_2 = geom.find('\n').ok_or_else(|| anyhow!("shader marker not valid"))?;
-        Some(&geom[split_2 + 1 ..])
+        let geom = &frag[split..];
+        frag = &frag[..split];
+        let split_2 = geom
+            .find('\n')
+            .ok_or_else(|| anyhow!("shader marker not valid"))?;
+        Some(&geom[split_2 + 1..])
     } else {
         None
     };
@@ -364,4 +427,3 @@ pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr:
     let prg = glr::Program::from_source(gl, vertex, frag, geom)?;
     Ok(prg)
 }
-

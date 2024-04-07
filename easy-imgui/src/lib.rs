@@ -126,16 +126,16 @@
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
 
-use std::ffi::{CString, c_char, CStr, c_void};
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::ptr::{null, null_mut};
-use std::mem::MaybeUninit;
-use std::cell::{Cell, RefCell};
-use std::borrow::Cow;
+pub use cgmath;
 use cstr::cstr;
 use easy_imgui_sys::*;
-pub use cgmath;
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
+use std::ffi::{c_char, c_void, CStr, CString};
+use std::marker::PhantomData;
+use std::mem::MaybeUninit;
+use std::ops::Deref;
+use std::ptr::{null, null_mut};
 
 /// A type alias of the `cgmath::Vector2<f32>`.
 ///
@@ -146,8 +146,8 @@ pub type Vector2 = cgmath::Vector2<f32>;
 mod enums;
 pub mod style;
 
-pub use enums::*;
 pub use easy_imgui_sys::{self, ImGuiID};
+pub use enums::*;
 pub use image;
 pub use mint;
 
@@ -180,10 +180,7 @@ fn remove_generation(id: usize, gen: usize) -> Option<usize> {
 /// Helper function to create a `Vector2`.
 pub fn to_v2(v: impl Into<mint::Vector2<f32>>) -> Vector2 {
     let v = v.into();
-    Vector2 {
-        x: v.x,
-        y: v.y,
-    }
+    Vector2 { x: v.x, y: v.y }
 }
 /// Helper function to create a `Vector2`.
 pub const fn vec2(x: f32, y: f32) -> Vector2 {
@@ -195,17 +192,11 @@ pub const fn im_vec2(x: f32, y: f32) -> ImVec2 {
 }
 /// Helper function to create a `ImVec2`.
 pub const fn v2_to_im(v: Vector2) -> ImVec2 {
-    ImVec2 {
-        x: v.x,
-        y: v.y,
-    }
+    ImVec2 { x: v.x, y: v.y }
 }
 /// Helper function to create a `Vector2`.
 pub const fn im_to_v2(v: ImVec2) -> Vector2 {
-    Vector2 {
-        x: v.x,
-        y: v.y,
-    }
+    Vector2 { x: v.x, y: v.y }
 }
 
 /// A color is stored as a `[r, g, b, a]`, each value between 0.0 and 1.0.
@@ -234,25 +225,19 @@ impl Color {
     }
     /// Converts a `Color` into a packed `u32` value, required by some Dear ImGui functions.
     pub fn as_u32(&self) -> u32 {
-        unsafe {
-            ImGui_ColorConvertFloat4ToU32(&(*self).into())
-        }
+        unsafe { ImGui_ColorConvertFloat4ToU32(&(*self).into()) }
     }
 }
 impl AsRef<[f32; 4]> for Color {
     fn as_ref(&self) -> &[f32; 4] {
         // SAFETY: Self is repr(C) so layout compatible with an array
-        unsafe {
-            std::mem::transmute::<&Color, &[f32; 4]>(self)
-        }
+        unsafe { std::mem::transmute::<&Color, &[f32; 4]>(self) }
     }
 }
 impl AsMut<[f32; 4]> for Color {
     fn as_mut(&mut self) -> &mut [f32; 4] {
         // SAFETY: Self is repr(C) so layout compatible with an array
-        unsafe {
-            std::mem::transmute::<&mut Color, &mut [f32; 4]>(self)
-        }
+        unsafe { std::mem::transmute::<&mut Color, &mut [f32; 4]>(self) }
     }
 }
 impl From<ImVec4> for Color {
@@ -293,7 +278,7 @@ impl Context {
             (*io).IniFilename = null();
 
             // If you eanbled the "docking" feature you will want to use it
-            #[cfg(feature="docking")]
+            #[cfg(feature = "docking")]
             {
                 (*io).ConfigFlags |= ConfigFlags::DockingEnable.bits();
             }
@@ -312,9 +297,7 @@ impl Context {
     /// in the same thread.
     pub unsafe fn set_current(&mut self) -> CurrentContext<'_> {
         ImGui_SetCurrentContext(self.imgui);
-        CurrentContext {
-            ctx: self
-        }
+        CurrentContext { ctx: self }
     }
     /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
@@ -349,14 +332,10 @@ impl CurrentContext<'_> {
         }
     }
     pub fn io(&self) -> &ImGuiIO {
-        unsafe {
-            &*ImGui_GetIO()
-        }
+        unsafe { &*ImGui_GetIO() }
     }
     pub fn io_mut(&mut self) -> &mut ImGuiIO {
-        unsafe {
-            &mut *ImGui_GetIO()
-        }
+        unsafe { &mut *ImGui_GetIO() }
     }
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
@@ -412,7 +391,9 @@ impl CurrentContext<'_> {
 
         let scale = (*io).DisplayFramebufferScale.x;
         let mut atlas = FontAtlasMut {
-            ptr: FontAtlasPtr { ptr: &mut *(*io).Fonts },
+            ptr: FontAtlasPtr {
+                ptr: &mut *(*io).Fonts,
+            },
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
@@ -431,8 +412,7 @@ impl CurrentContext<'_> {
         app: &mut A,
         pre_render: impl FnOnce(),
         render: impl FnOnce(&ImDrawData),
-    )
-    {
+    ) {
         let mut ui = Ui {
             data: std::ptr::null_mut(),
             generation: ImGui_GetFrameCount() as usize,
@@ -535,7 +515,8 @@ impl FontInfo {
     /// table. But if you call this function for a font, then it will not be added by default, you
     /// should add it yourself.
     pub fn add_char_range(mut self, range: std::ops::RangeInclusive<char>) -> Self {
-        self.char_ranges.push([ImWchar::from(*range.start()), ImWchar::from(*range.end())]);
+        self.char_ranges
+            .push([ImWchar::from(*range.start()), ImWchar::from(*range.end())]);
         self
     }
 }
@@ -604,8 +585,7 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
     let btxt = text.as_bytes();
     let start = btxt.as_ptr() as *const c_char;
     let end = unsafe { start.add(btxt.len()) };
-    ( start, end )
-
+    (start, end)
 }
 
 unsafe fn font_ptr(font: FontId) -> *mut ImFont {
@@ -627,7 +607,8 @@ unsafe fn no_op() {}
 /// Usually you will get a `&mut Ui` when you are expected to build a user interface,
 /// as in [`UiBuilder::do_ui`].
 pub struct Ui<A>
-    where A: ?Sized
+where
+    A: ?Sized,
 {
     data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
@@ -719,11 +700,15 @@ macro_rules! decl_builder_setter_ex {
 }
 
 macro_rules! decl_builder_setter {
-    ($name:ident: $ty:ty) => { decl_builder_setter_ex!{ $name: $ty = $name.into() } };
+    ($name:ident: $ty:ty) => {
+        decl_builder_setter_ex! { $name: $ty = $name.into() }
+    };
 }
 
 macro_rules! decl_builder_setter_vector2 {
-    ($name:ident: Vector2) => { decl_builder_setter_ex!{ $name: Vector2 = v2_to_im($name) } };
+    ($name:ident: Vector2) => {
+        decl_builder_setter_ex! { $name: Vector2 = v2_to_im($name) }
+    };
 }
 
 macro_rules! decl_builder_with_maybe_opt {
@@ -801,7 +786,7 @@ macro_rules! decl_builder_with_opt {
     };
 }
 
-decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
+decl_builder_with! {Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         size (ImVec2) (&size),
@@ -826,7 +811,7 @@ decl_builder_with!{Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
     }
 }
 
-decl_builder_with!{Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
+decl_builder_with! {Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         open (Option<&'v mut bool>) (optional_mut_bool(&mut open)),
@@ -848,7 +833,7 @@ decl_builder_with!{Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
     }
 }
 
-decl_builder!{ MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
+decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
     (
         label (S1::Temp) (label.as_ptr()),
         shortcut (Option<S2::Temp>) (optional_str(&shortcut)),
@@ -1176,7 +1161,9 @@ macro_rules! decl_builder_drag {
 }
 
 macro_rules! impl_float_format {
-    ($name:ident) => { impl_float_format!{$name "%g" "%.0f" "%.3f" "%.{}f"} };
+    ($name:ident) => {
+        impl_float_format! {$name "%g" "%.0f" "%.3f" "%.{}f"}
+    };
     ($name:ident $g:literal $f0:literal $f3:literal $f_n:literal) => {
         impl<S: IntoCStr> $name<'_, S> {
             pub fn display_format(mut self, format: FloatFormat) -> Self {
@@ -1192,20 +1179,20 @@ macro_rules! impl_float_format {
     };
 }
 
-decl_builder_drag!{ DragFloat drag_float_config ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_drag!{ DragFloat2 drag_float_2_config ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag!{ DragFloat3 drag_float_3_config ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag!{ DragFloat4 drag_float_4_config ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! { DragFloat drag_float_config ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_drag! { DragFloat2 drag_float_2_config ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! { DragFloat3 drag_float_3_config ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! { DragFloat4 drag_float_4_config ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
-impl_float_format!{ DragFloat }
-impl_float_format!{ DragFloat2 }
-impl_float_format!{ DragFloat3 }
-impl_float_format!{ DragFloat4 }
+impl_float_format! { DragFloat }
+impl_float_format! { DragFloat2 }
+impl_float_format! { DragFloat3 }
+impl_float_format! { DragFloat4 }
 
-decl_builder_drag!{ DragInt drag_int_config ImGui_DragInt 'v (i32) (&'v mut i32) (std::convert::identity)}
-decl_builder_drag!{ DragInt2 drag_int_2_config ImGui_DragInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
-decl_builder_drag!{ DragInt3 drag_int_3_config ImGui_DragInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
-decl_builder_drag!{ DragInt4 drag_int_4_config ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag! { DragInt drag_int_config ImGui_DragInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_drag! { DragInt2 drag_int_2_config ImGui_DragInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag! { DragInt3 drag_int_3_config ImGui_DragInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_drag! { DragInt4 drag_int_4_config ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
 macro_rules! decl_builder_slider {
     ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
@@ -1242,20 +1229,20 @@ macro_rules! decl_builder_slider {
     };
 }
 
-decl_builder_slider!{ SliderFloat slider_float_config ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_slider!{ SliderFloat2 slider_float_2_config ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderFloat3 slider_float_3_config ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderFloat4 slider_float_4_config ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! { SliderFloat slider_float_config ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_slider! { SliderFloat2 slider_float_2_config ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! { SliderFloat3 slider_float_3_config ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! { SliderFloat4 slider_float_4_config ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
-impl_float_format!{ SliderFloat }
-impl_float_format!{ SliderFloat2 }
-impl_float_format!{ SliderFloat3 }
-impl_float_format!{ SliderFloat4 }
+impl_float_format! { SliderFloat }
+impl_float_format! { SliderFloat2 }
+impl_float_format! { SliderFloat3 }
+impl_float_format! { SliderFloat4 }
 
-decl_builder_slider!{ SliderInt slider_int_config ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
-decl_builder_slider!{ SliderInt2 slider_int_2_config ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderInt3 slider_int_3_config ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider!{ SliderInt4 slider_int_4_config ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! { SliderInt slider_int_config ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_slider! { SliderInt2 slider_int_2_config ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! { SliderInt3 slider_int_3_config ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! { SliderInt4 slider_int_4_config ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
 decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
     (
@@ -1285,7 +1272,7 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
     }
 }
 
-impl_float_format!{ SliderAngle "%g deg" "%.0f deg" "%.3f deg" "%.{}f deg"}
+impl_float_format! { SliderAngle "%g deg" "%.0f deg" "%.3f deg" "%.{}f deg"}
 
 decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
     (
@@ -1375,7 +1362,7 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
 
 unsafe extern "C" fn input_text_callback(data: *mut ImGuiInputTextCallbackData) -> i32 {
     let data = &mut *data;
-    if data.EventFlag  == InputTextFlags::CallbackResize.bits() {
+    if data.EventFlag == InputTextFlags::CallbackResize.bits() {
         let this = &mut *(data.UserData as *mut String);
         let extra = (data.BufSize as usize).saturating_sub(this.len());
         this.reserve(extra);
@@ -1394,11 +1381,17 @@ fn text_pre_edit(text: &mut String) {
 unsafe fn text_post_edit(text: &mut String) {
     let buf = text.as_mut_vec();
     // Look for the ending NUL that must be there, instead of memchr or iter::position, leverage the standard CStr
-    let len = CStr::from_ptr(buf.as_ptr() as *const c_char).to_bytes().len();
+    let len = CStr::from_ptr(buf.as_ptr() as *const c_char)
+        .to_bytes()
+        .len();
     buf.set_len(len);
 }
 
-unsafe fn input_text_wrapper(label: *const c_char, text: &mut String, flags: InputTextFlags) -> bool {
+unsafe fn input_text_wrapper(
+    label: *const c_char,
+    text: &mut String,
+    flags: InputTextFlags,
+) -> bool {
     let flags = flags | InputTextFlags::CallbackResize;
 
     text_pre_edit(text);
@@ -1408,7 +1401,7 @@ unsafe fn input_text_wrapper(label: *const c_char, text: &mut String, flags: Inp
         text.capacity(),
         flags.bits(),
         Some(input_text_callback),
-        text as *mut String as *mut c_void
+        text as *mut String as *mut c_void,
     );
     text_post_edit(text);
     r
@@ -1434,7 +1427,12 @@ decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
     }
 }
 
-unsafe fn input_text_multiline_wrapper(label: *const c_char, text: &mut String, size: &ImVec2, flags: InputTextFlags) -> bool {
+unsafe fn input_text_multiline_wrapper(
+    label: *const c_char,
+    text: &mut String,
+    size: &ImVec2,
+    flags: InputTextFlags,
+) -> bool {
     let flags = flags | InputTextFlags::CallbackResize;
     text_pre_edit(text);
     let r = ImGui_InputTextMultiline(
@@ -1444,7 +1442,7 @@ unsafe fn input_text_multiline_wrapper(label: *const c_char, text: &mut String, 
         size,
         flags.bits(),
         Some(input_text_callback),
-        text as *mut String as *mut c_void
+        text as *mut String as *mut c_void,
     );
     text_post_edit(text);
     r
@@ -1473,7 +1471,12 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
     }
 }
 
-unsafe fn input_text_hint_wrapper(label: *const c_char, hint: *const c_char, text: &mut String, flags: InputTextFlags) -> bool {
+unsafe fn input_text_hint_wrapper(
+    label: *const c_char,
+    hint: *const c_char,
+    text: &mut String,
+    flags: InputTextFlags,
+) -> bool {
     let flags = flags | InputTextFlags::CallbackResize;
     text_pre_edit(text);
     let r = ImGui_InputTextWithHint(
@@ -1483,7 +1486,7 @@ unsafe fn input_text_hint_wrapper(label: *const c_char, hint: *const c_char, tex
         text.capacity(),
         flags.bits(),
         Some(input_text_callback),
-        text as *mut String as *mut c_void
+        text as *mut String as *mut c_void,
     );
     text_post_edit(text);
     r
@@ -1602,15 +1605,14 @@ macro_rules! decl_builder_input_f {
     };
 }
 
-decl_builder_input_f!{ InputFloat2 input_float_2_config ImGui_InputFloat2 2}
-decl_builder_input_f!{ InputFloat3 input_float_3_config ImGui_InputFloat3 3}
-decl_builder_input_f!{ InputFloat4 input_float_4_config ImGui_InputFloat4 4}
+decl_builder_input_f! { InputFloat2 input_float_2_config ImGui_InputFloat2 2}
+decl_builder_input_f! { InputFloat3 input_float_3_config ImGui_InputFloat3 3}
+decl_builder_input_f! { InputFloat4 input_float_4_config ImGui_InputFloat4 4}
 
-impl_float_format!{ InputFloat }
-impl_float_format!{ InputFloat2 }
-impl_float_format!{ InputFloat3 }
-impl_float_format!{ InputFloat4 }
-
+impl_float_format! { InputFloat }
+impl_float_format! { InputFloat2 }
+impl_float_format! { InputFloat3 }
+impl_float_format! { InputFloat4 }
 
 macro_rules! decl_builder_input_i {
     ($name:ident $func:ident $cfunc:ident $len:literal) => {
@@ -1637,11 +1639,11 @@ macro_rules! decl_builder_input_i {
     };
 }
 
-decl_builder_input_i!{ InputInt2 input_int_2_config ImGui_InputInt2 2}
-decl_builder_input_i!{ InputInt3 input_int_3_config ImGui_InputInt3 3}
-decl_builder_input_i!{ InputInt4 input_int_4_config ImGui_InputInt4 4}
+decl_builder_input_i! { InputInt2 input_int_2_config ImGui_InputInt2 2}
+decl_builder_input_i! { InputInt3 input_int_3_config ImGui_InputInt3 3}
+decl_builder_input_i! { InputInt4 input_int_4_config ImGui_InputInt4 4}
 
-decl_builder_with_opt!{Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
+decl_builder_with_opt! {Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         enabled (bool) (enabled),
@@ -1660,7 +1662,7 @@ decl_builder_with_opt!{Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
     }
 }
 
-decl_builder_with_opt!{CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: IntoCStr)
+decl_builder_with_opt! {CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         flags (TreeNodeFlags) (flags.bits()),
@@ -1684,7 +1686,10 @@ enum LabelId<'a, S: IntoCStr, H: Hashable> {
     LabelId(&'a str, H),
 }
 
-unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(label_id: LabelId<'_, S, H>, flags: TreeNodeFlags) -> bool {
+unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(
+    label_id: LabelId<'_, S, H>,
+    flags: TreeNodeFlags,
+) -> bool {
     match label_id {
         LabelId::Label(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
         LabelId::LabelId(lbl, id) => {
@@ -1695,7 +1700,7 @@ unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(label_id: LabelId<'_, S,
     }
 }
 
-decl_builder_with_opt!{TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: IntoCStr, H: Hashable)
+decl_builder_with_opt! {TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: IntoCStr, H: Hashable)
     (
         label (LabelId<'a, S, H>) (label),
         flags (TreeNodeFlags) (flags),
@@ -1721,7 +1726,7 @@ decl_builder_with_opt!{TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: Int
     }
 }
 
-decl_builder_with_opt!{Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
+decl_builder_with_opt! {Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         flags (WindowFlags) (flags.bits()),
@@ -1740,7 +1745,7 @@ decl_builder_with_opt!{Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
     }
 }
 
-decl_builder_with_opt!{PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: IntoCStr)
+decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         opened (Option<bool>) (optional_mut_bool(&mut opened.as_mut())),
@@ -1767,7 +1772,7 @@ decl_builder_with_opt!{PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: 
 
 macro_rules! decl_builder_popup_context {
     ($struct:ident $begin:ident $do_function:ident) => {
-        decl_builder_with_opt!{$struct, $begin, ImGui_EndPopup () (S: IntoCStr)
+        decl_builder_with_opt! {$struct, $begin, ImGui_EndPopup () (S: IntoCStr)
             (
                 str_id (Option<S::Temp>) (optional_str(&str_id)),
                 flags (PopupFlags) (flags.bits()),
@@ -1796,11 +1801,11 @@ macro_rules! decl_builder_popup_context {
     };
 }
 
-decl_builder_popup_context!{PopupContextItem ImGui_BeginPopupContextItem popup_context_item_config}
-decl_builder_popup_context!{PopupContextWindow ImGui_BeginPopupContextWindow popup_context_window_config}
-decl_builder_popup_context!{PopupContextVoid ImGui_BeginPopupContextVoid popup_context_void_config}
+decl_builder_popup_context! {PopupContextItem ImGui_BeginPopupContextItem popup_context_item_config}
+decl_builder_popup_context! {PopupContextWindow ImGui_BeginPopupContextWindow popup_context_window_config}
+decl_builder_popup_context! {PopupContextVoid ImGui_BeginPopupContextVoid popup_context_void_config}
 
-decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr, S2: IntoCStr)
+decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr, S2: IntoCStr)
     (
         label (S1::Temp) (label.as_ptr()),
         preview_value (Option<S2::Temp>) (optional_str(&preview_value)),
@@ -1857,7 +1862,7 @@ decl_builder_with_opt!{Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr,
     }
 }
 
-decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: IntoCStr)
+decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         size (ImVec2) (&size),
@@ -1910,7 +1915,7 @@ decl_builder_with_opt!{ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Into
     }
 }
 
-decl_builder_with_opt!{TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCStr)
+decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCStr)
     (
         std_id (S::Temp) (std_id.as_ptr()),
         flags (TabBarFlags) (flags.bits()),
@@ -1929,8 +1934,7 @@ decl_builder_with_opt!{TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCSt
     }
 }
 
-
-decl_builder_with_opt!{TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: IntoCStr)
+decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: IntoCStr)
     (
         std_id (S::Temp) (std_id.as_ptr()),
         opened (Option<&'o mut bool>) (optional_mut_bool(&mut opened)),
@@ -2013,21 +2017,21 @@ impl<A> Ui<A> {
     }
     pub fn get_clipboard_text(&self) -> String {
         unsafe {
-            CStr::from_ptr(ImGui_GetClipboardText()).to_string_lossy().into_owned()
+            CStr::from_ptr(ImGui_GetClipboardText())
+                .to_string_lossy()
+                .into_owned()
         }
     }
     pub fn set_clipboard_text(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe {
-            ImGui_SetClipboardText(text.as_ptr())
-        }
+        unsafe { ImGui_SetClipboardText(text.as_ptr()) }
     }
-    pub fn set_next_window_size_constraints_callback(&self,
+    pub fn set_next_window_size_constraints_callback(
+        &self,
         size_min: Vector2,
         size_max: Vector2,
         mut cb: impl FnMut(SizeCallbackData<'_>) + 'static,
-    )
-    {
+    ) {
         unsafe {
             // Beware! This callback is called while the `do_ui()` is still running, so the argument for the
             // first callback is null!
@@ -2040,11 +2044,7 @@ impl<A> Ui<A> {
             );
         }
     }
-    pub fn set_next_window_size_constraints(&self,
-        size_min: Vector2,
-        size_max: Vector2,
-    )
-    {
+    pub fn set_next_window_size_constraints(&self, size_min: Vector2, size_max: Vector2) {
         unsafe {
             ImGui_SetNextWindowSizeConstraints(
                 &v2_to_im(size_min),
@@ -2065,22 +2065,20 @@ impl<A> Ui<A> {
         }
     }
     pub fn set_keyboard_focus_here(offset: i32) {
-        unsafe {
-            ImGui_SetKeyboardFocusHere(offset)
-        }
+        unsafe { ImGui_SetKeyboardFocusHere(offset) }
     }
 
-    with_begin_end!{
+    with_begin_end! {
         /// See `BeginGroup`, `EndGroup`.
         group ImGui_BeginGroup ImGui_EndGroup ()
     }
-    with_begin_end!{
+    with_begin_end! {
         /// See `BeginDisabled`, `EndDisabled`.
         disabled ImGui_BeginDisabled ImGui_EndDisabled (
             disabled (bool) (disabled),
         )
     }
-    with_begin_end!{
+    with_begin_end! {
         /// See `PushClipRect`, `PopClipRect`.
         clip_rect ImGui_PushClipRect ImGui_PopClipRect (
             clip_rect_min (Vector2) (&v2_to_im(clip_rect_min)),
@@ -2089,19 +2087,19 @@ impl<A> Ui<A> {
         )
     }
 
-    with_begin_end_opt!{
+    with_begin_end_opt! {
         /// See `BeginMainMenuBar`, `EndMainMenuBar`.
         main_menu_bar ImGui_BeginMainMenuBar ImGui_EndMainMenuBar ()
     }
-    with_begin_end_opt!{
+    with_begin_end_opt! {
         /// See `BeginMenuBar`, `EndMenuBar`.
         menu_bar ImGui_BeginMenuBar ImGui_EndMenuBar ()
     }
-    with_begin_end_opt!{
+    with_begin_end_opt! {
         /// See `BeginTooltip`, `EndTooltip`.
         tooltip ImGui_BeginTooltip ImGui_EndTooltip ()
     }
-    with_begin_end_opt!{
+    with_begin_end_opt! {
         /// See `BeginItemTooltip`, `EndTooltip`. There is not `EndItemTooltip`.
         item_tooltip ImGui_BeginItemTooltip ImGui_EndTooltip ()
     }
@@ -2136,13 +2134,13 @@ impl<A> Ui<A> {
 
     pub fn set_next_window_collapsed(&self, collapsed: bool, cond: Cond) {
         unsafe {
-           ImGui_SetNextWindowCollapsed(collapsed, cond.bits());
+            ImGui_SetNextWindowCollapsed(collapsed, cond.bits());
         }
     }
 
     pub fn set_next_window_focus(&self) {
         unsafe {
-           ImGui_SetNextWindowFocus();
+            ImGui_SetNextWindowFocus();
         }
     }
 
@@ -2160,28 +2158,19 @@ impl<A> Ui<A> {
     pub fn window_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
-            WindowDrawList {
-                ui: self,
-                ptr,
-            }
+            WindowDrawList { ui: self, ptr }
         }
     }
     pub fn foreground_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList();
-            WindowDrawList {
-                ui: self,
-                ptr,
-            }
+            WindowDrawList { ui: self, ptr }
         }
     }
     pub fn background_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetBackgroundDrawList();
-            WindowDrawList {
-                ui: self,
-                ptr,
-            }
+            WindowDrawList { ui: self, ptr }
         }
     }
     pub fn text(&self, text: &str) {
@@ -2189,38 +2178,27 @@ impl<A> Ui<A> {
             let (start, end) = text_ptrs(text);
             ImGui_TextUnformatted(start, end);
         }
-
     }
     pub fn text_colored(&self, color: Color, text: impl IntoCStr) {
         let text = text.into();
-        unsafe {
-            ImGui_TextColored(&color.into(), cstr!("%s").as_ptr(), text.as_ptr())
-        }
+        unsafe { ImGui_TextColored(&color.into(), cstr!("%s").as_ptr(), text.as_ptr()) }
     }
     pub fn text_disabled(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe {
-            ImGui_TextDisabled(cstr!("%s").as_ptr(), text.as_ptr())
-        }
+        unsafe { ImGui_TextDisabled(cstr!("%s").as_ptr(), text.as_ptr()) }
     }
     pub fn text_wrapped(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe {
-            ImGui_TextWrapped(cstr!("%s").as_ptr(), text.as_ptr())
-        }
+        unsafe { ImGui_TextWrapped(cstr!("%s").as_ptr(), text.as_ptr()) }
     }
     pub fn label_text(&self, label: impl IntoCStr, text: impl IntoCStr) {
         let label = label.into();
         let text = text.into();
-        unsafe {
-            ImGui_LabelText(label.as_ptr(), cstr!("%s").as_ptr(), text.as_ptr())
-        }
+        unsafe { ImGui_LabelText(label.as_ptr(), cstr!("%s").as_ptr(), text.as_ptr()) }
     }
     pub fn bullet_text(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe {
-            ImGui_BulletText(cstr!("%s").as_ptr(), text.as_ptr())
-        }
+        unsafe { ImGui_BulletText(cstr!("%s").as_ptr(), text.as_ptr()) }
     }
     pub fn bullet(&self) {
         unsafe {
@@ -2248,161 +2226,101 @@ impl<A> Ui<A> {
         self.is_item_hovered_ex(HoveredFlags::None)
     }
     pub fn is_item_hovered_ex(&self, flags: HoveredFlags) -> bool {
-        unsafe {
-            ImGui_IsItemHovered(flags.bits())
-        }
+        unsafe { ImGui_IsItemHovered(flags.bits()) }
     }
     pub fn is_item_active(&self) -> bool {
-        unsafe {
-            ImGui_IsItemActive()
-        }
+        unsafe { ImGui_IsItemActive() }
     }
     pub fn is_item_focused(&self) -> bool {
-        unsafe {
-            ImGui_IsItemFocused()
-        }
+        unsafe { ImGui_IsItemFocused() }
     }
     pub fn is_item_clicked(&self, flags: MouseButton) -> bool {
-        unsafe {
-            ImGui_IsItemClicked(flags.bits())
-        }
+        unsafe { ImGui_IsItemClicked(flags.bits()) }
     }
     pub fn is_item_visible(&self) -> bool {
-        unsafe {
-            ImGui_IsItemVisible()
-        }
+        unsafe { ImGui_IsItemVisible() }
     }
     pub fn is_item_edited(&self) -> bool {
-        unsafe {
-            ImGui_IsItemEdited()
-        }
+        unsafe { ImGui_IsItemEdited() }
     }
     pub fn is_item_activated(&self) -> bool {
-        unsafe {
-            ImGui_IsItemActivated()
-        }
+        unsafe { ImGui_IsItemActivated() }
     }
     pub fn is_item_deactivated(&self) -> bool {
-        unsafe {
-            ImGui_IsItemDeactivated()
-        }
+        unsafe { ImGui_IsItemDeactivated() }
     }
     pub fn is_item_deactivated_after_edit(&self) -> bool {
-        unsafe {
-            ImGui_IsItemDeactivatedAfterEdit()
-        }
+        unsafe { ImGui_IsItemDeactivatedAfterEdit() }
     }
     pub fn is_item_toggled_open(&self) -> bool {
-        unsafe {
-            ImGui_IsItemToggledOpen()
-        }
+        unsafe { ImGui_IsItemToggledOpen() }
     }
     pub fn is_any_item_hovered(&self) -> bool {
-        unsafe {
-            ImGui_IsAnyItemHovered()
-        }
+        unsafe { ImGui_IsAnyItemHovered() }
     }
     pub fn is_any_item_active(&self) -> bool {
-        unsafe {
-            ImGui_IsAnyItemActive()
-        }
+        unsafe { ImGui_IsAnyItemActive() }
     }
     pub fn is_any_item_focused(&self) -> bool {
-        unsafe {
-            ImGui_IsAnyItemFocused()
-        }
+        unsafe { ImGui_IsAnyItemFocused() }
     }
     pub fn is_window_collapsed(&self) -> bool {
-        unsafe {
-            ImGui_IsWindowCollapsed()
-        }
+        unsafe { ImGui_IsWindowCollapsed() }
     }
     pub fn is_window_focused(&self, flags: FocusedFlags) -> bool {
-        unsafe {
-            ImGui_IsWindowFocused(flags.bits())
-        }
+        unsafe { ImGui_IsWindowFocused(flags.bits()) }
     }
     pub fn is_window_hovered(&self, flags: FocusedFlags) -> bool {
-        unsafe {
-            ImGui_IsWindowHovered(flags.bits())
-        }
+        unsafe { ImGui_IsWindowHovered(flags.bits()) }
     }
     pub fn get_item_id(&self) -> ImGuiID {
-        unsafe {
-            ImGui_GetItemID()
-        }
+        unsafe { ImGui_GetItemID() }
     }
     pub fn get_id(&self, id: impl Hashable) -> ImGuiID {
-        unsafe {
-            id.get_id()
-        }
+        unsafe { id.get_id() }
     }
     pub fn get_item_rect_min(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetItemRectMin())
-        }
+        unsafe { im_to_v2(ImGui_GetItemRectMin()) }
     }
     pub fn get_item_rect_max(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetItemRectMax())
-        }
+        unsafe { im_to_v2(ImGui_GetItemRectMax()) }
     }
     pub fn get_item_rect_size(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetItemRectSize())
-        }
+        unsafe { im_to_v2(ImGui_GetItemRectSize()) }
     }
     pub fn get_main_viewport(&self) -> Viewport<'_> {
         unsafe {
             Viewport {
-                ptr: &*ImGui_GetMainViewport()
+                ptr: &*ImGui_GetMainViewport(),
             }
         }
     }
     pub fn get_content_region_avail(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetContentRegionAvail())
-        }
+        unsafe { im_to_v2(ImGui_GetContentRegionAvail()) }
     }
     pub fn get_content_region_max(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetContentRegionMax())
-        }
+        unsafe { im_to_v2(ImGui_GetContentRegionMax()) }
     }
     pub fn get_window_content_region_min(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetWindowContentRegionMin())
-        }
+        unsafe { im_to_v2(ImGui_GetWindowContentRegionMin()) }
     }
     pub fn get_window_content_region_max(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetWindowContentRegionMax())
-        }
+        unsafe { im_to_v2(ImGui_GetWindowContentRegionMax()) }
     }
     pub fn get_window_pos(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetWindowPos())
-        }
+        unsafe { im_to_v2(ImGui_GetWindowPos()) }
     }
     pub fn get_window_width(&self) -> f32 {
-        unsafe {
-            ImGui_GetWindowWidth()
-        }
+        unsafe { ImGui_GetWindowWidth() }
     }
     pub fn get_window_height(&self) -> f32 {
-        unsafe {
-            ImGui_GetWindowHeight()
-        }
+        unsafe { ImGui_GetWindowHeight() }
     }
     pub fn get_scroll_x(&self) -> f32 {
-        unsafe {
-            ImGui_GetScrollX()
-        }
+        unsafe { ImGui_GetScrollX() }
     }
     pub fn get_scroll_y(&self) -> f32 {
-        unsafe {
-            ImGui_GetScrollY()
-        }
+        unsafe { ImGui_GetScrollY() }
     }
     pub fn set_scroll_x(&self, scroll_x: f32) {
         unsafe {
@@ -2415,14 +2333,10 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_scroll_max_x(&self) -> f32 {
-        unsafe {
-            ImGui_GetScrollMaxX()
-        }
+        unsafe { ImGui_GetScrollMaxX() }
     }
     pub fn get_scroll_max_y(&self) -> f32 {
-        unsafe {
-            ImGui_GetScrollMaxY()
-        }
+        unsafe { ImGui_GetScrollMaxY() }
     }
     pub fn set_scroll_here_x(&self, center_x_ratio: f32) {
         unsafe {
@@ -2500,19 +2414,13 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_cursor_pos(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetCursorPos())
-        }
+        unsafe { im_to_v2(ImGui_GetCursorPos()) }
     }
     pub fn get_cursor_pos_x(&self) -> f32 {
-        unsafe {
-            ImGui_GetCursorPosX()
-        }
+        unsafe { ImGui_GetCursorPosX() }
     }
     pub fn get_cursor_pos_y(&self) -> f32 {
-        unsafe {
-            ImGui_GetCursorPosY()
-        }
+        unsafe { ImGui_GetCursorPosY() }
     }
     pub fn set_cursor_pos(&self, local_pos: Vector2) {
         unsafe {
@@ -2530,14 +2438,10 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_cursor_start_pos(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetCursorStartPos())
-        }
+        unsafe { im_to_v2(ImGui_GetCursorStartPos()) }
     }
     pub fn get_cursor_screen_pos(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetCursorScreenPos())
-        }
+        unsafe { im_to_v2(ImGui_GetCursorScreenPos()) }
     }
     pub fn set_cursor_screen_pos(&self, pos: Vector2) {
         unsafe {
@@ -2550,49 +2454,46 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_text_line_height(&self) -> f32 {
-        unsafe {
-            ImGui_GetTextLineHeight()
-        }
+        unsafe { ImGui_GetTextLineHeight() }
     }
     pub fn get_text_line_height_with_spacing(&self) -> f32 {
-        unsafe {
-            ImGui_GetTextLineHeightWithSpacing()
-        }
+        unsafe { ImGui_GetTextLineHeightWithSpacing() }
     }
     pub fn get_frame_height(&self) -> f32 {
-        unsafe {
-            ImGui_GetFrameHeight()
-        }
+        unsafe { ImGui_GetFrameHeight() }
     }
     pub fn get_frame_height_with_spacing(&self) -> f32 {
-        unsafe {
-            ImGui_GetFrameHeightWithSpacing()
-        }
+        unsafe { ImGui_GetFrameHeightWithSpacing() }
     }
     pub fn calc_item_width(&self) -> f32 {
-        unsafe {
-            ImGui_CalcItemWidth()
-        }
+        unsafe { ImGui_CalcItemWidth() }
     }
     pub fn calc_text_size(&self, text: &str) -> Vector2 {
         self.calc_text_size_ex(text, false, -1.0)
     }
-    pub fn calc_text_size_ex(&self, text: &str, hide_text_after_double_hash: bool, wrap_width: f32) -> Vector2 {
+    pub fn calc_text_size_ex(
+        &self,
+        text: &str,
+        hide_text_after_double_hash: bool,
+        wrap_width: f32,
+    ) -> Vector2 {
         unsafe {
             let (start, end) = text_ptrs(text);
-            im_to_v2(ImGui_CalcTextSize(start, end, hide_text_after_double_hash, wrap_width))
+            im_to_v2(ImGui_CalcTextSize(
+                start,
+                end,
+                hide_text_after_double_hash,
+                wrap_width,
+            ))
         }
     }
     pub fn set_color_edit_options(&self, flags: ColorEditFlags) {
         unsafe {
             ImGui_SetColorEditOptions(flags.bits());
         }
-
     }
     pub fn is_key_down(&self, key: Key) -> bool {
-        unsafe {
-            ImGui_IsKeyDown(ImGuiKey(key.bits()))
-        }
+        unsafe { ImGui_IsKeyDown(ImGuiKey(key.bits())) }
     }
     pub fn is_key_pressed(&self, key: Key) -> bool {
         unsafe {
@@ -2605,31 +2506,21 @@ impl<A> Ui<A> {
         }
     }
     pub fn is_key_released(&self, key: Key) -> bool {
-        unsafe {
-            ImGui_IsKeyReleased(ImGuiKey(key.bits()))
-        }
+        unsafe { ImGui_IsKeyReleased(ImGuiKey(key.bits())) }
     }
     pub fn get_key_pressed_amount(&self, key: Key, repeat_delay: f32, rate: f32) -> i32 {
-        unsafe {
-            ImGui_GetKeyPressedAmount(ImGuiKey(key.bits()), repeat_delay, rate)
-        }
+        unsafe { ImGui_GetKeyPressedAmount(ImGuiKey(key.bits()), repeat_delay, rate) }
     }
     pub fn get_font_tex_uv_white_pixel(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetFontTexUvWhitePixel())
-        }
+        unsafe { im_to_v2(ImGui_GetFontTexUvWhitePixel()) }
     }
     //GetKeyName
     //SetNextFrameWantCaptureKeyboard
     pub fn get_font_size(&self) -> f32 {
-        unsafe {
-            ImGui_GetFontSize()
-        }
+        unsafe { ImGui_GetFontSize() }
     }
     pub fn is_mouse_down(&self, button: MouseButton) -> bool {
-        unsafe {
-            ImGui_IsMouseDown(button.bits())
-        }
+        unsafe { ImGui_IsMouseDown(button.bits()) }
     }
     pub fn is_mouse_clicked(&self, button: MouseButton) -> bool {
         unsafe {
@@ -2642,29 +2533,19 @@ impl<A> Ui<A> {
         }
     }
     pub fn is_mouse_released(&self, button: MouseButton) -> bool {
-        unsafe {
-            ImGui_IsMouseReleased(button.bits())
-        }
+        unsafe { ImGui_IsMouseReleased(button.bits()) }
     }
     pub fn is_mouse_double_clicked(&self, button: MouseButton) -> bool {
-        unsafe {
-            ImGui_IsMouseDoubleClicked(button.bits())
-        }
+        unsafe { ImGui_IsMouseDoubleClicked(button.bits()) }
     }
     pub fn get_mouse_clicked_count(&self, button: MouseButton) -> i32 {
-        unsafe {
-            ImGui_GetMouseClickedCount(button.bits())
-        }
+        unsafe { ImGui_GetMouseClickedCount(button.bits()) }
     }
     pub fn is_rect_visible_size(&self, size: Vector2) -> bool {
-        unsafe {
-            ImGui_IsRectVisible(&v2_to_im(size))
-        }
+        unsafe { ImGui_IsRectVisible(&v2_to_im(size)) }
     }
     pub fn is_rect_visible(&self, rect_min: Vector2, rect_max: Vector2) -> bool {
-        unsafe {
-            ImGui_IsRectVisible1(&v2_to_im(rect_min), &v2_to_im(rect_max))
-        }
+        unsafe { ImGui_IsRectVisible1(&v2_to_im(rect_min), &v2_to_im(rect_max)) }
     }
     /*
     pub fn is_mouse_hovering_rect(&self) -> bool {
@@ -2678,19 +2559,13 @@ impl<A> Ui<A> {
         }
     }*/
     pub fn is_any_mouse_down(&self) -> bool {
-        unsafe {
-            ImGui_IsAnyMouseDown()
-        }
+        unsafe { ImGui_IsAnyMouseDown() }
     }
     pub fn get_mouse_pos(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetMousePos())
-        }
+        unsafe { im_to_v2(ImGui_GetMousePos()) }
     }
     pub fn get_mouse_pos_on_opening_current_popup(&self) -> Vector2 {
-        unsafe {
-            im_to_v2(ImGui_GetMousePosOnOpeningCurrentPopup())
-        }
+        unsafe { im_to_v2(ImGui_GetMousePosOnOpeningCurrentPopup()) }
     }
     pub fn is_mouse_dragging(&self, button: MouseButton) -> bool {
         unsafe {
@@ -2699,7 +2574,10 @@ impl<A> Ui<A> {
     }
     pub fn get_mouse_drag_delta(&self, button: MouseButton) -> Vector2 {
         unsafe {
-            im_to_v2(ImGui_GetMouseDragDelta(button.bits(), /*lock_threshold*/ -1.0))
+            im_to_v2(ImGui_GetMouseDragDelta(
+                button.bits(),
+                /*lock_threshold*/ -1.0,
+            ))
         }
     }
     pub fn reset_mouse_drag_delta(&self, button: MouseButton) {
@@ -2708,10 +2586,7 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_mouse_cursor(&self) -> MouseCursor {
-        unsafe {
-            MouseCursor::from_bits(ImGui_GetMouseCursor())
-                .unwrap_or(MouseCursor::None)
-        }
+        unsafe { MouseCursor::from_bits(ImGui_GetMouseCursor()).unwrap_or(MouseCursor::None) }
     }
     pub fn set_mouse_cursor(&self, cursor_type: MouseCursor) {
         unsafe {
@@ -2719,14 +2594,10 @@ impl<A> Ui<A> {
         }
     }
     pub fn get_time(&self) -> f64 {
-        unsafe {
-            ImGui_GetTime()
-        }
+        unsafe { ImGui_GetTime() }
     }
     pub fn get_frame_count(&self) -> i32 {
-        unsafe {
-            ImGui_GetFrameCount()
-        }
+        unsafe { ImGui_GetFrameCount() }
     }
     pub fn is_popup_open(&self, str_id: Option<&str>) -> bool {
         self.is_popup_open_ex(str_id, PopupFlags::None)
@@ -2738,11 +2609,9 @@ impl<A> Ui<A> {
                 temp = IntoCStr::into(s);
                 temp.as_ptr()
             }
-            None => null()
+            None => null(),
         };
-        unsafe {
-            ImGui_IsPopupOpen(str_id, flags.bits())
-        }
+        unsafe { ImGui_IsPopupOpen(str_id, flags.bits()) }
     }
     pub fn open_popup(&self, str_id: impl IntoCStr) {
         self.open_popup_ex(str_id, PopupFlags::None)
@@ -2759,54 +2628,73 @@ impl<A> Ui<A> {
         }
     }
     pub fn is_window_appearing(&self) -> bool {
-        unsafe {
-            ImGui_IsWindowAppearing()
-        }
+        unsafe { ImGui_IsWindowAppearing() }
     }
 
     pub fn io(&self) -> &ImGuiIO {
-        unsafe {
-            &*ImGui_GetIO()
-        }
+        unsafe { &*ImGui_GetIO() }
     }
     pub fn font_atlas(&self) -> FontAtlas<'_> {
         unsafe {
             let io = &*ImGui_GetIO();
             FontAtlas {
-                ptr: FontAtlasPtr { ptr: &mut *io.Fonts },
+                ptr: FontAtlasPtr {
+                    ptr: &mut *io.Fonts,
+                },
             }
         }
     }
 
-    pub fn with_always_drag_drop_source<R>(&self, flags: DragDropSourceFlags, f: impl FnOnce(Option<DragDropPayloadSetter<'_>>) -> R) -> R {
+    pub fn with_always_drag_drop_source<R>(
+        &self,
+        flags: DragDropSourceFlags,
+        f: impl FnOnce(Option<DragDropPayloadSetter<'_>>) -> R,
+    ) -> R {
         if !unsafe { ImGui_BeginDragDropSource(flags.bits()) } {
             return f(None);
         }
-        let payload = DragDropPayloadSetter { _dummy: PhantomData };
+        let payload = DragDropPayloadSetter {
+            _dummy: PhantomData,
+        };
         let r = f(Some(payload));
         unsafe { ImGui_EndDragDropSource() }
         r
     }
-    pub fn with_drag_drop_source<R>(&self, flags: DragDropSourceFlags, f: impl FnOnce(DragDropPayloadSetter<'_>) -> R) -> Option<R> {
-        self.with_always_drag_drop_source(flags, move |r| { r.map(f) })
+    pub fn with_drag_drop_source<R>(
+        &self,
+        flags: DragDropSourceFlags,
+        f: impl FnOnce(DragDropPayloadSetter<'_>) -> R,
+    ) -> Option<R> {
+        self.with_always_drag_drop_source(flags, move |r| r.map(f))
     }
-    pub fn with_always_drag_drop_target<R>(&self, f: impl FnOnce(Option<DragDropPayloadGetter<'_>>) -> R) -> R {
+    pub fn with_always_drag_drop_target<R>(
+        &self,
+        f: impl FnOnce(Option<DragDropPayloadGetter<'_>>) -> R,
+    ) -> R {
         if !unsafe { ImGui_BeginDragDropTarget() } {
             return f(None);
         }
-        let payload = DragDropPayloadGetter { _dummy: PhantomData };
+        let payload = DragDropPayloadGetter {
+            _dummy: PhantomData,
+        };
         let r = f(Some(payload));
         unsafe { ImGui_EndDragDropTarget() }
         r
     }
-    pub fn with_drag_drop_target<R>(&self, f: impl FnOnce(DragDropPayloadGetter<'_>) -> R) -> Option<R> {
-        self.with_always_drag_drop_target(move |r| { r.map(f) })
+    pub fn with_drag_drop_target<R>(
+        &self,
+        f: impl FnOnce(DragDropPayloadGetter<'_>) -> R,
+    ) -> Option<R> {
+        self.with_always_drag_drop_target(move |r| r.map(f))
     }
 
-    pub fn with_list_clipper(&self, items_count: usize, items_height: f32, included_ranges: &[std::ops::Range<usize>],
-        mut f: impl FnMut(usize)
-        )
-    {
+    pub fn with_list_clipper(
+        &self,
+        items_count: usize,
+        items_height: f32,
+        included_ranges: &[std::ops::Range<usize>],
+        mut f: impl FnMut(usize),
+    ) {
         unsafe {
             let mut clip = ImGuiListClipper::new();
             clip.Begin(items_count as i32, items_height);
@@ -2814,7 +2702,7 @@ impl<A> Ui<A> {
                 clip.IncludeItemsByIndex(r.start as i32, r.end as i32);
             }
             while clip.Step() {
-                for i in clip.DisplayStart .. clip.DisplayEnd {
+                for i in clip.DisplayStart..clip.DisplayEnd {
                     f(i as usize);
                 }
             }
@@ -2895,18 +2783,21 @@ impl std::fmt::Debug for FontGlyph<'_> {
     }
 }
 
-
-#[cfg(feature="docking")]
+#[cfg(feature = "docking")]
 impl<A> Ui<A> {
-    pub fn dock_space(&self, id: ImGuiID, size: Vector2, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
-        unsafe {
-            ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null())
-        }
+    pub fn dock_space(
+        &self,
+        id: ImGuiID,
+        size: Vector2,
+        flags: DockNodeFlags, /*window_class: &WindowClass*/
+    ) -> ImGuiID {
+        unsafe { ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null()) }
     }
-    pub fn dock_space_over_viewport(&self, flags: DockNodeFlags /*window_class: &WindowClass*/) -> ImGuiID {
-        unsafe {
-            ImGui_DockSpaceOverViewport(std::ptr::null(), flags.bits(), std::ptr::null())
-        }
+    pub fn dock_space_over_viewport(
+        &self,
+        flags: DockNodeFlags, /*window_class: &WindowClass*/
+    ) -> ImGuiID {
+        unsafe { ImGui_DockSpaceOverViewport(std::ptr::null(), flags.bits(), std::ptr::null()) }
     }
     pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
         unsafe {
@@ -2915,17 +2806,12 @@ impl<A> Ui<A> {
     }
     //SetNextWindowClass(const ImGuiWindowClass* window_class)
     pub fn get_window_doc_id(&self) -> ImGuiID {
-        unsafe {
-            ImGui_GetWindowDockID()
-        }
+        unsafe { ImGui_GetWindowDockID() }
     }
     pub fn is_window_docked(&self) -> bool {
-        unsafe {
-            ImGui_IsWindowDocked()
-        }
+        unsafe { ImGui_IsWindowDocked() }
     }
 }
-
 
 /// Identifier of a registered font. Only the values obtained from the latest call to [`UiBuilder::build_custom_atlas`] are actually valid.
 ///
@@ -3020,7 +2906,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
                         bytes.len() as i32,
                         font.size * self.scale,
                         &fc,
-                        glyph_ranges
+                        glyph_ranges,
                     );
                 }
                 TtfData::DefaultFont => {
@@ -3038,15 +2924,22 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         size: impl Into<mint::Vector2<u32>>,
         advance_x: f32,
         offset: Vector2,
-        draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static
-    ) -> CustomRectIndex
-    {
+        draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static,
+    ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
             let io = ImGui_GetIO();
 
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph((*io).Fonts, font, id as ImWchar, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap(), advance_x, &v2_to_im(offset));
+            let idx = ImFontAtlas_AddCustomRectFontGlyph(
+                (*io).Fonts,
+                font,
+                id as ImWchar,
+                i32::try_from(size.x).unwrap(),
+                i32::try_from(size.y).unwrap(),
+                advance_x,
+                &v2_to_im(offset),
+            );
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -3057,14 +2950,17 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
     pub fn add_custom_rect_regular(
         &mut self,
         size: impl Into<mint::Vector2<u32>>,
-        draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static
-    ) -> CustomRectIndex
-    {
+        draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static,
+    ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
             let io = ImGui_GetIO();
 
-            let idx = ImFontAtlas_AddCustomRectRegular((*io).Fonts, i32::try_from(size.x).unwrap(), i32::try_from(size.y).unwrap());
+            let idx = ImFontAtlas_AddCustomRectRegular(
+                (*io).Fonts,
+                i32::try_from(size.x).unwrap(),
+                i32::try_from(size.y).unwrap(),
+            );
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
@@ -3083,18 +2979,35 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
         let io;
         unsafe {
             io = ImGui_GetIO();
-            ImFontAtlas_GetTexDataAsRGBA32((*io).Fonts, &mut tex_data, &mut tex_width, &mut tex_height, &mut pixel_size);
+            ImFontAtlas_GetTexDataAsRGBA32(
+                (*io).Fonts,
+                &mut tex_data,
+                &mut tex_width,
+                &mut tex_height,
+                &mut pixel_size,
+            );
         }
         let pixel_size = pixel_size as usize;
         assert!(pixel_size == 4);
-        let tex_data = unsafe { std::slice::from_raw_parts_mut(tex_data, tex_width as usize * tex_height as usize * pixel_size) };
-        let mut pixel_image = PixelImage::from_raw(tex_width as u32, tex_height as u32, tex_data).unwrap();
+        let tex_data = unsafe {
+            std::slice::from_raw_parts_mut(
+                tex_data,
+                tex_width as usize * tex_height as usize * pixel_size,
+            )
+        };
+        let mut pixel_image =
+            PixelImage::from_raw(tex_width as u32, tex_height as u32, tex_data).unwrap();
 
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
                 unsafe {
                     let rect = &(*(*io).Fonts).CustomRects[idx];
-                    let mut sub_image = pixel_image.sub_image(rect.X as u32, rect.Y as u32, rect.Width as u32, rect.Height as u32);
+                    let mut sub_image = pixel_image.sub_image(
+                        rect.X as u32,
+                        rect.Y as u32,
+                        rect.Width as u32,
+                        rect.Height as u32,
+                    );
                     f(app, &mut sub_image);
                 }
             }
@@ -3155,9 +3068,7 @@ impl SizeCallbackData<'_> {
 unsafe extern "C" fn call_size_callback<A>(ptr: *mut ImGuiSizeCallbackData) {
     let ptr = &mut *ptr;
     let id = ptr.UserData as usize;
-    let data = SizeCallbackData {
-        ptr,
-    };
+    let data = SizeCallbackData { ptr };
     Ui::<A>::run_callback(id, data);
 }
 
@@ -3169,62 +3080,204 @@ pub struct WindowDrawList<'ui, A> {
 impl<'ui, A> WindowDrawList<'ui, A> {
     pub fn add_line(&self, p1: Vector2, p2: Vector2, color: Color, thickness: f32) {
         unsafe {
-            ImDrawList_AddLine(self.ptr, &v2_to_im(p1), &v2_to_im(p2), color.as_u32(), thickness);
+            ImDrawList_AddLine(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                color.as_u32(),
+                thickness,
+            );
         }
     }
-    pub fn add_rect(&self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags, thickness: f32) {
+    pub fn add_rect(
+        &self,
+        p_min: Vector2,
+        p_max: Vector2,
+        color: Color,
+        rounding: f32,
+        flags: DrawFlags,
+        thickness: f32,
+    ) {
         unsafe {
-            ImDrawList_AddRect(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), color.as_u32(), rounding, flags.bits(), thickness);
+            ImDrawList_AddRect(
+                self.ptr,
+                &v2_to_im(p_min),
+                &v2_to_im(p_max),
+                color.as_u32(),
+                rounding,
+                flags.bits(),
+                thickness,
+            );
         }
     }
-    pub fn add_rect_filled(&self, p_min: Vector2, p_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_rect_filled(
+        &self,
+        p_min: Vector2,
+        p_max: Vector2,
+        color: Color,
+        rounding: f32,
+        flags: DrawFlags,
+    ) {
         unsafe {
-            ImDrawList_AddRectFilled(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), color.as_u32(), rounding, flags.bits());
+            ImDrawList_AddRectFilled(
+                self.ptr,
+                &v2_to_im(p_min),
+                &v2_to_im(p_max),
+                color.as_u32(),
+                rounding,
+                flags.bits(),
+            );
         }
     }
-    pub fn add_rect_filled_multicolor(&self, p_min: Vector2, p_max: Vector2, col_upr_left: Color, col_upr_right: Color, col_bot_right: Color, col_bot_left: Color) {
+    pub fn add_rect_filled_multicolor(
+        &self,
+        p_min: Vector2,
+        p_max: Vector2,
+        col_upr_left: Color,
+        col_upr_right: Color,
+        col_bot_right: Color,
+        col_bot_left: Color,
+    ) {
         unsafe {
-            ImDrawList_AddRectFilledMultiColor(self.ptr, &v2_to_im(p_min), &v2_to_im(p_max), col_upr_left.as_u32(), col_upr_right.as_u32(), col_bot_right.as_u32(), col_bot_left.as_u32());
+            ImDrawList_AddRectFilledMultiColor(
+                self.ptr,
+                &v2_to_im(p_min),
+                &v2_to_im(p_max),
+                col_upr_left.as_u32(),
+                col_upr_right.as_u32(),
+                col_bot_right.as_u32(),
+                col_bot_left.as_u32(),
+            );
         }
     }
-    pub fn add_quad(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32) {
+    pub fn add_quad(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        p4: Vector2,
+        color: Color,
+        thickness: f32,
+    ) {
         unsafe {
-            ImDrawList_AddQuad(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32(), thickness);
+            ImDrawList_AddQuad(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                &v2_to_im(p4),
+                color.as_u32(),
+                thickness,
+            );
         }
     }
-    pub fn add_quad_filled(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color) {
+    pub fn add_quad_filled(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        p4: Vector2,
+        color: Color,
+    ) {
         unsafe {
-            ImDrawList_AddQuadFilled(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32());
+            ImDrawList_AddQuadFilled(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                &v2_to_im(p4),
+                color.as_u32(),
+            );
         }
     }
-    pub fn add_triangle(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32) {
+    pub fn add_triangle(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        color: Color,
+        thickness: f32,
+    ) {
         unsafe {
-            ImDrawList_AddTriangle(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32(), thickness);
+            ImDrawList_AddTriangle(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                color.as_u32(),
+                thickness,
+            );
         }
     }
     pub fn add_triangle_filled(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color) {
         unsafe {
-            ImDrawList_AddTriangleFilled(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32());
+            ImDrawList_AddTriangleFilled(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                color.as_u32(),
+            );
         }
     }
-    pub fn add_circle(&self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_circle(
+        &self,
+        center: Vector2,
+        radius: f32,
+        color: Color,
+        num_segments: i32,
+        thickness: f32,
+    ) {
         unsafe {
-            ImDrawList_AddCircle(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments, thickness);
+            ImDrawList_AddCircle(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                color.as_u32(),
+                num_segments,
+                thickness,
+            );
         }
     }
     pub fn add_circle_filled(&self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddCircleFilled(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments);
+            ImDrawList_AddCircleFilled(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                color.as_u32(),
+                num_segments,
+            );
         }
     }
-    pub fn add_ngon(&self, center: Vector2, radius: f32, color: Color, num_segments: i32, thickness: f32) {
+    pub fn add_ngon(
+        &self,
+        center: Vector2,
+        radius: f32,
+        color: Color,
+        num_segments: i32,
+        thickness: f32,
+    ) {
         unsafe {
-            ImDrawList_AddNgon(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments, thickness);
+            ImDrawList_AddNgon(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                color.as_u32(),
+                num_segments,
+                thickness,
+            );
         }
     }
     pub fn add_ngon_filled(&self, center: Vector2, radius: f32, color: Color, num_segments: i32) {
         unsafe {
-            ImDrawList_AddNgonFilled(self.ptr, &v2_to_im(center), radius, color.as_u32(), num_segments);
+            ImDrawList_AddNgonFilled(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                color.as_u32(),
+                num_segments,
+            );
         }
     }
     pub fn add_text(&self, pos: Vector2, color: Color, text: &str) {
@@ -3233,48 +3286,173 @@ impl<'ui, A> WindowDrawList<'ui, A> {
             ImDrawList_AddText(self.ptr, &v2_to_im(pos), color.as_u32(), start, end);
         }
     }
-    pub fn add_text_ex(&self, font: FontId, font_size: f32, pos: Vector2, color: Color, text: &str, wrap_width: f32, cpu_fine_clip_rect: Option<ImVec4>) {
+    pub fn add_text_ex(
+        &self,
+        font: FontId,
+        font_size: f32,
+        pos: Vector2,
+        color: Color,
+        text: &str,
+        wrap_width: f32,
+        cpu_fine_clip_rect: Option<ImVec4>,
+    ) {
         unsafe {
             let (start, end) = text_ptrs(text);
             ImDrawList_AddText1(
-                self.ptr, font_ptr(font), font_size, &v2_to_im(pos), color.as_u32(), start, end,
-                wrap_width, cpu_fine_clip_rect.as_ref().map(|x| x as *const _).unwrap_or(null())
+                self.ptr,
+                font_ptr(font),
+                font_size,
+                &v2_to_im(pos),
+                color.as_u32(),
+                start,
+                end,
+                wrap_width,
+                cpu_fine_clip_rect
+                    .as_ref()
+                    .map(|x| x as *const _)
+                    .unwrap_or(null()),
             );
         }
     }
     pub fn add_polyline(&self, points: &[ImVec2], color: Color, flags: DrawFlags, thickness: f32) {
         unsafe {
-            ImDrawList_AddPolyline(self.ptr, points.as_ptr(), points.len() as i32, color.as_u32(), flags.bits(), thickness);
+            ImDrawList_AddPolyline(
+                self.ptr,
+                points.as_ptr(),
+                points.len() as i32,
+                color.as_u32(),
+                flags.bits(),
+                thickness,
+            );
         }
     }
     pub fn add_convex_poly_filled(&self, points: &[ImVec2], color: Color) {
         unsafe {
-            ImDrawList_AddConvexPolyFilled(self.ptr, points.as_ptr(), points.len() as i32, color.as_u32());
+            ImDrawList_AddConvexPolyFilled(
+                self.ptr,
+                points.as_ptr(),
+                points.len() as i32,
+                color.as_u32(),
+            );
         }
     }
-    pub fn add_bezier_cubic(&self, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_cubic(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        p4: Vector2,
+        color: Color,
+        thickness: f32,
+        num_segments: i32,
+    ) {
         unsafe {
-            ImDrawList_AddBezierCubic(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), color.as_u32(), thickness, num_segments);
+            ImDrawList_AddBezierCubic(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                &v2_to_im(p4),
+                color.as_u32(),
+                thickness,
+                num_segments,
+            );
         }
     }
-    pub fn add_bezier_quadratic(&self, p1: Vector2, p2: Vector2, p3: Vector2, color: Color, thickness: f32, num_segments: i32) {
+    pub fn add_bezier_quadratic(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        color: Color,
+        thickness: f32,
+        num_segments: i32,
+    ) {
         unsafe {
-            ImDrawList_AddBezierQuadratic(self.ptr, &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), color.as_u32(), thickness, num_segments);
+            ImDrawList_AddBezierQuadratic(
+                self.ptr,
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                color.as_u32(),
+                thickness,
+                num_segments,
+            );
         }
     }
-    pub fn add_image(&self, user_texture_id: TextureId, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color) {
+    pub fn add_image(
+        &self,
+        user_texture_id: TextureId,
+        p_min: Vector2,
+        p_max: Vector2,
+        uv_min: Vector2,
+        uv_max: Vector2,
+        color: Color,
+    ) {
         unsafe {
-            ImDrawList_AddImage(self.ptr, user_texture_id.id(), &v2_to_im(p_min), &v2_to_im(p_max), &v2_to_im(uv_min), &v2_to_im(uv_max), color.as_u32());
+            ImDrawList_AddImage(
+                self.ptr,
+                user_texture_id.id(),
+                &v2_to_im(p_min),
+                &v2_to_im(p_max),
+                &v2_to_im(uv_min),
+                &v2_to_im(uv_max),
+                color.as_u32(),
+            );
         }
     }
-    pub fn add_image_quad(&self, user_texture_id: TextureId, p1: Vector2, p2: Vector2, p3: Vector2, p4: Vector2, uv1: Vector2, uv2: Vector2, uv3: Vector2, uv4: Vector2, color: Color) {
+    pub fn add_image_quad(
+        &self,
+        user_texture_id: TextureId,
+        p1: Vector2,
+        p2: Vector2,
+        p3: Vector2,
+        p4: Vector2,
+        uv1: Vector2,
+        uv2: Vector2,
+        uv3: Vector2,
+        uv4: Vector2,
+        color: Color,
+    ) {
         unsafe {
-            ImDrawList_AddImageQuad(self.ptr, user_texture_id.id(), &v2_to_im(p1), &v2_to_im(p2), &v2_to_im(p3), &v2_to_im(p4), &v2_to_im(uv1), &v2_to_im(uv2), &v2_to_im(uv3), &v2_to_im(uv4), color.as_u32());
+            ImDrawList_AddImageQuad(
+                self.ptr,
+                user_texture_id.id(),
+                &v2_to_im(p1),
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                &v2_to_im(p4),
+                &v2_to_im(uv1),
+                &v2_to_im(uv2),
+                &v2_to_im(uv3),
+                &v2_to_im(uv4),
+                color.as_u32(),
+            );
         }
     }
-    pub fn add_image_rounded(&self, user_texture_id: TextureId, p_min: Vector2, p_max: Vector2, uv_min: Vector2, uv_max: Vector2, color: Color, rounding: f32, flags: DrawFlags) {
+    pub fn add_image_rounded(
+        &self,
+        user_texture_id: TextureId,
+        p_min: Vector2,
+        p_max: Vector2,
+        uv_min: Vector2,
+        uv_max: Vector2,
+        color: Color,
+        rounding: f32,
+        flags: DrawFlags,
+    ) {
         unsafe {
-            ImDrawList_AddImageRounded(self.ptr, user_texture_id.id(), &v2_to_im(p_min), &v2_to_im(p_max), &v2_to_im(uv_min), &v2_to_im(uv_max), color.as_u32(), rounding, flags.bits());
+            ImDrawList_AddImageRounded(
+                self.ptr,
+                user_texture_id.id(),
+                &v2_to_im(p_min),
+                &v2_to_im(p_max),
+                &v2_to_im(uv_min),
+                &v2_to_im(uv_max),
+                color.as_u32(),
+                rounding,
+                flags.bits(),
+            );
         }
     }
 
@@ -3289,18 +3467,24 @@ impl<'ui, A> WindowDrawList<'ui, A> {
                     cb(&mut *a);
                 }
             });
-            ImDrawList_AddCallback(self.ptr, Some(call_drawlist_callback::<A>), id as *mut c_void);
+            ImDrawList_AddCallback(
+                self.ptr,
+                Some(call_drawlist_callback::<A>),
+                id as *mut c_void,
+            );
         }
     }
     pub fn add_draw_cmd(&self) {
         unsafe {
             ImDrawList_AddDrawCmd(self.ptr);
         }
-
     }
 }
 
-unsafe extern "C" fn call_drawlist_callback<A>(_parent_lilst: *const ImDrawList, cmd: *const ImDrawCmd) {
+unsafe extern "C" fn call_drawlist_callback<A>(
+    _parent_lilst: *const ImDrawList,
+    cmd: *const ImDrawCmd,
+) {
     let id = (*cmd).UserCallbackData as usize;
     Ui::<A>::run_callback(id, ());
 }
@@ -3523,7 +3707,6 @@ impl<const N: usize> Pushable for [StyleColorF; N] {
     }
 }
 
-
 #[derive(Debug, Copy, Clone)]
 pub enum StyleValue {
     F32(f32),
@@ -3658,7 +3841,7 @@ impl Viewport<'_> {
     }
 }
 
-decl_builder_with_opt!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
+decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         column (i32) (column),
@@ -3754,7 +3937,7 @@ decl_builder_with_opt!{ TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: Int
 
 /// Helper token class that allows to set the drag&drop payload, once.
 pub struct DragDropPayloadSetter<'a> {
-    _dummy: PhantomData<&'a ()>
+    _dummy: PhantomData<&'a ()>,
 }
 
 /// This is a sub-set of [`Cond`], only for drag&drop payloads.
@@ -3766,15 +3949,17 @@ pub enum DragDropPayloadCond {
 impl<'a> DragDropPayloadSetter<'a> {
     pub fn set(self, type_: impl IntoCStr, data: &[u8], cond: DragDropPayloadCond) -> bool {
         // For some reason ImGui does not accept a non-null pointer with length 0.
-        let ptr = if data.is_empty() { null() } else { data.as_ptr() as *const c_void};
+        let ptr = if data.is_empty() {
+            null()
+        } else {
+            data.as_ptr() as *const c_void
+        };
         let len = data.len();
         let cond = match cond {
             DragDropPayloadCond::Always => Cond::Always,
             DragDropPayloadCond::Once => Cond::Once,
         };
-        unsafe {
-            ImGui_SetDragDropPayload(type_.into().as_ptr(), ptr, len, cond.bits())
-        }
+        unsafe { ImGui_SetDragDropPayload(type_.into().as_ptr(), ptr, len, cond.bits()) }
     }
 }
 
@@ -3797,21 +3982,21 @@ impl<'a> DragDropPayloadGetter<'a> {
             if pay.is_null() {
                 None
             } else {
-                Some(DragDropPayload {
-                    pay: &*pay,
-                })
+                Some(DragDropPayload { pay: &*pay })
             }
         }
     }
-    pub fn by_type(&self, type_: impl IntoCStr, flags: DragDropAcceptFlags) -> Option<DragDropPayload<'a>> {
+    pub fn by_type(
+        &self,
+        type_: impl IntoCStr,
+        flags: DragDropAcceptFlags,
+    ) -> Option<DragDropPayload<'a>> {
         unsafe {
             let pay = ImGui_AcceptDragDropPayload(type_.into().as_ptr(), flags.bits());
             if pay.is_null() {
                 None
             } else {
-                Some(DragDropPayload {
-                    pay: &*pay,
-                })
+                Some(DragDropPayload { pay: &*pay })
             }
         }
     }
@@ -3821,9 +4006,7 @@ impl<'a> DragDropPayloadGetter<'a> {
             if pay.is_null() {
                 None
             } else {
-                Some(DragDropPayload {
-                    pay: &*pay,
-                })
+                Some(DragDropPayload { pay: &*pay })
             }
         }
     }
@@ -3861,5 +4044,7 @@ impl<'a> DragDropPayload<'a> {
     }
 }
 
-pub const PAYLOAD_TYPE_COLOR_3F: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_3F) };
-pub const PAYLOAD_TYPE_COLOR_4F: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_4F) };
+pub const PAYLOAD_TYPE_COLOR_3F: &CStr =
+    unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_3F) };
+pub const PAYLOAD_TYPE_COLOR_4F: &CStr =
+    unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_4F) };

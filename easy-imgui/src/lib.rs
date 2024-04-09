@@ -398,7 +398,13 @@ impl CurrentContext<'_> {
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
         };
+
         app.build_custom_atlas(&mut atlas);
+        // If the app did not create any font, create a default one here.
+        // ImGui will do it by itself, but that would not be properly scaled if scale != 1.0
+        if atlas.ptr.ptr.Fonts.is_empty() {
+            atlas.add_font(FontInfo::default_font(13.0));
+        }
         atlas.build_custom_rects(app);
         true
     }
@@ -502,6 +508,8 @@ impl FontInfo {
         }
     }
     /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
+    ///
+    /// The default size of the default font is 13.0.
     pub fn default_font(size: f32) -> FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
@@ -591,10 +599,7 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     let io = &*ImGui_GetIO();
     let fonts = &*io.Fonts;
-    // If there is no fonts, create the default here
-    if fonts.Fonts.is_empty() {
-        ImFontAtlas_AddFontDefault(io.Fonts, null_mut());
-    }
+    // fonts.Fonts is never empty, at least there is the default font
     fonts.Fonts[font.0]
 }
 
@@ -2910,6 +2915,7 @@ impl<'ui, A> FontAtlasMut<'ui, A> {
                     );
                 }
                 TtfData::DefaultFont => {
+                    fc.SizePixels = font.size * self.scale;
                     ImFontAtlas_AddFontDefault((*io).Fonts, &fc);
                 }
             }

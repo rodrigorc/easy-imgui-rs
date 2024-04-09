@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-window"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
 description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
 license = "MIT"
@@ -19,9 +19,9 @@ main-window = ["dep:glutin-winit"]
 # docking = ["easy-imgui/docking"]
 
 [dependencies]
-easy-imgui-sys = { version = "=0.2.4", path = "../easy-imgui-sys" }
-easy-imgui = { version = "=0.2.4", path = "../easy-imgui" }
-easy-imgui-renderer = { version = "=0.2.4", path = "../easy-imgui-renderer" }
+easy-imgui-sys = { version = "=0.3.0", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.3.0", path = "../easy-imgui" }
+easy-imgui-renderer = { version = "=0.3.0", path = "../easy-imgui-renderer" }
 
 anyhow = "1"
 bitflags = "2"

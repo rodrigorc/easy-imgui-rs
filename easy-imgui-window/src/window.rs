@@ -104,12 +104,25 @@ pub trait MainWindowRef {
     fn ping_user_input(&mut self) {}
     /// There are no more messages, going to idle.
     fn about_to_wait(&mut self, _pinged: bool) {}
+    /// Gets the scale factor of the window, (HiDPI).
+    fn scale_factor(&self) -> f32 {
+        self.window().scale_factor() as f32
+    }
+    /// Changes the scale factor.
+    ///
+    /// Normally there is nothing to be done here, unless you are doing something fancy with HiDPI.
+    ///
+    /// It returns the real applied scale factor, as it would returned by
+    /// `self.scale_factor()` after this change has been applied.
+    fn set_scale_factor(&self, scale: f32) -> f32 {
+        scale
+    }
     /// The window has been resized.
     ///
     /// Takes the new physical size. It should return the new logical size.
     fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
-        let scale = self.window().scale_factor();
-        size.to_logical(scale)
+        let scale = self.scale_factor();
+        size.to_logical(scale as f64)
     }
     /// Changes the mouse cursor.
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
@@ -160,8 +173,8 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
         let height = NonZeroU32::new(size.height.max(1)).unwrap();
         self.surface.resize(self.gl_context, width, height);
-        let scale = self.window.scale_factor();
-        size.to_logical(scale)
+        let scale = self.scale_factor();
+        size.to_logical(scale as f64)
     }
 }
 
@@ -169,6 +182,21 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
 impl<'a> MainWindowRef for &'a Window {
     fn window(&self) -> &Window {
         self
+    }
+}
+
+// NewType to disable the HiDPI scaling.
+pub struct NoScale<'a>(pub &'a Window);
+
+impl<'a> MainWindowRef for NoScale<'a> {
+    fn window(&self) -> &Window {
+        self.0
+    }
+    fn scale_factor(&self) -> f32 {
+        1.0
+    }
+    fn set_scale_factor(&self, _scale: f32) -> f32 {
+        1.0
     }
 }
 
@@ -271,9 +299,11 @@ pub fn do_event<EventUserType>(
                 }
                 ScaleFactorChanged { scale_factor, .. } => {
                     main_window.ping_user_input();
-                    let scale_factor = *scale_factor as f32;
+                    let scale_factor = main_window.set_scale_factor(*scale_factor as f32);
                     let mut imgui = unsafe { renderer.imgui().set_current() };
                     let io = imgui.io_mut();
+                    // Keep the mouse in the same relative position: maybe it is wrong, but it is
+                    // the best guess we can do.
                     let old_scale_factor = io.DisplayFramebufferScale.x;
                     if io.MousePos.x.is_finite() && io.MousePos.y.is_finite() {
                         io.MousePos.x *= scale_factor / old_scale_factor;
@@ -370,8 +400,8 @@ pub fn do_event<EventUserType>(
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
-                        let scale = main_window.window().scale_factor();
-                        let position = position.to_logical(scale);
+                        let scale = main_window.scale_factor();
+                        let position = position.to_logical(scale as f64);
                         ImGuiIO_AddMousePosEvent(io, position.x, position.y);
                     }
                 }

@@ -3286,6 +3286,46 @@ impl<'ui, A> WindowDrawList<'ui, A> {
             );
         }
     }
+    pub fn add_ellipse(
+        &self,
+        center: Vector2,
+        radius: Vector2,
+        color: Color,
+        rot: f32,
+        num_segments: i32,
+        thickness: f32,
+    ) {
+        unsafe {
+            ImDrawList_AddEllipse(
+                self.ptr,
+                &v2_to_im(center),
+                &v2_to_im(radius),
+                color.as_u32(),
+                rot,
+                num_segments,
+                thickness,
+            );
+        }
+    }
+    pub fn add_ellipse_filled(
+        &self,
+        center: Vector2,
+        radius: Vector2,
+        color: Color,
+        rot: f32,
+        num_segments: i32,
+    ) {
+        unsafe {
+            ImDrawList_AddEllipseFilled(
+                self.ptr,
+                &v2_to_im(center),
+                &v2_to_im(radius),
+                color.as_u32(),
+                rot,
+                num_segments,
+            );
+        }
+    }
     pub fn add_text(&self, pos: Vector2, color: Color, text: &str) {
         unsafe {
             let (start, end) = text_ptrs(text);
@@ -3335,6 +3375,16 @@ impl<'ui, A> WindowDrawList<'ui, A> {
     pub fn add_convex_poly_filled(&self, points: &[ImVec2], color: Color) {
         unsafe {
             ImDrawList_AddConvexPolyFilled(
+                self.ptr,
+                points.as_ptr(),
+                points.len() as i32,
+                color.as_u32(),
+            );
+        }
+    }
+    pub fn add_concave_poly_filled(&self, points: &[ImVec2], color: Color) {
+        unsafe {
+            ImDrawList_AddConcavePolyFilled(
                 self.ptr,
                 points.as_ptr(),
                 points.len() as i32,

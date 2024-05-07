@@ -29,7 +29,7 @@ bitflags = "2"
 glutin = "0.31"
 glutin-winit = { version = "0.4", optional = true }
 raw-window-handle = "0.5"
-arboard = { version = "3", optional = true, default_features = false }
+arboard = { version = "3", optional = true, default-features = false }
 winit = { version = "0.29", features = ["x11", "mint"] }
 
 # For the examples

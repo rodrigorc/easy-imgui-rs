@@ -72,7 +72,7 @@ macro_rules! attrib {
                     $(
                         if name == stringify!($f) {
                             let (n, t) = <$ft as $crate::glr::AttribField>::detail();
-                            return Some((n, t, memoffset::offset_of!($name, $f)));
+                            return Some((n, t, std::mem::offset_of!($name, $f)));
                         }
                     )*
                     None

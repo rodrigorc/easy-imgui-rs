@@ -1,5 +1,3 @@
-#version 150
-
 precision highp float;
 
 in vec2 pos;
@@ -18,8 +16,6 @@ void main(void) {
 }
 
 ###
-#version 150
-
 precision highp float;
 
 in vec2 v_uv;

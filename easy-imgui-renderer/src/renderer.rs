@@ -56,11 +56,12 @@ impl Renderer {
             }
 
             atlas = glr::Texture::generate(&gl)?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let shader_source = include_str!("shader.glsl");
-            #[cfg(target_arch = "wasm32")]
-            let shader_source = include_str!("shader_es.glsl");
-            program = gl_program_from_source(&gl, shader_source)?;
+            let glsl_version = if cfg!(not(target_arch = "wasm32")) {
+                "#version 150\n"
+            } else {
+                "#version 300 es\n"
+            };
+            program = gl_program_from_source(&gl, Some(glsl_version), include_str!("shader.glsl"))?;
             vao = glr::VertexArray::generate(&gl)?;
             gl.bind_vertex_array(Some(vao.id()));
 
@@ -401,7 +402,11 @@ impl Drop for Renderer {
     }
 }
 
-pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr::Program> {
+pub fn gl_program_from_source(
+    gl: &glr::GlContext,
+    prefix: Option<&str>,
+    shaders: &str,
+) -> Result<glr::Program> {
     let split = shaders
         .find("###")
         .ok_or_else(|| anyhow!("shader marker not found"))?;
@@ -424,6 +429,20 @@ pub fn gl_program_from_source(gl: &glr::GlContext, shaders: &str) -> Result<glr:
         None
     };
 
-    let prg = glr::Program::from_source(gl, vertex, frag, geom)?;
+    use std::borrow::Cow;
+
+    let (vertex, frag, geom) = match prefix {
+        None => (
+            Cow::Borrowed(vertex),
+            Cow::Borrowed(frag),
+            geom.map(Cow::Borrowed),
+        ),
+        Some(prefix) => (
+            Cow::Owned(format!("{0}{1}", prefix, vertex)),
+            Cow::Owned(format!("{0}{1}", prefix, frag)),
+            geom.map(|s| Cow::Owned(format!("{0}{1}", prefix, s))),
+        ),
+    };
+    let prg = glr::Program::from_source(gl, &vertex, &frag, geom.as_deref())?;
     Ok(prg)
 }

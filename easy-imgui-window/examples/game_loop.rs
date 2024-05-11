@@ -75,11 +75,11 @@ fn main() {
                 event::{ElementState, Event, KeyEvent, WindowEvent},
                 keyboard::{KeyCode, PhysicalKey},
             };
-            let mut wr = easy_imgui_window::MainWindowPieces {
-                window: &g.window,
-                surface: &g.game.surface,
-                gl_context: &g.game.gl_context,
-            };
+            let mut wr = easy_imgui_window::MainWindowPieces::new(
+                &g.window,
+                &g.game.surface,
+                &g.game.gl_context,
+            );
             // game_loop renders in the other callback, not here
             let imgui_wants = easy_imgui_window::do_event(
                 &mut wr,

@@ -1,5 +1,6 @@
 use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
-use easy_imgui::{self as imgui, mint, Vector2};
+use cgmath::Matrix3;
+use easy_imgui::{self as imgui, cgmath, mint, Vector2};
 use easy_imgui_renderer::Renderer;
 use easy_imgui_sys::*;
 use glutin::{
@@ -104,6 +105,9 @@ pub trait MainWindowRef {
     fn ping_user_input(&mut self) {}
     /// There are no more messages, going to idle.
     fn about_to_wait(&mut self, _pinged: bool) {}
+    fn transform_position(&self, pos: Vector2) -> Vector2 {
+        pos / self.scale_factor()
+    }
     /// Gets the scale factor of the window, (HiDPI).
     fn scale_factor(&self) -> f32 {
         self.window().scale_factor() as f32
@@ -137,6 +141,18 @@ pub trait MainWindowRef {
     }
 }
 
+fn transform_position_with_optional_matrix(
+    w: &impl MainWindowRef,
+    pos: Vector2,
+    mx: &Option<Matrix3<f32>>,
+) -> Vector2 {
+    use cgmath::{EuclideanSpace as _, Transform};
+    match mx {
+        Some(mx) => mx.transform_point(cgmath::Point2::from_vec(pos)).to_vec(),
+        None => pos / w.scale_factor(),
+    }
+}
+
 bitflags::bitflags! {
     /// These flags can be used to customize the [`do_event`] function.
     #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -147,14 +163,40 @@ bitflags::bitflags! {
         ///
         /// https://github.com/rust-windowing/winit/issues/2841
         const DoNotFixFocusGainedBug = 2;
+        /// Do not change the size or scale of the UI
+        const DoNotResize = 4;
+        /// Do not send mouse positions
+        const DoNotMouse = 8;
     }
 }
 
 /// Helper struct to call [`do_event`] without owning the Window.
 pub struct MainWindowPieces<'a> {
-    pub window: &'a Window,
-    pub surface: &'a Surface<WindowSurface>,
-    pub gl_context: &'a PossiblyCurrentContext,
+    window: &'a Window,
+    surface: &'a Surface<WindowSurface>,
+    gl_context: &'a PossiblyCurrentContext,
+    matrix: Option<Matrix3<f32>>,
+}
+
+impl<'a> MainWindowPieces<'a> {
+    pub fn new(
+        window: &'a Window,
+        surface: &'a Surface<WindowSurface>,
+        gl_context: &'a PossiblyCurrentContext,
+    ) -> Self {
+        MainWindowPieces {
+            window,
+            surface,
+            gl_context,
+            matrix: None,
+        }
+    }
+    /// Sets the matrix that transforms the input mouse coordinates into UI space.
+    ///
+    /// If none, it uses the default transformation.
+    pub fn set_matrix(&mut self, matrix: Option<Matrix3<f32>>) {
+        self.matrix = matrix;
+    }
 }
 
 /// Default implementation if you have all the pieces.
@@ -175,6 +217,9 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         self.surface.resize(self.gl_context, width, height);
         let scale = self.scale_factor();
         size.to_logical(scale as f64)
+    }
+    fn transform_position(&self, pos: Vector2) -> Vector2 {
+        transform_position_with_optional_matrix(self, pos, &self.matrix)
     }
 }
 
@@ -289,28 +334,32 @@ pub fn do_event<EventUserType>(
                     }
                 },
                 Resized(size) => {
-                    main_window.ping_user_input();
-                    // GL surface in physical pixels, imgui in logical
-                    let size = main_window.resize(*size);
-                    let mut imgui = unsafe { renderer.imgui().set_current() };
-                    let io = imgui.io_mut();
-                    let size = Vector2::from(mint::Vector2::from(size));
-                    io.DisplaySize = imgui::v2_to_im(size);
+                    if !flags.contains(EventFlags::DoNotResize) {
+                        main_window.ping_user_input();
+                        // GL surface in physical pixels, imgui in logical
+                        let size = main_window.resize(*size);
+                        let mut imgui = unsafe { renderer.imgui().set_current() };
+                        let io = imgui.io_mut();
+                        let size = Vector2::from(mint::Vector2::from(size));
+                        io.DisplaySize = imgui::v2_to_im(size);
+                    }
                 }
                 ScaleFactorChanged { scale_factor, .. } => {
-                    main_window.ping_user_input();
-                    let scale_factor = main_window.set_scale_factor(*scale_factor as f32);
-                    let mut imgui = unsafe { renderer.imgui().set_current() };
-                    let io = imgui.io_mut();
-                    // Keep the mouse in the same relative position: maybe it is wrong, but it is
-                    // the best guess we can do.
-                    let old_scale_factor = io.DisplayFramebufferScale.x;
-                    if io.MousePos.x.is_finite() && io.MousePos.y.is_finite() {
-                        io.MousePos.x *= scale_factor / old_scale_factor;
-                        io.MousePos.y *= scale_factor / old_scale_factor;
+                    if !flags.contains(EventFlags::DoNotResize) {
+                        main_window.ping_user_input();
+                        let scale_factor = main_window.set_scale_factor(*scale_factor as f32);
+                        let mut imgui = unsafe { renderer.imgui().set_current() };
+                        let io = imgui.io_mut();
+                        // Keep the mouse in the same relative position: maybe it is wrong, but it is
+                        // the best guess we can do.
+                        let old_scale_factor = io.DisplayFramebufferScale.x;
+                        if io.MousePos.x.is_finite() && io.MousePos.y.is_finite() {
+                            io.MousePos.x *= scale_factor / old_scale_factor;
+                            io.MousePos.y *= scale_factor / old_scale_factor;
+                        }
+                        let size = renderer.size();
+                        renderer.set_size(size, scale_factor);
                     }
-                    let size = renderer.size();
-                    renderer.set_size(size, scale_factor);
                 }
                 ModifiersChanged(mods) => {
                     main_window.ping_user_input();
@@ -400,8 +449,8 @@ pub fn do_event<EventUserType>(
                     unsafe {
                         let mut imgui = renderer.imgui().set_current();
                         let io = imgui.io_mut();
-                        let scale = main_window.scale_factor();
-                        let position = position.to_logical(scale as f64);
+                        let position = main_window
+                            .transform_position(Vector2::new(position.x as f32, position.y as f32));
                         ImGuiIO_AddMousePosEvent(io, position.x, position.y);
                     }
                 }
@@ -539,6 +588,7 @@ mod main_window {
         // The surface must be dropped before the window.
         surface: Surface<WindowSurface>,
         window: Window,
+        matrix: Option<Matrix3<f32>>,
         idler: MainWindowIdler,
     }
 
@@ -636,9 +686,15 @@ mod main_window {
                 gl_context,
                 window,
                 surface,
+                matrix: None,
                 idler: MainWindowIdler::default(),
             })
         }
+        /// Sets a custom matrix that converts physical mouse coordinates into logical ones.
+        pub fn set_matrix(&mut self, matrix: Option<Matrix3<f32>>) {
+            self.matrix = matrix;
+        }
+
         /// Splits this window into its parts.
         ///
         /// # Safety
@@ -659,6 +715,9 @@ mod main_window {
         /// Gets a reference to the `winit` window.
         pub fn window(&self) -> &Window {
             &self.window
+        }
+        pub fn surface(&self) -> &Surface<WindowSurface> {
+            &self.surface
         }
         /// Converts the given physical size to a logical size, using the window scale factor.
         pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
@@ -751,13 +810,22 @@ mod main_window {
             app: &mut impl imgui::UiBuilder,
             event: &Event<EventUserType>,
         ) -> EventResult {
+            self.do_event_with_flags(app, event, EventFlags::empty())
+        }
+        /// Just like `do_event` but with flags.
+        pub fn do_event_with_flags<EventUserType>(
+            &mut self,
+            app: &mut impl imgui::UiBuilder,
+            event: &Event<EventUserType>,
+            flags: EventFlags,
+        ) -> EventResult {
             do_event(
                 &mut self.main_window,
                 &mut self.renderer,
                 &mut self.status,
                 app,
                 event,
-                EventFlags::empty(),
+                flags,
             )
         }
     }
@@ -790,6 +858,9 @@ mod main_window {
                 // Not doing it will default to Wait.
                 self.window.request_redraw();
             }
+        }
+        fn transform_position(&self, pos: Vector2) -> Vector2 {
+            transform_position_with_optional_matrix(self, pos, &self.matrix)
         }
     }
 }

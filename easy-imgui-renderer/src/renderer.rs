@@ -1,6 +1,7 @@
 use std::mem::size_of;
 
 use anyhow::{anyhow, Result};
+use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
 use easy_imgui_sys::*;
 use glow::HasContext;
 
@@ -13,6 +14,7 @@ pub struct Renderer {
     imgui: imgui::Context,
     gl: glr::GlContext,
     bg_color: Option<imgui::Color>,
+    matrix: Option<Matrix3<f32>>,
     objs: GlObjects,
 }
 
@@ -90,6 +92,7 @@ impl Renderer {
             imgui,
             gl,
             bg_color: Some(Color::new(0.45, 0.55, 0.60, 1.0)),
+            matrix: None,
             objs: GlObjects {
                 atlas,
                 program,
@@ -115,6 +118,12 @@ impl Renderer {
     /// you need, if anything.
     pub fn set_background_color(&mut self, color: Option<Color>) {
         self.bg_color = color;
+    }
+    /// Sets the 2D (3x3) matrix transformation for the UI display.
+    ///
+    /// If you set this matrix to `Some` then it is your responsibility to also call the appropriate `gl.viewport()`.
+    pub fn set_matrix(&mut self, matrix: Option<Matrix3<f32>>) {
+        self.matrix = matrix;
     }
     /// Gets the background color.
     pub fn background_color(&self) -> Option<Color> {
@@ -147,19 +156,21 @@ impl Renderer {
                 app,
                 || {
                     let io = &*ImGui_GetIO();
-                    self.gl.viewport(
-                        0,
-                        0,
-                        (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
-                        (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32,
-                    );
+                    if self.matrix.is_none() {
+                        self.gl.viewport(
+                            0,
+                            0,
+                            (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
+                            (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32,
+                        );
+                    }
                     if let Some(bg) = self.bg_color {
                         self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
                         self.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
                 },
                 |draw_data| {
-                    Self::render(&self.gl, &self.objs, draw_data);
+                    Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
                 },
             );
         }
@@ -224,7 +235,78 @@ impl Renderer {
         // We keep this, no need for imgui to hold a copy
         ImFontAtlas_ClearTexData((*io).Fonts);
     }
-    unsafe fn render(gl: &glow::Context, objs: &GlObjects, draw_data: &ImDrawData) {
+    unsafe fn render(
+        gl: &glow::Context,
+        objs: &GlObjects,
+        draw_data: &ImDrawData,
+        matrix: Option<&Matrix3<f32>>,
+    ) {
+        enum ScissorViewportMatrix {
+            Default,
+            Custom(Matrix3<f32>),
+            None,
+        }
+        let (matrix, viewport_matrix) = match matrix {
+            None => {
+                let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
+                let ImVec2 {
+                    x: width,
+                    y: height,
+                } = draw_data.DisplaySize;
+                let right = left + width;
+                let bottom = top + height;
+                gl.enable(glow::SCISSOR_TEST);
+                (
+                    &Matrix3::new(
+                        2.0 / width,
+                        0.0,
+                        0.0,
+                        0.0,
+                        -2.0 / height,
+                        0.0,
+                        -(right + left) / width,
+                        (top + bottom) / height,
+                        1.0,
+                    ),
+                    ScissorViewportMatrix::Default,
+                )
+            }
+            Some(matrix) => {
+                // If there is a custom matrix we have to compute the scissor rectangle in viewport coordinates.
+                // This only works if the transformed scissor rectangle is axis aligned, ie the rotation is 0°, 90°, 180° or 270°.
+                // TODO: for other angles a fragment shader would be needed, maybe with a `discard`.
+                // A rotation of multiple of 90° always has two 0 in the matrix:
+                // * 0° and 180°: at (0,0) and (1,1), the sines.
+                // * 90° and 270°: at (0,1) and (1,0), the cosines.
+                if (matrix[0][0].abs() < f32::EPSILON && matrix[1][1].abs() < f32::EPSILON)
+                    || (matrix[1][0].abs() < f32::EPSILON && matrix[0][1].abs() < f32::EPSILON)
+                {
+                    let mut viewport = [0; 4];
+                    gl.get_parameter_i32_slice(glow::VIEWPORT, &mut viewport);
+                    let viewport_x = viewport[0] as f32;
+                    let viewport_y = viewport[1] as f32;
+                    let viewport_w2 = viewport[2] as f32 / 2.0;
+                    let viewport_h2 = viewport[3] as f32 / 2.0;
+                    let vm = Matrix3::new(
+                        viewport_w2,
+                        0.0,
+                        0.0,
+                        0.0,
+                        viewport_h2,
+                        0.0,
+                        viewport_x + viewport_w2,
+                        viewport_y + viewport_h2,
+                        1.0,
+                    );
+                    gl.enable(glow::SCISSOR_TEST);
+                    (matrix, ScissorViewportMatrix::Custom(vm * matrix))
+                } else {
+                    gl.disable(glow::SCISSOR_TEST);
+                    (matrix, ScissorViewportMatrix::None)
+                }
+            }
+        };
+
         gl.bind_vertex_array(Some(objs.vao.id()));
         gl.use_program(Some(objs.program.id()));
         gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));
@@ -238,32 +320,14 @@ impl Renderer {
         );
         gl.disable(glow::CULL_FACE);
         gl.disable(glow::DEPTH_TEST);
-        gl.enable(glow::SCISSOR_TEST);
 
         gl.active_texture(glow::TEXTURE0);
         gl.uniform_1_i32(Some(&objs.u_tex_location), 0);
 
-        let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
-        let ImVec2 {
-            x: width,
-            y: height,
-        } = draw_data.DisplaySize;
-        let right = left + width;
-        let bottom = top + height;
         gl.uniform_matrix_3_f32_slice(
             Some(&objs.u_matrix_location),
             false,
-            &[
-                2.0 / width,
-                0.0,
-                0.0,
-                0.0,
-                -2.0 / height,
-                0.0,
-                -(right + left) / width,
-                (top + bottom) / height,
-                1.0,
-            ],
+            AsRef::<[f32; 9]>::as_ref(matrix),
         );
 
         for cmd_list in &draw_data.CmdLists {
@@ -306,16 +370,35 @@ impl Renderer {
             );
 
             for cmd in &cmd_list.CmdBuffer {
-                let clip_x = cmd.ClipRect.x - left;
-                let clip_y = cmd.ClipRect.y - top;
-                let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
-                let clip_h = cmd.ClipRect.w - cmd.ClipRect.y;
-                gl.scissor(
-                    (clip_x * draw_data.FramebufferScale.x) as i32,
-                    ((height - (clip_y + clip_h)) * draw_data.FramebufferScale.y) as i32,
-                    (clip_w * draw_data.FramebufferScale.x) as i32,
-                    (clip_h * draw_data.FramebufferScale.y) as i32,
-                );
+                match viewport_matrix {
+                    ScissorViewportMatrix::Default => {
+                        let clip_x = cmd.ClipRect.x - draw_data.DisplayPos.x;
+                        let clip_y = cmd.ClipRect.y - draw_data.DisplayPos.y;
+                        let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
+                        let clip_h = cmd.ClipRect.w - cmd.ClipRect.y;
+                        let scale = draw_data.FramebufferScale.x;
+                        gl.scissor(
+                            (clip_x * scale) as i32,
+                            ((draw_data.DisplaySize.y - (clip_y + clip_h)) * scale) as i32,
+                            (clip_w * scale) as i32,
+                            (clip_h * scale) as i32,
+                        );
+                    }
+                    ScissorViewportMatrix::Custom(vm) => {
+                        let pos = Vector2::new(draw_data.DisplayPos.x, draw_data.DisplayPos.y);
+                        let clip_aa = Vector2::new(cmd.ClipRect.x, cmd.ClipRect.y) - pos;
+                        let clip_bb = Vector2::new(cmd.ClipRect.z, cmd.ClipRect.w) - pos;
+                        let clip_aa = vm.transform_point(Point2::from_vec(clip_aa));
+                        let clip_bb = vm.transform_point(Point2::from_vec(clip_bb));
+                        gl.scissor(
+                            clip_aa.x.min(clip_bb.x).round() as i32,
+                            clip_aa.y.min(clip_bb.y).round() as i32,
+                            (clip_bb.x - clip_aa.x).abs().round() as i32,
+                            (clip_bb.y - clip_aa.y).abs().round() as i32,
+                        );
+                    }
+                    ScissorViewportMatrix::None => {}
+                }
 
                 match cmd.UserCallback {
                     Some(cb) => {

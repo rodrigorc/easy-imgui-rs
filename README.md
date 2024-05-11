@@ -2,7 +2,7 @@
 
 [![build](https://github.com/rodrigorc/easy-imgui-rs/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/rodrigorc/easy-imgui-rs/actions/workflows/build.yaml)
 
-Build full GUI applications with Rust and [Dear ImGui][dearimgui]. It currently uses version v1.90.5.
+Build full GUI applications with Rust and [Dear ImGui][dearimgui]. It currently uses version v1.90.6.
 
 There are several crates in this repository:
  * [`easy-imgui-sys`](https://crates.io/crates/easy-imgui-sys): This is the direct binding of the C++ Dear ImGui library.

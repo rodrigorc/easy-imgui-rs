@@ -1,3 +1,5 @@
+#![allow(clippy::needless_doctest_main)]
+
 /*!
  * Crate for easy integration of the [Dear ImGui][dearimgui] library.
  *

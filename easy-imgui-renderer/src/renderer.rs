@@ -246,6 +246,7 @@ impl Renderer {
             Custom(Matrix3<f32>),
             None,
         }
+        let default_matrix;
         let (matrix, viewport_matrix) = match matrix {
             None => {
                 let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
@@ -256,20 +257,18 @@ impl Renderer {
                 let right = left + width;
                 let bottom = top + height;
                 gl.enable(glow::SCISSOR_TEST);
-                (
-                    &Matrix3::new(
-                        2.0 / width,
-                        0.0,
-                        0.0,
-                        0.0,
-                        -2.0 / height,
-                        0.0,
-                        -(right + left) / width,
-                        (top + bottom) / height,
-                        1.0,
-                    ),
-                    ScissorViewportMatrix::Default,
-                )
+                default_matrix = Matrix3::new(
+                    2.0 / width,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -2.0 / height,
+                    0.0,
+                    -(right + left) / width,
+                    (top + bottom) / height,
+                    1.0,
+                );
+                (&default_matrix, ScissorViewportMatrix::Default)
             }
             Some(matrix) => {
                 // If there is a custom matrix we have to compute the scissor rectangle in viewport coordinates.

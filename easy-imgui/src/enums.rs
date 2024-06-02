@@ -525,11 +525,23 @@ imgui_enum_ex! {
         MouseWheelX = ImGuiKey_MouseWheelX,
         MouseWheelY = ImGuiKey_MouseWheelY,
 
-        // Modifiers
+        // These are better handled as KeyMod, but sometimes can be seen as regular  keys
         ModCtrl = ImGuiMod_Ctrl,
         ModShift = ImGuiMod_Shift,
         ModAlt = ImGuiMod_Alt,
         ModSuper = ImGuiMod_Super,
+    }
+}
+
+// ImGuiMod is not a real enum in the .h but are part of ImGuiKey.
+// We week them separated because they can be OR-combined with keys and between them.
+imgui_flags_ex! {
+    pub KeyMod: ImGuiKey {
+        None = ImGuiMod_None,
+        Ctrl = ImGuiMod_Ctrl,
+        Shift = ImGuiMod_Shift,
+        Alt = ImGuiMod_Alt,
+        Super = ImGuiMod_Super,
     }
 }
 
@@ -836,5 +848,20 @@ imgui_flags_ex! {
         NoDrawDefaultRect = ImGuiDragDropFlags_AcceptNoDrawDefaultRect,
         NoPreviewTooltip =  ImGuiDragDropFlags_AcceptNoPreviewTooltip,
         PeekOnly = ImGuiDragDropFlags_AcceptPeekOnly,
+    }
+}
+
+imgui_flags! {
+    pub InputFlags: ImGuiInputFlags_ {
+        None,
+        RouteActive,
+        RouteFocused,
+        RouteGlobal,
+        RouteAlways,
+        RouteOverFocused,
+        RouteOverActive,
+        RouteUnlessBgFocused,
+        RouteFromRootWindow,
+        Tooltip,
     }
 }

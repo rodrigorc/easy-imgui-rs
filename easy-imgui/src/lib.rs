@@ -2716,6 +2716,26 @@ impl<A> Ui<A> {
         }
     }
 
+    pub fn shortcut(&self, key_chord: impl Into<KeyChord>) -> bool {
+        unsafe { ImGui_Shortcut(key_chord.into().bits(), 0) }
+    }
+    pub fn shortcut_ex(&self, key_chord: impl Into<KeyChord>, flags: InputFlags) -> bool {
+        unsafe { ImGui_Shortcut(key_chord.into().bits(), flags.bits()) }
+    }
+    pub fn set_next_item_shortcut(&self, key_chord: impl Into<KeyChord>) {
+        unsafe {
+            ImGui_SetNextItemShortcut(key_chord.into().bits(), 0);
+        }
+    }
+    pub fn set_next_item_shortcut_ex(&self, key_chord: impl Into<KeyChord>, flags: InputFlags) {
+        unsafe {
+            ImGui_SetNextItemShortcut(key_chord.into().bits(), flags.bits());
+        }
+    }
+    pub fn is_keychord_pressed(&self, key_chord: impl Into<KeyChord>) -> bool {
+        unsafe { ImGui_IsKeyChordPressed(key_chord.into().bits()) }
+    }
+
     /// Gets information about a glyph for a font.
     ///
     /// This is a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
@@ -2802,9 +2822,17 @@ impl<A> Ui<A> {
     }
     pub fn dock_space_over_viewport(
         &self,
+        dockspace_id: ImGuiID,
         flags: DockNodeFlags, /*window_class: &WindowClass*/
     ) -> ImGuiID {
-        unsafe { ImGui_DockSpaceOverViewport(std::ptr::null(), flags.bits(), std::ptr::null()) }
+        unsafe {
+            ImGui_DockSpaceOverViewport(
+                dockspace_id,
+                std::ptr::null(),
+                flags.bits(),
+                std::ptr::null(),
+            )
+        }
     }
     pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
         unsafe {
@@ -4106,3 +4134,48 @@ pub const PAYLOAD_TYPE_COLOR_3F: &CStr =
     unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_3F) };
 pub const PAYLOAD_TYPE_COLOR_4F: &CStr =
     unsafe { CStr::from_bytes_with_nul_unchecked(IMGUI_PAYLOAD_TYPE_COLOR_4F) };
+
+/// This is an ImGuiKey plus several ImGuiMods.
+///
+/// Functions that use a `KeyChord` usually get a `impl Into<KeyChord>`. That is
+/// implemented also for `Key` and `(KeyMod, Key)`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct KeyChord(ImGuiKey);
+
+impl KeyChord {
+    pub fn new(mods: KeyMod, key: Key) -> KeyChord {
+        KeyChord(ImGuiKey(mods.bits() | key.bits()))
+    }
+    pub fn bits(&self) -> i32 {
+        self.0 .0
+    }
+    pub fn from_bits(bits: i32) -> Option<KeyChord> {
+        // Validate that the bits are valid when building self
+        let key = bits & !ImGuiKey::ImGuiMod_Mask_.0;
+        let mods = bits & ImGuiKey::ImGuiMod_Mask_.0;
+        match (Key::from_bits(key), KeyMod::from_bits(mods)) {
+            (Some(_), Some(_)) => Some(KeyChord(ImGuiKey(bits))),
+            _ => None,
+        }
+    }
+    pub fn key(&self) -> Key {
+        let key = self.bits() & !ImGuiKey::ImGuiMod_Mask_.0;
+        Key::from_bits(key).unwrap()
+    }
+    pub fn mods(&self) -> KeyMod {
+        let mods = self.bits() & ImGuiKey::ImGuiMod_Mask_.0;
+        KeyMod::from_bits(mods).unwrap()
+    }
+}
+
+impl From<Key> for KeyChord {
+    fn from(value: Key) -> Self {
+        KeyChord::new(KeyMod::None, value)
+    }
+}
+
+impl From<(KeyMod, Key)> for KeyChord {
+    fn from(value: (KeyMod, Key)) -> Self {
+        KeyChord::new(value.0, value.1)
+    }
+}

@@ -2620,6 +2620,22 @@ impl<A> Ui<A> {
         };
         unsafe { ImGui_IsPopupOpen(str_id, flags.bits()) }
     }
+    /// Returns true if the current window is below a modal pop-up.
+    pub fn is_below_blocking_modal(&self) -> bool {
+        // Beware: internal API
+        unsafe {
+            let modal = ImGui_FindBlockingModal((*ImGui_GetCurrentContext()).CurrentWindow);
+            !modal.is_null()
+        }
+    }
+    /// Return true if there is any modal window opened
+    pub fn is_blocking_modal(&self) -> bool {
+        // Beware: internal API
+        unsafe {
+            let modal = ImGui_FindBlockingModal(std::ptr::null_mut());
+            !modal.is_null()
+        }
+    }
     pub fn open_popup(&self, str_id: impl IntoCStr) {
         self.open_popup_ex(str_id, PopupFlags::None)
     }

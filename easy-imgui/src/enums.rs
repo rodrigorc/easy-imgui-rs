@@ -3,8 +3,43 @@
 
 use easy_imgui_sys::*;
 
+// In most API calls enums are passed as integers, but a few are true enums.
+// But since the code to wrap the enums is created by a macro, we use this trait
+// to do the necessary conversions.
+
+trait BitEnumHelper {
+    fn to_bits(self) -> i32;
+    fn from_bits(t: i32) -> Self;
+}
+
+impl BitEnumHelper for i32 {
+    #[inline]
+    fn to_bits(self) -> i32 {
+        self
+    }
+    #[inline]
+    fn from_bits(t: i32) -> Self {
+        t
+    }
+}
+
+macro_rules! impl_bit_enum_helper {
+    ($native_name:ident) => {
+        impl BitEnumHelper for $native_name {
+            #[inline]
+            fn to_bits(self) -> i32 {
+                self.0
+            }
+            #[inline]
+            fn from_bits(t: i32) -> Self {
+                Self(t)
+            }
+        }
+    };
+}
+
 macro_rules! imgui_enum_ex {
-    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
+    ($vis:vis $name:ident : $native_name:ident : $native_name_api:ty { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
         #[repr(i32)]
         #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
         $vis enum $name {
@@ -14,15 +49,15 @@ macro_rules! imgui_enum_ex {
             )*
         }
         impl $name {
-            pub fn bits(self) -> i32 {
-                self as i32
+            pub fn bits(self) -> $native_name_api {
+                <$native_name_api>::from_bits(self as i32)
             }
-            pub fn from_bits(bits: i32) -> Option<Self> {
+            pub fn from_bits(bits: $native_name_api) -> Option<Self> {
                 $(
                     $(#[$inner $($args)*])*
                     const $field: i32 = $native_name::$value.0 as i32;
                 )*
-                let r = match bits {
+                let r = match <$native_name_api>::to_bits(bits) {
                     $(
                         $(#[$inner $($args)*])*
                         $field => Self::$field,
@@ -32,15 +67,29 @@ macro_rules! imgui_enum_ex {
                 Some(r)
             }
         }
-    }
+    };
 }
 
 macro_rules! imgui_enum {
     ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident ),* $(,)? }) => {
         paste::paste! {
             imgui_enum_ex! {
-                $vis $name: $native_name {
+                $vis $name: $native_name: i32 {
                     $( $(#[$inner $($args)*])* $field = [<$native_name $field>],)*
+                }
+            }
+        }
+    };
+}
+
+// Just like imgui_enum but for native strong C++ enums
+macro_rules! imgui_scoped_enum {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident ),* $(,)? }) => {
+        impl_bit_enum_helper!{$native_name}
+        paste::paste! {
+            imgui_enum_ex! {
+                $vis $name: $native_name: $native_name {
+                    $( $(#[$inner $($args)*])* $field = [<$native_name _ $field>],)*
                 }
             }
         }
@@ -251,8 +300,8 @@ imgui_flags! {
     }
 }
 
-imgui_enum! {
-    pub Dir: ImGuiDir_ {
+imgui_scoped_enum! {
+    pub Dir: ImGuiDir {
         Left,
         Right,
         Up,
@@ -296,28 +345,37 @@ imgui_flags! {
 
 imgui_flags! {
     pub InputTextFlags: ImGuiInputTextFlags_ {
+        //Basic filters
         None,
         CharsDecimal,
         CharsHexadecimal,
+        CharsScientific,
         CharsUppercase,
         CharsNoBlank,
-        AutoSelectAll,
+
+        // Inputs
+        AllowTabInput,
         EnterReturnsTrue,
+        EscapeClearsAll,
+        CtrlEnterForNewLine,
+
+        // Other options
+        ReadOnly,
+        Password,
+        AlwaysOverwrite,
+        AutoSelectAll,
+        ParseEmptyRefVal,
+        DisplayEmptyRefVal,
+        NoHorizontalScroll,
+        NoUndoRedo,
+
+        // Callback features
         CallbackCompletion,
         CallbackHistory,
         CallbackAlways,
         CallbackCharFilter,
-        AllowTabInput,
-        CtrlEnterForNewLine,
-        NoHorizontalScroll,
-        AlwaysOverwrite,
-        ReadOnly,
-        Password,
-        NoUndoRedo,
-        CharsScientific,
         CallbackResize,
         CallbackEdit,
-        EscapeClearsAll,
     }
 }
 
@@ -386,7 +444,7 @@ imgui_enum! {
 
 // ImGuiKey is named weirdly
 imgui_enum_ex! {
-    pub Key: ImGuiKey {
+    pub Key: ImGuiKey: i32 {
         None = ImGuiKey_None,
         Tab = ImGuiKey_Tab,
         LeftArrow = ImGuiKey_LeftArrow,

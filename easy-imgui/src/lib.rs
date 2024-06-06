@@ -2500,23 +2500,23 @@ impl<A> Ui<A> {
         }
     }
     pub fn is_key_down(&self, key: Key) -> bool {
-        unsafe { ImGui_IsKeyDown(ImGuiKey(key.bits())) }
+        unsafe { ImGui_IsKeyDown(key.bits()) }
     }
     pub fn is_key_pressed(&self, key: Key) -> bool {
         unsafe {
-            ImGui_IsKeyPressed(ImGuiKey(key.bits()), /*repeat*/ true)
+            ImGui_IsKeyPressed(key.bits(), /*repeat*/ true)
         }
     }
     pub fn is_key_pressed_no_repeat(&self, key: Key) -> bool {
         unsafe {
-            ImGui_IsKeyPressed(ImGuiKey(key.bits()), /*repeat*/ false)
+            ImGui_IsKeyPressed(key.bits(), /*repeat*/ false)
         }
     }
     pub fn is_key_released(&self, key: Key) -> bool {
-        unsafe { ImGui_IsKeyReleased(ImGuiKey(key.bits())) }
+        unsafe { ImGui_IsKeyReleased(key.bits()) }
     }
     pub fn get_key_pressed_amount(&self, key: Key, repeat_delay: f32, rate: f32) -> i32 {
-        unsafe { ImGui_GetKeyPressedAmount(ImGuiKey(key.bits()), repeat_delay, rate) }
+        unsafe { ImGui_GetKeyPressedAmount(key.bits(), repeat_delay, rate) }
     }
     pub fn get_font_tex_uv_white_pixel(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetFontTexUvWhitePixel()) }
@@ -4160,7 +4160,7 @@ pub struct KeyChord(ImGuiKey);
 
 impl KeyChord {
     pub fn new(mods: KeyMod, key: Key) -> KeyChord {
-        KeyChord(ImGuiKey(mods.bits() | key.bits()))
+        KeyChord(ImGuiKey(mods.bits() | key.bits().0))
     }
     pub fn bits(&self) -> i32 {
         self.0 .0
@@ -4169,14 +4169,14 @@ impl KeyChord {
         // Validate that the bits are valid when building self
         let key = bits & !ImGuiKey::ImGuiMod_Mask_.0;
         let mods = bits & ImGuiKey::ImGuiMod_Mask_.0;
-        match (Key::from_bits(key), KeyMod::from_bits(mods)) {
+        match (Key::from_bits(ImGuiKey(key)), KeyMod::from_bits(mods)) {
             (Some(_), Some(_)) => Some(KeyChord(ImGuiKey(bits))),
             _ => None,
         }
     }
     pub fn key(&self) -> Key {
         let key = self.bits() & !ImGuiKey::ImGuiMod_Mask_.0;
-        Key::from_bits(key).unwrap()
+        Key::from_bits(ImGuiKey(key)).unwrap()
     }
     pub fn mods(&self) -> KeyMod {
         let mods = self.bits() & ImGuiKey::ImGuiMod_Mask_.0;

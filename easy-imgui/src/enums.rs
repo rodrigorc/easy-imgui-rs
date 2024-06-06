@@ -7,18 +7,20 @@ use easy_imgui_sys::*;
 // But since the code to wrap the enums is created by a macro, we use this trait
 // to do the necessary conversions.
 
+use std::ffi::c_int;
+
 trait BitEnumHelper {
-    fn to_bits(self) -> i32;
-    fn from_bits(t: i32) -> Self;
+    fn to_bits(self) -> c_int;
+    fn from_bits(t: c_int) -> Self;
 }
 
-impl BitEnumHelper for i32 {
+impl BitEnumHelper for c_int {
     #[inline]
-    fn to_bits(self) -> i32 {
+    fn to_bits(self) -> c_int {
         self
     }
     #[inline]
-    fn from_bits(t: i32) -> Self {
+    fn from_bits(t: c_int) -> Self {
         t
     }
 }
@@ -27,11 +29,11 @@ macro_rules! impl_bit_enum_helper {
     ($native_name:ident) => {
         impl BitEnumHelper for $native_name {
             #[inline]
-            fn to_bits(self) -> i32 {
+            fn to_bits(self) -> c_int {
                 self.0
             }
             #[inline]
-            fn from_bits(t: i32) -> Self {
+            fn from_bits(t: c_int) -> Self {
                 Self(t)
             }
         }
@@ -50,12 +52,12 @@ macro_rules! imgui_enum_ex {
         }
         impl $name {
             pub fn bits(self) -> $native_name_api {
-                <$native_name_api>::from_bits(self as i32)
+                <$native_name_api>::from_bits(self as c_int)
             }
             pub fn from_bits(bits: $native_name_api) -> Option<Self> {
                 $(
                     $(#[$inner $($args)*])*
-                    const $field: i32 = $native_name::$value.0 as i32;
+                    const $field: c_int = $native_name::$value.0 as i32;
                 )*
                 let r = match <$native_name_api>::to_bits(bits) {
                     $(
@@ -443,8 +445,10 @@ imgui_enum! {
 }
 
 // ImGuiKey is named weirdly
+impl_bit_enum_helper! {ImGuiKey}
+
 imgui_enum_ex! {
-    pub Key: ImGuiKey: i32 {
+    pub Key: ImGuiKey: ImGuiKey {
         None = ImGuiKey_None,
         Tab = ImGuiKey_Tab,
         LeftArrow = ImGuiKey_LeftArrow,
@@ -583,7 +587,7 @@ imgui_enum_ex! {
         MouseWheelX = ImGuiKey_MouseWheelX,
         MouseWheelY = ImGuiKey_MouseWheelY,
 
-        // These are better handled as KeyMod, but sometimes can be seen as regular  keys
+        // These are better handled as KeyMod, but sometimes can be seen as regular keys.
         ModCtrl = ImGuiMod_Ctrl,
         ModShift = ImGuiMod_Shift,
         ModAlt = ImGuiMod_Alt,

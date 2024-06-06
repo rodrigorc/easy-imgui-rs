@@ -368,22 +368,23 @@ pub fn do_event<EventUserType>(
                         let io = imgui.io_mut();
                         ImGuiIO_AddKeyEvent(
                             io,
-                            ImGuiKey(imgui::Key::ModCtrl.bits()),
+                            imgui::Key::ModCtrl.bits(),
                             mods.state().control_key(),
                         );
                         ImGuiIO_AddKeyEvent(
                             io,
-                            ImGuiKey(imgui::Key::ModShift.bits()),
+                            imgui::Key::ModShift.bits(),
                             mods.state().shift_key(),
                         );
+                        #[rustfmt::skip]
                         ImGuiIO_AddKeyEvent(
                             io,
-                            ImGuiKey(imgui::Key::ModAlt.bits()),
+                            imgui::Key::ModAlt.bits(),
                             mods.state().alt_key(),
                         );
                         ImGuiIO_AddKeyEvent(
                             io,
-                            ImGuiKey(imgui::Key::ModSuper.bits()),
+                            imgui::Key::ModSuper.bits(),
                             mods.state().super_key(),
                         );
                     }
@@ -405,7 +406,7 @@ pub fn do_event<EventUserType>(
                         unsafe {
                             let mut imgui = renderer.imgui().set_current();
                             let io = imgui.io_mut();
-                            ImGuiIO_AddKeyEvent(io, ImGuiKey(key.bits()), pressed);
+                            ImGuiIO_AddKeyEvent(io, key.bits(), pressed);
 
                             use winit::keyboard::KeyCode::*;
                             if let PhysicalKey::Code(keycode) = physical_key {
@@ -417,7 +418,7 @@ pub fn do_event<EventUserType>(
                                     _ => None,
                                 };
                                 if let Some(kmod) = kmod {
-                                    ImGuiIO_AddKeyEvent(io, ImGuiKey(kmod.bits()), pressed);
+                                    ImGuiIO_AddKeyEvent(io, kmod.bits(), pressed);
                                 }
                             }
                         }

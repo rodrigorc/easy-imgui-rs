@@ -51,7 +51,7 @@ enum BallPhase {
 }
 
 struct Pong {
-    input: [bool; UserInput::COUNT as usize],
+    input: [bool; UserInput::Count as usize],
     pos1: f32,
     pos2: f32,
     score1: u32,
@@ -301,13 +301,13 @@ enum UserInput {
     P2Up,
     P2Down,
 
-    COUNT,
+    Count,
 }
 
 impl Default for Pong {
     fn default() -> Pong {
         Pong {
-            input: [false; UserInput::COUNT as usize],
+            input: [false; UserInput::Count as usize],
             pos1: 300.0,
             pos2: 300.0,
             score1: 0,
@@ -564,6 +564,7 @@ fn main() {
             window.ping_user_input();
             let mut ui_request = std::mem::take(&mut app.ui_request);
 
+            #[allow(clippy::single_match)]
             match &event {
                 winit::event::Event::WindowEvent { event, .. } => match event {
                     winit::event::WindowEvent::Resized(_) => {
@@ -632,7 +633,7 @@ fn main() {
                     app.ui_status.insert(UiRequest::VSync);
                     glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap())
                 };
-                let _ = w.surface().set_swap_interval(&w.glutin_context(), interval);
+                let _ = w.surface().set_swap_interval(w.glutin_context(), interval);
             }
             if ui_request.contains(UiRequest::Fullscreen) {
                 let w = window.main_window().window();

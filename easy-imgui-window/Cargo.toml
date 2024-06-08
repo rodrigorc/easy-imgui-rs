@@ -19,9 +19,9 @@ main-window = ["dep:glutin-winit"]
 # docking = ["easy-imgui/docking"]
 
 [dependencies]
-easy-imgui-sys = { path = "../easy-imgui-sys" }
-easy-imgui = { path = "../easy-imgui" }
-easy-imgui-renderer = { path = "../easy-imgui-renderer" }
+easy-imgui-sys = { version = "=0.5.0", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.5.0", path = "../easy-imgui" }
+easy-imgui-renderer = { version = "=0.5.0", path = "../easy-imgui-renderer" }
 
 anyhow = "1"
 bitflags = "2"

@@ -13,7 +13,6 @@ keywords = ["imgui", "ui", "graphics"]
 easy-imgui-sys = { path = "../easy-imgui-sys" }
 paste = "1"
 bitflags = "2"
-cstr = "0.2"
 mint = "0.5"
 cgmath = { version = "0.18", features = ["mint"] }
 image = { version = "0.25", default-features = false }

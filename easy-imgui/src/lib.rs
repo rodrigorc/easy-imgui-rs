@@ -129,7 +129,6 @@
 #![allow(clippy::missing_safety_doc, clippy::too_many_arguments)]
 
 pub use cgmath;
-use cstr::cstr;
 use easy_imgui_sys::*;
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -1158,7 +1157,7 @@ macro_rules! decl_builder_drag {
                         speed: 1.0,
                         min: <$argty>::default(),
                         max: <$argty>::default(),
-                        format: Cow::Borrowed(cstr!("%.3f")),
+                        format: Cow::Borrowed(c"%.3f"),
                         flags: SliderFlags::None,
                     }
                 }
@@ -1169,15 +1168,15 @@ macro_rules! decl_builder_drag {
 
 macro_rules! impl_float_format {
     ($name:ident) => {
-        impl_float_format! {$name "%g" "%.0f" "%.3f" "%.{}f"}
+        impl_float_format! {$name c"%g" c"%.0f" c"%.3f" "%.{}f"}
     };
     ($name:ident $g:literal $f0:literal $f3:literal $f_n:literal) => {
         impl<S: IntoCStr> $name<'_, S> {
             pub fn display_format(mut self, format: FloatFormat) -> Self {
                 self.format = match format {
-                    FloatFormat::G => Cow::Borrowed(cstr!($g)),
-                    FloatFormat::F(0) => Cow::Borrowed(cstr!($f0)),
-                    FloatFormat::F(3) => Cow::Borrowed(cstr!($f3)),
+                    FloatFormat::G => Cow::Borrowed($g),
+                    FloatFormat::F(0) => Cow::Borrowed($f0),
+                    FloatFormat::F(3) => Cow::Borrowed($f3),
                     FloatFormat::F(n) => Cow::Owned(CString::new(format!($f_n, n)).unwrap()),
                 };
                 self
@@ -1227,7 +1226,7 @@ macro_rules! decl_builder_slider {
                         value,
                         min: <$argty>::default(),
                         max: <$argty>::default(),
-                        format: Cow::Borrowed(cstr!("%.3f")),
+                        format: Cow::Borrowed(c"%.3f"),
                         flags: SliderFlags::None,
                     }
                 }
@@ -1272,14 +1271,14 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
                 v_rad,
                 v_degrees_min: -360.0,
                 v_degrees_max: 360.0,
-                format: Cow::Borrowed(cstr!("%.0f deg")),
+                format: Cow::Borrowed(c"%.0f deg"),
                 flags: SliderFlags::None,
             }
         }
     }
 }
 
-impl_float_format! { SliderAngle "%g deg" "%.0f deg" "%.3f deg" "%.{}f deg"}
+impl_float_format! { SliderAngle c"%g deg" c"%.0f deg" c"%.3f deg" "%.{}f deg"}
 
 decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
     (
@@ -1552,7 +1551,7 @@ decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
                 value,
                 step: 0.0,
                 step_fast: 0.0,
-                format: Cow::Borrowed(cstr!("%.3f")),
+                format: Cow::Borrowed(c"%.3f"),
                 flags: InputTextFlags::None,
             }
         }
@@ -1602,7 +1601,7 @@ macro_rules! decl_builder_input_f {
                 $name {
                     label:label.into(),
                     value,
-                    format: Cow::Borrowed(cstr!("%.3f")),
+                    format: Cow::Borrowed(c"%.3f"),
                     flags: InputTextFlags::None,
                 }
             }
@@ -2188,24 +2187,24 @@ impl<A> Ui<A> {
     }
     pub fn text_colored(&self, color: Color, text: impl IntoCStr) {
         let text = text.into();
-        unsafe { ImGui_TextColored(&color.into(), cstr!("%s").as_ptr(), text.as_ptr()) }
+        unsafe { ImGui_TextColored(&color.into(), c"%s".as_ptr(), text.as_ptr()) }
     }
     pub fn text_disabled(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe { ImGui_TextDisabled(cstr!("%s").as_ptr(), text.as_ptr()) }
+        unsafe { ImGui_TextDisabled(c"%s".as_ptr(), text.as_ptr()) }
     }
     pub fn text_wrapped(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe { ImGui_TextWrapped(cstr!("%s").as_ptr(), text.as_ptr()) }
+        unsafe { ImGui_TextWrapped(c"%s".as_ptr(), text.as_ptr()) }
     }
     pub fn label_text(&self, label: impl IntoCStr, text: impl IntoCStr) {
         let label = label.into();
         let text = text.into();
-        unsafe { ImGui_LabelText(label.as_ptr(), cstr!("%s").as_ptr(), text.as_ptr()) }
+        unsafe { ImGui_LabelText(label.as_ptr(), c"%s".as_ptr(), text.as_ptr()) }
     }
     pub fn bullet_text(&self, text: impl IntoCStr) {
         let text = text.into();
-        unsafe { ImGui_BulletText(cstr!("%s").as_ptr(), text.as_ptr()) }
+        unsafe { ImGui_BulletText(c"%s".as_ptr(), text.as_ptr()) }
     }
     pub fn bullet(&self) {
         unsafe {

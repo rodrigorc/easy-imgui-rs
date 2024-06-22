@@ -57,9 +57,9 @@
  * This `crate` is similar to [`imgui-rs`][imguirs], and it is inpired by it, but with a few key
  * differences:
  *  * It doesn't use any C++-to-C api generator, as `rust-bindgen` is able to import simple C++
- * libraries directly.
+ *    libraries directly.
  *  * It is lower level, there are fewer high-level abstractions over the ImGui API. This means
- * that:
+ *    that:
  *      * This API is less Rusty than imgui-rs's.
  *      * If you know how to use Dear ImGui, then you know how to use easy-imgui.
  *      * It is far easier to upgrade to new Dear ImGui versions.
@@ -67,9 +67,9 @@
  * # Features
  * These are the available features for this crate:
  *  * `freetype`: Uses an external _freetype_ font loader for Dear ImGui, instead of the embedded
- *  `stb_truetype` library.
+ *    `stb_truetype` library.
  *  * `docking`: Uses the `docking` branch of Dear ImGui. Note that this is considered somewhat
- *  experimental.
+ *    experimental.
  *
  * # Usage
  * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
@@ -77,9 +77,9 @@
  *
  * These are the main pieces of this crate:
  *  * [`Context`]: It represents the ImGui context. In DearImgui this is a global variable. Here it
- *  is a thread-local variable. Still, since it is implicit in most API calls, most uses of this
- *  type are unsafe. If you use [`easy-imgui-window`] or [`easy-imgui-renderer`] you will rarely
- *  need to touch this type directly.
+ *    is a thread-local variable. Still, since it is implicit in most API calls, most uses of this
+ *    type are unsafe. If you use [`easy-imgui-window`] or [`easy-imgui-renderer`] you will rarely
+ *    need to touch this type directly.
  *  * [`Ui`]: A frame that is being built. Most ImGui functions are members of `Ui`.
  *  * [`UiBuilder`]: A trait that your application implements do build your user interface.
  *
@@ -93,24 +93,24 @@
  * This crate follows a series of naming conventions to make the API more predictable,
  * particularly with the [`Ui`] member functions:
  *  * A [`Pushable`] is any value that can be made active by a _push_ function and inactive by a
- *  corresponding _pop_ function. Examples are styles, colors, fonts...
+ *    corresponding _pop_ function. Examples are styles, colors, fonts...
  *  * A [`Hashable`] is any value that can be used to build an ImGui hash id. Ideally there should
- *  be one of these everywhere, but the Dear ImGui API it not totally othogonal here...
+ *    be one of these everywhere, but the Dear ImGui API it not totally othogonal here...
  *  * A function without special prefix or suffix does the same thing as its Dear ImGui
- *  counterpart. For example [`Ui::button`] calls `ImGui_Button`.
+ *    counterpart. For example [`Ui::button`] calls `ImGui_Button`.
  *  * A function name that contains the `with` word takes a function that is called immediately. It
- *  corresponds to a pair of `*Begin` and `*End` functions in Dear ImGui. The function is called
- *  between these two functions. The value returned will be that of the function.
+ *    corresponds to a pair of `*Begin` and `*End` functions in Dear ImGui. The function is called
+ *    between these two functions. The value returned will be that of the function.
  *      * If the function is called based on some condition, such as with `ImGui_BeginChild`, then there
- *      will be another function with prefix `with_always_` that takes a function with a bool
- *      argument `opened: bool`, that can be used if you need the function to be called even if the
- *      condition is not met.
+ *        will be another function with prefix `with_always_` that takes a function with a bool
+ *        argument `opened: bool`, that can be used if you need the function to be called even if the
+ *        condition is not met.
  *  * A function name that ends as `_config` will create a builder object (with the `must_use`
- *  annotation). This object will have a few properties to be set and a `build` or a
- *  `with` function to create the actual UI element.
+ *    annotation). This object will have a few properties to be set and a `build` or a
+ *    `with` function to create the actual UI element.
  *  * Most builder object have a `push_for_begin` function, that will set up the pushable to be
- *  used only for the `begin` part of the UI. This is useful for example to set up the style for a
- *  window but not for its contents.
+ *    used only for the `begin` part of the UI. This is useful for example to set up the style for a
+ *    window but not for its contents.
  *
  * When a function takes a value of type `String` this crate will usually take a generic `impl IntoCStr`.
  * This is an optimization that allows you to pass either a `String`, a `&str`, a `CString` or a

@@ -128,7 +128,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     if let Some(freetype) = &freetype {
         build.define("IMGUI_ENABLE_FREETYPE", "1");
         for include in &freetype.include_paths {
-            build.include(&include.display().to_string());
+            build.include(include.display().to_string());
         }
     }
     build.compile("dear_imgui");

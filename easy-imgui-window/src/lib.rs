@@ -4,7 +4,7 @@
 * # Features
 *  * `clipboard` (default): clipboard integration, via the `arboard` crate.
 *  * `freetype`: use `libfreetype` for TTF font loading. It requires a precompiled native FreeType
-*  shared library.
+*    shared library.
 */
 pub mod conv;
 mod window;

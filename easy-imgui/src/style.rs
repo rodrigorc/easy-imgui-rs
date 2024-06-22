@@ -99,4 +99,22 @@ impl<'a> StylePtr<'a> {
     pub fn item_inner_spacing(&self) -> Vector2 {
         im_to_v2(self.ptr.ItemInnerSpacing)
     }
+    pub fn window_padding(&self) -> Vector2 {
+        im_to_v2(self.ptr.WindowPadding)
+    }
+    pub fn window_rounding(&self) -> f32 {
+        self.ptr.WindowRounding
+    }
+    pub fn window_border_size(&self) -> f32 {
+        self.ptr.WindowBorderSize
+    }
+    pub fn window_min_size(&self) -> Vector2 {
+        im_to_v2(self.ptr.WindowMinSize)
+    }
+    pub fn window_title_align(&self) -> Vector2 {
+        im_to_v2(self.ptr.WindowTitleAlign)
+    }
+    pub fn window_menu_button_position(&self) -> Dir {
+        Dir::from_bits(self.ptr.WindowMenuButtonPosition).unwrap()
+    }
 }

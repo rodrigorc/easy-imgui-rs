@@ -14,6 +14,7 @@ default = ["clipboard", "main-window"]
 clipboard = ["dep:arboard"]
 freetype = ["easy-imgui/freetype"]
 main-window = ["dep:glutin-winit"]
+docking = ["easy-imgui/docking"]
 
 # This is not really needed except for the examples/demo
 # docking = ["easy-imgui/docking"]

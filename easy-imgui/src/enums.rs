@@ -30,11 +30,11 @@ macro_rules! impl_bit_enum_helper {
         impl BitEnumHelper for $native_name {
             #[inline]
             fn to_bits(self) -> c_int {
-                self.0
+                self.0 as _
             }
             #[inline]
             fn from_bits(t: c_int) -> Self {
-                Self(t)
+                Self(t as _)
             }
         }
     };
@@ -925,5 +925,13 @@ imgui_flags! {
         RouteUnlessBgFocused,
         RouteFromRootWindow,
         Tooltip,
+    }
+}
+
+imgui_scoped_enum! {
+    pub SortDirection: ImGuiSortDirection {
+        None,
+        Ascending,
+        Descending,
     }
 }

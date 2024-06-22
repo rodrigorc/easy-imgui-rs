@@ -4022,6 +4022,12 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
             };
             TableColumnFlags::from_bits_truncate(bits)
         }
+        pub fn table_get_column_name(&self, column_n: Option<i32>) -> String {
+            unsafe {
+                let c_str = ImGui_TableGetColumnName(column_n.unwrap_or(-1));
+                CStr::from_ptr(c_str).to_string_lossy().into_owned()
+            }
+        }
         pub fn table_set_column_enabled(&self, column_n: Option<i32>, enabled: bool) {
             unsafe {
                 ImGui_TableSetColumnEnabled(column_n.unwrap_or(-1), enabled);
@@ -4032,7 +4038,34 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
                 ImGui_TableSetBgColor(target.bits(), color.as_u32(), column_n.unwrap_or(-1));
             };
         }
-        //TODO: ImGui_TableGetSortSpecs, TableGetColumnName
+        pub fn table_with_sort_specs(&self, sort_fn: impl FnOnce(&[TableColumnSortSpec])) {
+            self.table_with_sort_specs_always(|dirty, spec| {
+                if dirty {
+                    sort_fn(spec);
+                }
+                false
+            })
+        }
+        /// The `sort_fn` takes the old `dirty` and returns the new `dirty`.
+        pub fn table_with_sort_specs_always(&self, sort_fn: impl FnOnce(bool, &[TableColumnSortSpec]) -> bool) {
+            unsafe {
+                let specs = ImGui_TableGetSortSpecs();
+                if specs.is_null() {
+                    return;
+                }
+                // SAFETY: TableColumnSortSpec is a repr(transparent), so this pointer cast should be ok
+                let slice = {
+                    let len = (*specs).SpecsCount as usize;
+                    if len == 0 {
+                        &[]
+                    } else {
+                        let ptr = std::mem::transmute::<*const ImGuiTableColumnSortSpecs, *const TableColumnSortSpec>((*specs).Specs);
+                        std::slice::from_raw_parts(ptr, len)
+                    }
+                };
+                (*specs).SpecsDirty = sort_fn((*specs).SpecsDirty, slice);
+            }
+        }
     }
 }
 
@@ -4192,5 +4225,35 @@ impl From<Key> for KeyChord {
 impl From<(KeyMod, Key)> for KeyChord {
     fn from(value: (KeyMod, Key)) -> Self {
         KeyChord::new(value.0, value.1)
+    }
+}
+
+/// Return type for `Ui::table_get_sort_specs`.
+#[repr(transparent)]
+pub struct TableColumnSortSpec(ImGuiTableColumnSortSpecs);
+
+impl std::fmt::Debug for TableColumnSortSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TableColumnSortSpec")
+            .field("id", &self.id())
+            .field("index", &self.index())
+            .field("sort_order", &self.sort_order())
+            .field("sort_direction", &self.sort_direction())
+            .finish()
+    }
+}
+
+impl TableColumnSortSpec {
+    pub fn id(&self) -> ImGuiID {
+        self.0.ColumnUserID
+    }
+    pub fn index(&self) -> usize {
+        self.0.ColumnIndex as usize
+    }
+    pub fn sort_order(&self) -> usize {
+        self.0.SortOrder as usize
+    }
+    pub fn sort_direction(&self) -> SortDirection {
+        SortDirection::from_bits(self.0.SortDirection).unwrap_or(SortDirection::None)
     }
 }

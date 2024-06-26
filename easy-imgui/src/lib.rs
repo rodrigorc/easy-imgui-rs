@@ -132,7 +132,7 @@ pub use cgmath;
 use easy_imgui_sys::*;
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
@@ -1425,7 +1425,42 @@ decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
     {
         pub fn input_text_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut String) -> InputText<'v, S> {
             InputText {
-                label:label.into(),
+                label: label.into(),
+                text,
+                flags: InputTextFlags::None,
+            }
+        }
+    }
+}
+
+unsafe fn input_os_string_wrapper(
+    label: *const c_char,
+    os_string: &mut OsString,
+    flags: InputTextFlags,
+) -> bool {
+    let s = std::mem::take(os_string).into_string();
+    let mut s = match s {
+        Ok(s) => s,
+        Err(os) => os.to_string_lossy().into_owned(),
+    };
+    let res = input_text_wrapper(label, &mut s, flags);
+    *os_string = OsString::from(s);
+    res
+}
+
+decl_builder! { InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr)
+    (
+        label (S::Temp) (label.as_ptr()),
+        text (&'v mut OsString) (text),
+        flags (InputTextFlags) (flags),
+    )
+    {
+        decl_builder_setter!{flags: InputTextFlags}
+    }
+    {
+        pub fn input_os_string_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut OsString) -> InputOsString<'v, S> {
+            InputOsString {
+                label: label.into(),
                 text,
                 flags: InputTextFlags::None,
             }

@@ -1751,24 +1751,52 @@ decl_builder_with_opt! {Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
     }
 }
 
-decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup () (S: IntoCStr)
+enum PopupOpened<'a> {
+    Literal(bool),
+    Reference(&'a mut bool),
+    None,
+}
+
+impl<'a> PopupOpened<'a> {
+    unsafe fn pointer(&mut self) -> *mut bool {
+        match self {
+            PopupOpened::Literal(x) => x,
+            PopupOpened::Reference(r) => *r,
+            PopupOpened::None => std::ptr::null_mut(),
+        }
+    }
+}
+
+decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup ('a) (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
-        opened (Option<bool>) (optional_mut_bool(&mut opened.as_mut())),
+        opened (PopupOpened<'a>) (opened.pointer()),
         flags (WindowFlags) (flags.bits()),
     )
     {
         decl_builder_setter!{flags: WindowFlags}
+
         pub fn close_button(mut self, close_button: bool) -> Self {
-            self.opened = if close_button { Some(true) } else { None };
+            self.opened = if close_button { PopupOpened::Literal(true) } else { PopupOpened::None };
             self
+        }
+
+        pub fn opened(self, opened: Option<&'a mut bool>) -> PopupModal<'a, S, P> {
+            let opened = match opened {
+                Some(b) => PopupOpened::Reference(b),
+                None => PopupOpened::None,
+            };
+            PopupModal {
+                opened,
+                .. self
+            }
         }
     }
     {
-        pub fn popup_modal_config<S: IntoCStr>(&self, name: S) -> PopupModal<S> {
+        pub fn popup_modal_config<S: IntoCStr>(&self, name: S) -> PopupModal<'static, S> {
             PopupModal {
                 name: name.into(),
-                opened: None,
+                opened: PopupOpened::None,
                 flags: WindowFlags::None,
                 push: (),
             }

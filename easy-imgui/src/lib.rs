@@ -2773,24 +2773,12 @@ impl<A> Ui<A> {
         self.with_always_drag_drop_target(move |r| r.map(f))
     }
 
-    pub fn with_list_clipper(
-        &self,
-        items_count: usize,
-        items_height: f32,
-        included_ranges: &[std::ops::Range<usize>],
-        mut f: impl FnMut(usize),
-    ) {
-        unsafe {
-            let mut clip = ImGuiListClipper::new();
-            clip.Begin(items_count as i32, items_height);
-            for r in included_ranges {
-                clip.IncludeItemsByIndex(r.start as i32, r.end as i32);
-            }
-            while clip.Step() {
-                for i in clip.DisplayStart..clip.DisplayEnd {
-                    f(i as usize);
-                }
-            }
+    #[must_use]
+    pub fn list_clipper(&self, items_count: usize) -> ListClipper {
+        ListClipper {
+            items_count,
+            items_height: -1.0,
+            included_ranges: Vec::new(),
         }
     }
 
@@ -2840,6 +2828,35 @@ impl<A> Ui<A> {
         unsafe {
             let font = font_ptr(font_id);
             &*font
+        }
+    }
+}
+
+pub struct ListClipper {
+    items_count: usize,
+    items_height: f32,
+    included_ranges: Vec<std::ops::Range<usize>>,
+}
+
+impl ListClipper {
+    decl_builder_setter! {items_height: f32}
+
+    pub fn add_included_range(&mut self, range: std::ops::Range<usize>) {
+        self.included_ranges.push(range);
+    }
+
+    pub fn with(self, mut f: impl FnMut(usize)) {
+        unsafe {
+            let mut clip = ImGuiListClipper::new();
+            clip.Begin(self.items_count as i32, self.items_height);
+            for r in self.included_ranges {
+                clip.IncludeItemsByIndex(r.start as i32, r.end as i32);
+            }
+            while clip.Step() {
+                for i in clip.DisplayStart..clip.DisplayEnd {
+                    f(i as usize);
+                }
+            }
         }
     }
 }

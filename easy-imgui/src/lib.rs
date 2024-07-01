@@ -1963,7 +1963,7 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
                 height_in_items = 7;
             }
             let height_in_items_f = height_in_items as f32 + 0.25;
-            let height_in_pixels = self.get_text_line_height_with_spacing() * height_in_items_f + self.style().frame_padding().y * 2.0;
+            let height_in_pixels = self.get_text_line_height_with_spacing() * height_in_items_f + self.style().FramePadding.y * 2.0;
 
             let mut changed = false;
             self.list_box_config(label)
@@ -2133,7 +2133,7 @@ impl<A> Ui<A> {
             ImGui_SetNextItemOpen(is_open, cond.bits());
         }
     }
-    pub fn set_keyboard_focus_here(offset: i32) {
+    pub fn set_keyboard_focus_here(&self, offset: i32) {
         unsafe { ImGui_SetKeyboardFocusHere(offset) }
     }
 

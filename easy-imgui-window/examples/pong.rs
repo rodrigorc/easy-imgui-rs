@@ -4,9 +4,9 @@ use std::{
 };
 
 use easy_imgui_window::{
-    easy_imgui as imgui, winit::event_loop::EventLoopBuilder, EventFlags, MainWindow,
-    MainWindowWithRenderer,
+    easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
 };
+use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
 
 use easy_imgui_renderer::{
     glow,
@@ -533,131 +533,141 @@ impl imgui::UiBuilder for App {
     }
 }
 
+const TICK: Duration = Duration::from_micros(1_000_000 / 60);
+
+impl Application for App {
+    type UserEvent = ();
+    type Data = ();
+
+    const EVENT_FLAGS: EventFlags = EventFlags::DoNotResize;
+
+    fn new(args: Args<()>) -> App {
+        args.window
+            .renderer()
+            .set_background_color(Some(imgui::Color {
+                r: 0.2,
+                g: 0.2,
+                b: 0.2,
+                a: 1.0,
+            }));
+
+        args.window.renderer().set_matrix(Some(Matrix3::identity()));
+        args.window
+            .main_window()
+            .set_matrix(Some(Matrix3::identity()));
+
+        let mut app = App::new(args.window.renderer().gl_context());
+        app.game_tick();
+        app.ui_status.insert(UiRequest::VSync);
+
+        app
+    }
+
+    fn window_event(&mut self, args: Args<()>, event: WindowEvent, ui_res: EventResult) {
+        if ui_res.window_closed || self.ui_request.contains(UiRequest::Quit) {
+            args.event_loop.exit();
+        }
+
+        //continuous render
+        args.window.ping_user_input();
+        let mut ui_request = std::mem::take(&mut self.ui_request);
+
+        match event {
+            winit::event::WindowEvent::Resized(_) => {
+                let size = args.window.main_window().window().inner_size();
+                let (mx, offs, scale_inv) = ratio_ortho(size.width as f32, size.height as f32);
+                //let angle = imgui::cgmath::Deg(5.0);
+                //let mx = mx * imgui::cgmath::Matrix3::from_angle_z(-angle);
+                self.u.m = mx;
+                args.window
+                    .renderer()
+                    .set_size(Vector2::new(800.0, 600.0), 1.0 / scale_inv);
+                args.window.renderer().set_matrix(Some(mx));
+                args.window.main_window().set_matrix(Some(
+                    //imgui::cgmath::Matrix3::from_angle_z(angle) *
+                    Matrix3::from_translation(-offs) * Matrix3::from_scale(scale_inv),
+                ));
+                self.window_size = size;
+            }
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                if !ui_res.want_capture_keyboard {
+                    match event.physical_key {
+                        winit::keyboard::PhysicalKey::Code(key) => match key {
+                            winit::keyboard::KeyCode::KeyQ => {
+                                self.user_input(UserInput::P1Up, event.state.is_pressed());
+                            }
+                            winit::keyboard::KeyCode::KeyA => {
+                                self.user_input(UserInput::P1Down, event.state.is_pressed());
+                            }
+                            winit::keyboard::KeyCode::KeyP => {
+                                self.user_input(UserInput::P2Up, event.state.is_pressed());
+                            }
+                            winit::keyboard::KeyCode::Semicolon => {
+                                self.user_input(UserInput::P2Down, event.state.is_pressed());
+                            }
+                            winit::keyboard::KeyCode::Escape if event.state.is_pressed() => {
+                                let next = match self.show_menu {
+                                    Menu::None => Menu::Main,
+                                    Menu::Main => Menu::None,
+                                    Menu::Options => Menu::Main,
+                                    Menu::Hello => Menu::Main,
+                                };
+                                self.set_show_menu(next);
+                            }
+                            winit::keyboard::KeyCode::F11 if event.state.is_pressed() => {
+                                ui_request.insert(UiRequest::Fullscreen);
+                            }
+                            _ => {}
+                        },
+                        winit::keyboard::PhysicalKey::Unidentified(_) => todo!(),
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if ui_request.contains(UiRequest::VSync) {
+            let w = args.window.main_window();
+            let interval = if self.ui_status.contains(UiRequest::VSync) {
+                self.ui_status.remove(UiRequest::VSync);
+                glutin::surface::SwapInterval::DontWait
+            } else {
+                self.ui_status.insert(UiRequest::VSync);
+                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap())
+            };
+            let _ = w.surface().set_swap_interval(w.glutin_context(), interval);
+        }
+        if ui_request.contains(UiRequest::Fullscreen) {
+            let w = args.window.main_window().window();
+            if w.fullscreen().is_some() {
+                w.set_fullscreen(None);
+                self.ui_status.remove(UiRequest::Fullscreen);
+            } else {
+                w.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+                self.ui_status.insert(UiRequest::Fullscreen);
+            }
+        }
+        if ui_request.contains(UiRequest::HideCursor) {
+            args.window.main_window().window().set_cursor_visible(false);
+        }
+        if ui_request.contains(UiRequest::ShowCursor) {
+            args.window.main_window().window().set_cursor_visible(true);
+        }
+        if self.show_menu == Menu::None {
+            let now = Instant::now();
+            if now.duration_since(self.last_tick) > TICK {
+                self.game_tick();
+                self.last_tick += TICK;
+            }
+        }
+    }
+}
+
 fn main() {
     //simple_logger::SimpleLogger::new().init().unwrap();
-    let event_loop = EventLoopBuilder::new().build().unwrap();
-    let main_window = MainWindow::new(&event_loop, "Example").unwrap();
-    let mut window = MainWindowWithRenderer::new(main_window);
-    window.renderer().set_background_color(Some(imgui::Color {
-        r: 0.2,
-        g: 0.2,
-        b: 0.2,
-        a: 1.0,
-    }));
+    let event_loop = EventLoop::new().unwrap();
+    let mut main = AppHandler::<App>::default();
+    *main.attributes() = Window::default_attributes().with_title("Pong");
 
-    window.renderer().set_matrix(Some(Matrix3::identity()));
-    window.main_window().set_matrix(Some(Matrix3::identity()));
-
-    let mut app = App::new(window.renderer().gl_context());
-    app.game_tick();
-    app.ui_status.insert(UiRequest::VSync);
-
-    const TICK: Duration = Duration::from_micros(1_000_000 / 60);
-
-    event_loop
-        .run(move |event, w| {
-            let ui_res = window.do_event_with_flags(&mut app, &event, EventFlags::DoNotResize);
-            if ui_res.window_closed || app.ui_request.contains(UiRequest::Quit) {
-                w.exit();
-            }
-            //continuous render
-            window.ping_user_input();
-            let mut ui_request = std::mem::take(&mut app.ui_request);
-
-            #[allow(clippy::single_match)]
-            match &event {
-                winit::event::Event::WindowEvent { event, .. } => match event {
-                    winit::event::WindowEvent::Resized(_) => {
-                        let size = window.main_window().window().inner_size();
-                        let (mx, offs, scale_inv) =
-                            ratio_ortho(size.width as f32, size.height as f32);
-                        //let angle = imgui::cgmath::Deg(5.0);
-                        //let mx = mx * imgui::cgmath::Matrix3::from_angle_z(-angle);
-                        app.u.m = mx;
-                        window
-                            .renderer()
-                            .set_size(Vector2::new(800.0, 600.0), 1.0 / scale_inv);
-                        window.renderer().set_matrix(Some(mx));
-                        window.main_window().set_matrix(Some(
-                            //imgui::cgmath::Matrix3::from_angle_z(angle) *
-                            Matrix3::from_translation(-offs) * Matrix3::from_scale(scale_inv),
-                        ));
-                        app.window_size = size;
-                    }
-                    winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                        if !ui_res.want_capture_keyboard {
-                            match event.physical_key {
-                                winit::keyboard::PhysicalKey::Code(key) => match key {
-                                    winit::keyboard::KeyCode::KeyQ => {
-                                        app.user_input(UserInput::P1Up, event.state.is_pressed());
-                                    }
-                                    winit::keyboard::KeyCode::KeyA => {
-                                        app.user_input(UserInput::P1Down, event.state.is_pressed());
-                                    }
-                                    winit::keyboard::KeyCode::KeyP => {
-                                        app.user_input(UserInput::P2Up, event.state.is_pressed());
-                                    }
-                                    winit::keyboard::KeyCode::Semicolon => {
-                                        app.user_input(UserInput::P2Down, event.state.is_pressed());
-                                    }
-                                    winit::keyboard::KeyCode::Escape
-                                        if event.state.is_pressed() =>
-                                    {
-                                        let next = match app.show_menu {
-                                            Menu::None => Menu::Main,
-                                            Menu::Main => Menu::None,
-                                            Menu::Options => Menu::Main,
-                                            Menu::Hello => Menu::Main,
-                                        };
-                                        app.set_show_menu(next);
-                                    }
-                                    winit::keyboard::KeyCode::F11 if event.state.is_pressed() => {
-                                        ui_request.insert(UiRequest::Fullscreen);
-                                    }
-                                    _ => {}
-                                },
-                                winit::keyboard::PhysicalKey::Unidentified(_) => todo!(),
-                            }
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-            if ui_request.contains(UiRequest::VSync) {
-                let w = window.main_window();
-                let interval = if app.ui_status.contains(UiRequest::VSync) {
-                    app.ui_status.remove(UiRequest::VSync);
-                    glutin::surface::SwapInterval::DontWait
-                } else {
-                    app.ui_status.insert(UiRequest::VSync);
-                    glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap())
-                };
-                let _ = w.surface().set_swap_interval(w.glutin_context(), interval);
-            }
-            if ui_request.contains(UiRequest::Fullscreen) {
-                let w = window.main_window().window();
-                if w.fullscreen().is_some() {
-                    w.set_fullscreen(None);
-                    app.ui_status.remove(UiRequest::Fullscreen);
-                } else {
-                    w.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-                    app.ui_status.insert(UiRequest::Fullscreen);
-                }
-            }
-            if ui_request.contains(UiRequest::HideCursor) {
-                window.main_window().window().set_cursor_visible(false);
-            }
-            if ui_request.contains(UiRequest::ShowCursor) {
-                window.main_window().window().set_cursor_visible(true);
-            }
-            if app.show_menu == Menu::None {
-                let now = Instant::now();
-                if now.duration_since(app.last_tick) > TICK {
-                    app.game_tick();
-                    app.last_tick += TICK;
-                }
-            }
-        })
-        .unwrap();
+    event_loop.run_app(&mut main).unwrap();
 }

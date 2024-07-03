@@ -5,24 +5,26 @@
 use std::time::Duration;
 
 use easy_imgui::{vec2, Color, Cond, DrawFlags, UiBuilder, Vector2, WindowFlags};
-use easy_imgui_window::{
-    winit::event_loop::{EventLoopBuilder, EventLoopProxy},
-    MainWindow, MainWindowWithRenderer,
+use easy_imgui_window::{winit, AppHandler, Application, Args, EventResult};
+use winit::{
+    event::WindowEvent,
+    event_loop::{EventLoop, EventLoopProxy},
+    window::Window,
 };
 
 use anyhow::Result;
 
 fn main() {
-    let event_loop = EventLoopBuilder::with_user_event().build().unwrap();
+    let event_loop = EventLoop::with_user_event().build().unwrap();
 
     let proxy = event_loop.create_proxy();
     std::thread::spawn(move || run_input_events(proxy));
 
-    let window = MainWindow::new(&event_loop, "Gamepad").unwrap();
-    let mut window = MainWindowWithRenderer::new(window);
+    let mut main = AppHandler::<MyApp>::default();
+    *main.attributes() = Window::default_attributes().with_title("Gamepad");
 
-    let mut app = MyApp::new();
-
+    event_loop.run_app(&mut main).unwrap();
+    /*
     event_loop
         .run(move |event, w| {
             let res = window.do_event(&mut app, &event);
@@ -35,6 +37,7 @@ fn main() {
             }
         })
         .unwrap();
+    */
 }
 
 #[derive(Debug)]
@@ -128,6 +131,24 @@ impl MyApp {
                 _ => {}
             },
         }
+    }
+}
+
+impl Application for MyApp {
+    type UserEvent = MyEvent;
+    type Data = ();
+
+    fn new(_: Args<()>) -> MyApp {
+        MyApp::new()
+    }
+    fn window_event(&mut self, args: Args<()>, _event: WindowEvent, res: EventResult) {
+        if res.window_closed {
+            args.event_loop.exit();
+        }
+    }
+    fn user_event(&mut self, args: Args<()>, event: MyEvent) {
+        args.window.ping_user_input();
+        self.update_gamepad(event);
     }
 }
 

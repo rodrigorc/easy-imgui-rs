@@ -11,17 +11,23 @@
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
  * The simplest `easy-imgui` program would be something like this:
  *
- * ```rust
+ * ```rust, no_run
  * use easy_imgui_window::{
  *     easy_imgui as imgui,
  *     MainWindow,
  *     MainWindowWithRenderer,
- *     winit::event_loop::EventLoopBuilder,
+ *     Application, AppHandler, Args, EventResult,
+ *     winit,
+ * };
+ * use winit::{
+ *     event_loop::{EventLoop, ActiveEventLoop},
+ *     event::WindowEvent,
  * };
  *
  * // The App type, this will do the actual app. stuff.
  * struct App;
  *
+ * // This trait handles the UI building.
  * impl imgui::UiBuilder for App {
  *     // There are other function in this trait, but this is the only one
  *     // mandatory and the most important: it build the UI.
@@ -30,26 +36,35 @@
  *     }
  * }
  *
- * fn main() {
- *     // Create a `winit` event loop.
- *     let event_loop = EventLoopBuilder::new().build().unwrap();
- *     // Create a `winit` window.
- *     let main_window = MainWindow::new(&event_loop, "Example").unwrap();
- *     // Create a `easy-imgui` window.
- *     let mut window = MainWindowWithRenderer::new(main_window);
+ * // This trait handles the application & event loop stuff.
+ * impl Application for App {
+ *     // The user event type, `()` if not needed.
+ *     type UserEvent = ();
+ *     // Custom data type, `()` if not needed.
+ *     type Data = ();
  *
  *     // Create the app object.
- *     let mut app = App;
- *
- *     // Run the loop.
- *     event_loop.run(move |event, w| {
- *         // Do the magic!
- *         let res = window.do_event(&mut app, &event, w);
- *         // If the user requested to close the app, you should consider doing that.
- *         if res.is_break() {
- *             w.exit();
+ *     fn new(_: Args<()>) -> App {
+ *         App
+ *     }
+ *     // Handle one window event.
+ *     // There are a few other functions for other types of events.
+ *     fn window_event(&mut self, args: Args<()>, _event: WindowEvent, res: EventResult) {
+ *         if res.window_closed {
+ *             args.event_loop.exit();
  *         }
- *     }).unwrap();
+ *     }
+ * }
+ *
+ * fn main() {
+ *     // Create a `winit` event loop.
+ *     let event_loop = EventLoop::new().unwrap();
+ *     // Create an application handler.
+ *     let mut main = AppHandler::<App>::default();
+ *     // Optionally set up the window attributes.
+ *     main.attributes().title = String::from("Example");
+ *     // Run the loop
+ *     event_loop.run_app(&mut main);
  * }
  * ```
  *
@@ -430,13 +445,27 @@ impl CurrentContext<'_> {
         let io = ImGui_GetIO();
         (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
         let _guard = UiPtrToNullGuard(self.ctx);
+
+        // This guards for panics during the frame.
+        struct FrameGuard;
+        impl Drop for FrameGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    ImGui_EndFrame();
+                }
+            }
+        }
+
         ImGui_NewFrame();
+
+        let _guard_2 = FrameGuard;
 
         app.do_ui(&ui);
 
         pre_render();
         app.pre_render();
 
+        std::mem::forget(_guard_2);
         ImGui_Render();
 
         ui.data = app;
@@ -637,9 +666,14 @@ macro_rules! with_begin_end {
             $(#[$attr])*
             pub fn [< with_ $name >]<R>(&self, $($arg: $($type)*,)* f: impl FnOnce() -> R) -> R {
                 unsafe { $begin( $( $pass, )* ) }
-                let r = f();
-                unsafe { $end() }
-                r
+                struct EndGuard;
+                impl Drop for EndGuard {
+                    fn drop(&mut self) {
+                        unsafe { $end() }
+                    }
+                }
+                let _guard = EndGuard;
+                f()
             }
         }
     };
@@ -656,9 +690,14 @@ macro_rules! with_begin_end_opt {
                 if !unsafe { $begin( $( $pass, )* ) } {
                     return f(false);
                 }
-                let r = f(true);
-                unsafe { $end() }
-                r
+                struct EndGuard;
+                impl Drop for EndGuard {
+                    fn drop(&mut self) {
+                        unsafe { $end() }
+                    }
+                }
+                let _guard = EndGuard;
+                f(true)
             }
         }
     };
@@ -763,13 +802,16 @@ macro_rules! decl_builder_with_maybe_opt {
                     let _guard = push_guard(&push);
                     $func_beg($($pass,)*)
                 };
-                let r = f(bres);
-                unsafe {
-                    if $always_run_end || bres {
-                        $func_end();
+                struct EndGuard(bool);
+                impl Drop for EndGuard {
+                    fn drop(&mut self) {
+                        if self.0 {
+                            unsafe { $func_end(); }
+                        }
                     }
                 }
-                r
+                let _guard_2 = EndGuard($always_run_end || bres);
+                f(bres)
             }
             $($extra)*
         }

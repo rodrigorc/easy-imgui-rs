@@ -1,34 +1,80 @@
 use easy_imgui_window::{
-    easy_imgui as imgui, easy_imgui_renderer::Renderer, winit::event_loop::EventLoopBuilder,
+    easy_imgui as imgui,
+    easy_imgui_renderer::Renderer,
+    winit::{
+        event_loop::{ActiveEventLoop, EventLoop},
+        window::Window,
+    },
     MainWindow, MainWindowWithRenderer,
 };
 use std::rc::Rc;
 
 fn main() {
-    let event_loop = EventLoopBuilder::new().build().unwrap();
+    let event_loop = EventLoop::new().unwrap();
 
-    let main_window = MainWindow::new(&event_loop, "Example #1").unwrap();
-    let mut window = MainWindowWithRenderer::new(main_window);
-
-    // The GL context can be reused, but the imgui context cannot
-    let main_window_2 = MainWindow::new(&event_loop, "Example #2").unwrap();
-    let mut renderer_2 = Renderer::new(Rc::clone(window.renderer().gl_context())).unwrap();
-    renderer_2.set_background_color(Some(imgui::Color::GREEN));
-    let mut window_2 = MainWindowWithRenderer::new_with_renderer(main_window_2, renderer_2);
-
-    let mut app = App;
-
-    event_loop
-        .run(move |event, w| {
-            let res_1 = window.do_event(&mut app, &event);
-            let res_2 = window_2.do_event(&mut app, &event);
-            if res_1.window_closed || res_2.window_closed {
-                w.exit();
-            }
-        })
-        .unwrap();
+    let mut main = AppHandler::default();
+    event_loop.run_app(&mut main).unwrap();
 }
 
+#[derive(Default)]
+struct AppHandler {
+    windows: Vec<MainWindowWithRenderer>,
+    app: App,
+}
+
+impl winit::application::ApplicationHandler for AppHandler {
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.windows.clear();
+    }
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let wattr_1 = Window::default_attributes().with_title("Example #1");
+        let main_window_1 = MainWindow::new::<()>(&event_loop, wattr_1).unwrap();
+        let mut window_1 = MainWindowWithRenderer::new(main_window_1);
+
+        let wattr_2 = Window::default_attributes().with_title("Example #2");
+        let main_window_2 = MainWindow::new::<()>(&event_loop, wattr_2).unwrap();
+        // The GL context can be reused, but the imgui context cannot
+        let mut renderer_2 = Renderer::new(Rc::clone(window_1.renderer().gl_context())).unwrap();
+        renderer_2.set_background_color(Some(imgui::Color::GREEN));
+        let window_2 = MainWindowWithRenderer::new_with_renderer(main_window_2, renderer_2);
+
+        self.windows.push(window_1);
+        self.windows.push(window_2);
+    }
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        for window in &mut self.windows {
+            if window.main_window().window().id() != window_id {
+                continue;
+            }
+            let res = window.window_event(
+                &mut self.app,
+                &event,
+                easy_imgui_window::EventFlags::empty(),
+            );
+            if res.window_closed {
+                event_loop.exit();
+            }
+            break;
+        }
+    }
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: winit::event::StartCause) {
+        for window in &mut self.windows {
+            window.new_events();
+        }
+    }
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        for window in &mut self.windows {
+            window.about_to_wait();
+        }
+    }
+}
+
+#[derive(Default)]
 struct App;
 
 impl imgui::UiBuilder for App {

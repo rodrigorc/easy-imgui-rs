@@ -1,25 +1,29 @@
-use easy_imgui_window::{
-    easy_imgui as imgui, winit::event_loop::EventLoopBuilder, MainWindow, MainWindowWithRenderer,
-};
+use easy_imgui_window::{easy_imgui as imgui, winit, AppHandler, Application, Args, EventResult};
+use winit::{event::WindowEvent, event_loop::EventLoop};
 
 fn main() {
-    let event_loop = EventLoopBuilder::new().build().unwrap();
-    let main_window = MainWindow::new(&event_loop, "Example").unwrap();
-    let mut window = MainWindowWithRenderer::new(main_window);
+    let event_loop = EventLoop::new().unwrap();
 
-    let mut app = App;
+    let mut main = AppHandler::<App>::default();
+    main.attributes().title = String::from("Example");
 
-    event_loop
-        .run(move |event, w| {
-            let res = window.do_event(&mut app, &event);
-            if res.window_closed {
-                w.exit();
-            }
-        })
-        .unwrap();
+    event_loop.run_app(&mut main).unwrap();
 }
 
 struct App;
+
+impl Application for App {
+    type UserEvent = ();
+    type Data = ();
+    fn new(_: Args<()>) -> App {
+        App
+    }
+    fn window_event(&mut self, args: Args<()>, _event: WindowEvent, res: EventResult) {
+        if res.window_closed {
+            args.event_loop.exit();
+        }
+    }
+}
 
 impl imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {

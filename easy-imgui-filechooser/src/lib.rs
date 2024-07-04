@@ -746,13 +746,12 @@ impl FileChooser {
         let font_sz = ui.get_font_size();
         let can_ok = !self.file_name.is_empty() && !self.path.as_os_str().is_empty();
         ui.with_disabled(!can_ok, || {
-            if can_ok
-                & (ui
-                    .button_config("OK")
-                    .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
-                    .build()
-                    | ui.shortcut(imgui::Key::Enter)
-                    | ui.shortcut(imgui::Key::KeypadEnter))
+            if ui
+                .button_config("OK")
+                .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
+                .build()
+                | ui.shortcut(imgui::Key::Enter)
+                | ui.shortcut(imgui::Key::KeypadEnter)
             {
                 output = Output::Ok;
             }

@@ -2274,12 +2274,18 @@ impl<A> Ui<A> {
     }
     pub fn foreground_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
+            #[cfg(feature = "docking")]
+            let ptr = ImGui_GetForegroundDrawList(std::ptr::null_mut());
+            #[cfg(not(feature = "docking"))]
             let ptr = ImGui_GetForegroundDrawList();
             WindowDrawList { ui: self, ptr }
         }
     }
     pub fn background_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
+            #[cfg(feature = "docking")]
+            let ptr = ImGui_GetBackgroundDrawList(std::ptr::null_mut());
+            #[cfg(not(feature = "docking"))]
             let ptr = ImGui_GetBackgroundDrawList();
             WindowDrawList { ui: self, ptr }
         }
@@ -4131,6 +4137,17 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
         pub fn table_get_column_index(&self) -> i32 {
             unsafe {
                 ImGui_TableGetColumnIndex()
+            }
+        }
+        /// Can return one-pass the last column if hovering the empty space
+        pub fn table_get_hovered_column(&self) -> Option<i32> {
+            unsafe {
+                let res = ImGui_TableGetHoveredColumn();
+                if res < 0 {
+                    None
+                } else {
+                    Some(res)
+                }
             }
         }
         pub fn table_get_row_index(&self) -> i32 {

@@ -184,11 +184,13 @@ imgui_enum! {
         ResizeGrip,
         ResizeGripHovered,
         ResizeGripActive,
-        Tab,
         TabHovered,
-        TabActive,
-        TabUnfocused,
-        TabUnfocusedActive,
+        Tab,
+        TabSelected,
+        TabSelectedOverline,
+        TabDimmed,
+        TabDimmedSelected,
+        TabDimmedSelectedOverline,
         #[cfg(feature="docking")]
         DockingPreview,
         #[cfg(feature="docking")]
@@ -291,6 +293,7 @@ imgui_flags! {
         AutoResizeY,
         AlwaysAutoResize,
         FrameStyle,
+        NavFlattened,
     }
 }
 imgui_flags! {
@@ -342,6 +345,7 @@ imgui_flags! {
         Logarithmic,
         NoRoundToFormat,
         NoInput,
+        WrapAround,
     }
 }
 
@@ -747,6 +751,7 @@ imgui_flags! {
         NoCloseWithMiddleMouseButton,
         NoTabListScrollingButtons,
         NoTooltip,
+        DrawSelectedOverline,
         FittingPolicyResizeDown,
         FittingPolicyScroll,
         FittingPolicyMask_,
@@ -900,7 +905,9 @@ imgui_flags_ex! {
         NoHoldToOpenOthers = ImGuiDragDropFlags_SourceNoHoldToOpenOthers,
         AllowNullID = ImGuiDragDropFlags_SourceAllowNullID,
         Extern = ImGuiDragDropFlags_SourceExtern,
-        AutoExpirePayload = ImGuiDragDropFlags_SourceAutoExpirePayload,
+        PayloadAutoExpire = ImGuiDragDropFlags_PayloadAutoExpire,
+        PayloadNoCrossContext = ImGuiDragDropFlags_PayloadNoCrossContext,
+        PayloadNoCrossProcess = ImGuiDragDropFlags_PayloadNoCrossProcess,
     }
 }
 imgui_flags_ex! {

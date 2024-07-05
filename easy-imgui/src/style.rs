@@ -1,7 +1,7 @@
 use super::*;
 
 impl CurrentContext<'_> {
-    pub fn style<'s>(&'s mut self) -> &'s mut Style {
+    pub fn style(&mut self) -> &mut Style {
         unsafe {
             let ptr = ImGui_GetStyle();
             &mut *(ptr as *mut Style)
@@ -10,7 +10,7 @@ impl CurrentContext<'_> {
 }
 
 impl<A> Ui<A> {
-    pub fn style<'s>(&'s self) -> &'s Style {
+    pub fn style(&self) -> &Style {
         unsafe {
             let ptr = ImGui_GetStyle();
             &*(ptr as *const Style)
@@ -25,14 +25,14 @@ impl<A> Ui<A> {
 #[repr(transparent)]
 pub struct Style(ImGuiStyle);
 
-impl<'a> std::ops::Deref for Style {
+impl std::ops::Deref for Style {
     type Target = ImGuiStyle;
     fn deref(&self) -> &ImGuiStyle {
         self.get()
     }
 }
 
-impl<'a> std::ops::DerefMut for Style {
+impl std::ops::DerefMut for Style {
     fn deref_mut(&mut self) -> &mut ImGuiStyle {
         self.get_mut()
     }

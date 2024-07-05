@@ -2,6 +2,12 @@
 name = "easy-imgui-filechooser"
 version = "0.1.0"
 edition = "2021"
+description = "File-chooser widget for easy-imgui"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/rodrigorc/easy-imgui-rs"
+categories = ["gui"]
+keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
 easy-imgui = { version = "0.6.0", path = "../easy-imgui" }

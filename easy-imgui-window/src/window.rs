@@ -778,7 +778,7 @@ mod main_window {
                 &mut self.renderer,
                 &mut self.status,
                 app,
-                &event,
+                event,
                 flags,
             )
         }
@@ -997,7 +997,7 @@ mod main_window {
             self.window = None;
         }
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-            let main_window = MainWindow::new::<()>(&event_loop, self.wattrs.clone()).unwrap();
+            let main_window = MainWindow::new::<()>(event_loop, self.wattrs.clone()).unwrap();
             let mut window = MainWindowWithRenderer::new(main_window);
 
             let args = Args {

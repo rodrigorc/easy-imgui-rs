@@ -7,6 +7,7 @@ fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap();
 
     // imgui_ori is a sumbodule of the upstream imgui repository, and as such does not have a
     // proper imconfig.h for this projects. Changing that file in the submodule is inconvenient
@@ -108,6 +109,36 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         // but `RustTarget::Stable_1_74` doesn't exist yet.
         .rust_target(bindgen::RustTarget::Nightly);
 
+    if target_env == "msvc" {
+        /* MSVC compilers have a weird ABI for C++. The only difference that affects us is a
+         * function that returns a C++ type, ie. a non-POD type, or something like that.
+         * In Dear ImGui, AFAIK, the only non-POD types returned by functions are ImVec2,
+         * ImVec4 and ImRect, because they have a default constructor.
+         * To solve this issue there are a few steps:
+         *  * Blocklist in the bindings all the offending functions, even those unused, just in
+         *    case.
+         *  * Write and bind an equivalent C POD type for every needed non-POD type.
+         *  * Write and bind C wrappers for the needed functions.
+         *
+         *  Due to a quirk in the handling of bindgen namespaces, we can blocklist `ImGui::Foo` and
+         *  then write a wrapper `ImGui_Foo` and the Rust code won't even notice.
+         */
+        println!("cargo:rerun-if-changed=msvc_blocklist.txt");
+        println!("cargo:rerun-if-changed=hack_msvc.cpp");
+        for line in std::fs::read_to_string("msvc_blocklist.txt")
+            .unwrap()
+            .lines()
+        {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            bindings = bindings.blocklist_function(line);
+        }
+        bindings = bindings
+            .header("hack_msvc.cpp")
+            .allowlist_file("hack_msvc.cpp");
+    }
     if let Some(freetype) = &freetype {
         bindings = bindings.clang_arg("-DIMGUI_ENABLE_FREETYPE=1");
         for include in &freetype.include_paths {
@@ -124,7 +155,8 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     if target_arch != "wasm32" {
         build.cpp(true).std("c++20");
     }
-    build.file("wrapper.cpp").include(&imgui_src);
+    build.include(&imgui_src);
+    build.file("wrapper.cpp");
     if let Some(freetype) = &freetype {
         build.define("IMGUI_ENABLE_FREETYPE", "1");
         for include in &freetype.include_paths {

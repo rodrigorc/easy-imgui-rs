@@ -9,3 +9,7 @@ thread_local ImGuiContext* MyImGuiTLS;
 #ifdef IMGUI_ENABLE_FREETYPE
     #include "misc/freetype/imgui_freetype.cpp"
 #endif
+
+#ifdef _MSC_VER
+#include "hack_msvc.cpp"
+#endif

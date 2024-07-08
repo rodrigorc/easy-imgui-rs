@@ -40,3 +40,10 @@ impl<'a, T> IntoIterator for &'a ImVector<T> {
         self.deref().into_iter()
     }
 }
+
+#[cfg(target_env = "msvc")]
+impl From<ImVec2_rr> for ImVec2 {
+    fn from(rr: ImVec2_rr) -> ImVec2 {
+        ImVec2 { x: rr.x, y: rr.y }
+    }
+}

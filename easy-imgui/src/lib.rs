@@ -211,7 +211,8 @@ pub const fn v2_to_im(v: Vector2) -> ImVec2 {
     ImVec2 { x: v.x, y: v.y }
 }
 /// Helper function to create a `Vector2`.
-pub const fn im_to_v2(v: ImVec2) -> Vector2 {
+pub fn im_to_v2(v: impl Into<ImVec2>) -> Vector2 {
+    let v = v.into();
     Vector2 { x: v.x, y: v.y }
 }
 

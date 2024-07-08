@@ -615,6 +615,7 @@ dependencies = [
  "glutin",
  "glutin-winit",
  "image",
+ "log",
  "raw-window-handle",
  "simple_logger",
  "winit",

@@ -201,11 +201,17 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
         self.window
     }
     fn pre_render(&mut self) {
-        self.gl_context.make_current(self.surface).unwrap();
+        let _ = self
+            .gl_context
+            .make_current(self.surface)
+            .inspect_err(|e| log::error!("{e}"));
     }
     fn post_render(&mut self) {
         self.window.pre_present_notify();
-        self.surface.swap_buffers(self.gl_context).unwrap();
+        let _ = self
+            .surface
+            .swap_buffers(self.gl_context)
+            .inspect_err(|e| log::error!("{e}"));
     }
     fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
         let width = NonZeroU32::new(size.width.max(1)).unwrap();
@@ -800,11 +806,17 @@ mod main_window {
         }
         fn pre_render(&mut self) {
             self.idler.incr_frame();
-            self.gl_context.make_current(&self.surface).unwrap();
+            let _ = self
+                .gl_context
+                .make_current(&self.surface)
+                .inspect_err(|e| log::error!("{e}"));
         }
         fn post_render(&mut self) {
             self.window.pre_present_notify();
-            self.surface.swap_buffers(&self.gl_context).unwrap();
+            let _ = self
+                .surface
+                .swap_buffers(&self.gl_context)
+                .inspect_err(|e| log::error!("{e}"));
         }
         fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
             let width = NonZeroU32::new(size.width.max(1)).unwrap();

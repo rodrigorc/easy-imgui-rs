@@ -24,6 +24,7 @@ easy-imgui-sys = { version = "=0.6.0", path = "../easy-imgui-sys" }
 easy-imgui = { version = "=0.6.0", path = "../easy-imgui" }
 easy-imgui-renderer = { version = "=0.6.0", path = "../easy-imgui-renderer" }
 
+log ="0.4"
 anyhow = "1"
 bitflags = "2"
 glutin = "0.32"

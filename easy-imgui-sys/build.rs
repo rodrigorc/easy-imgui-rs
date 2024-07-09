@@ -111,9 +111,9 @@ extern thread_local ImGuiContext* MyImGuiTLS;
 
     if target_env == "msvc" {
         /* MSVC compilers have a weird ABI for C++. The only difference that affects us is a
-         * function that returns a C++ type, ie. a non-POD type, or something like that.
-         * In Dear ImGui, AFAIK, the only non-POD types returned by functions are ImVec2,
-         * ImVec4 and ImRect, because they have a default constructor.
+         * function that returns a small C++ type, ie. a non-aggregate type, with sizeof <= 8.
+         * In Dear ImGui, AFAIK, the only such type in the public API is ImVec2, that is 8 bytes
+         * long and has a default constructor.
          * To solve this issue there are a few steps:
          *  * Blocklist in the bindings all the offending functions, even those unused, just in
          *    case.

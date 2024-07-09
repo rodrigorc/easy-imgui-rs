@@ -16,7 +16,6 @@ ImGui::CalcTextSize
 ImGui::GetMousePos
 ImGui::GetMousePosOnOpeningCurrentPopup
 ImGui::GetMouseDragDelta
-ImGui::ColorConvertU32ToFloat4
 ImFont_CalcTextSizeA
 # internal
 ImBezierCubicCalc
@@ -34,6 +33,3 @@ ImGui::FindBestWindowPosForPopupEx
 ImGui::GetKeyMagnitude2d
 ImGui::TabItemCalcSize
 ImGui::TabItemCalcSize
-ImGui::GetPopupAllowedExtentRect
-ImGui::TableGetCellBgRect
-ImGui::GetWindowScrollbarRect

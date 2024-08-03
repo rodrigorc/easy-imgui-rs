@@ -2309,6 +2309,15 @@ impl<A> Ui<A> {
         let text = text.into();
         unsafe { ImGui_TextWrapped(c"%s".as_ptr(), text.as_ptr()) }
     }
+    pub fn text_link(&self, label: impl IntoCStr) -> bool {
+        let label = label.into();
+        unsafe { ImGui_TextLink(label.as_ptr()) }
+    }
+    pub fn text_link_open_url(&self, label: impl IntoCStr, url: impl IntoCStr) {
+        let label = label.into();
+        let url = url.into();
+        unsafe { ImGui_TextLinkOpenURL(label.as_ptr(), url.as_ptr()) }
+    }
     pub fn label_text(&self, label: impl IntoCStr, text: impl IntoCStr) {
         let label = label.into();
         let text = text.into();
@@ -2415,15 +2424,6 @@ impl<A> Ui<A> {
     }
     pub fn get_content_region_avail(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetContentRegionAvail()) }
-    }
-    pub fn get_content_region_max(&self) -> Vector2 {
-        unsafe { im_to_v2(ImGui_GetContentRegionMax()) }
-    }
-    pub fn get_window_content_region_min(&self) -> Vector2 {
-        unsafe { im_to_v2(ImGui_GetWindowContentRegionMin()) }
-    }
-    pub fn get_window_content_region_max(&self) -> Vector2 {
-        unsafe { im_to_v2(ImGui_GetWindowContentRegionMax()) }
     }
     pub fn get_window_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetWindowPos()) }
@@ -4013,27 +4013,12 @@ impl Pushable for TextWrapPos {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct TabStop(pub bool);
-
-impl Pushable for TabStop {
+impl Pushable for (ItemFlags, bool) {
     unsafe fn push(&self) {
-        ImGui_PushTabStop(self.0);
+        ImGui_PushItemFlag(self.0.bits(), self.1);
     }
     unsafe fn pop(&self) {
-        ImGui_PopTabStop();
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct ButtonRepeat(pub bool);
-
-impl Pushable for ButtonRepeat {
-    unsafe fn push(&self) {
-        ImGui_PushButtonRepeat(self.0);
-    }
-    unsafe fn pop(&self) {
-        ImGui_PopButtonRepeat();
+        ImGui_PopItemFlag();
     }
 }
 

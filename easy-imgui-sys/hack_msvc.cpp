@@ -12,9 +12,6 @@ static inline ImVec2_rr _rr(ImVec2 v) { return ImVec2_rr { v.x, v.y }; }
 ImVec2_rr ImGui_GetWindowPos() { return _rr(ImGui::GetWindowPos()); }
 ImVec2_rr ImGui_GetWindowSize() { return _rr(ImGui::GetWindowSize()); }
 ImVec2_rr ImGui_GetContentRegionAvail() { return _rr(ImGui::GetContentRegionAvail()); }
-ImVec2_rr ImGui_GetContentRegionMax() { return _rr(ImGui::GetContentRegionMax()); }
-ImVec2_rr ImGui_GetWindowContentRegionMin() { return _rr(ImGui::GetWindowContentRegionMin()); }
-ImVec2_rr ImGui_GetWindowContentRegionMax() { return _rr(ImGui::GetWindowContentRegionMax()); }
 ImVec2_rr ImGui_GetFontTexUvWhitePixel() { return _rr(ImGui::GetFontTexUvWhitePixel()); }
 ImVec2_rr ImGui_GetCursorScreenPos() { return _rr(ImGui::GetCursorScreenPos()); }
 ImVec2_rr ImGui_GetCursorPos() { return _rr(ImGui::GetCursorPos()); }

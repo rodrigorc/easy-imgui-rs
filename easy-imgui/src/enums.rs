@@ -330,11 +330,12 @@ imgui_flags! {
 imgui_flags! {
     pub SelectableFlags: ImGuiSelectableFlags_ {
         None,
-        DontClosePopups,
+        NoAutoClosePopups,
         SpanAllColumns,
         AllowDoubleClick,
         Disabled,
         AllowOverlap,
+        Highlight,
     }
 }
 
@@ -940,5 +941,16 @@ imgui_scoped_enum! {
         None,
         Ascending,
         Descending,
+    }
+}
+
+imgui_flags! {
+    pub ItemFlags: ImGuiItemFlags_ {
+        None,
+        NoTabStop,
+        NoNav,
+        NoNavDefaultFocus,
+        ButtonRepeat,
+        AutoClosePopups,
     }
 }

@@ -160,12 +160,14 @@ use std::ptr::{null, null_mut};
 pub type Vector2 = cgmath::Vector2<f32>;
 
 mod enums;
+mod multisel;
 pub mod style;
 
-pub use easy_imgui_sys::{self, ImGuiID};
+pub use easy_imgui_sys::{self, ImGuiID, ImGuiSelectionUserData};
 pub use enums::*;
 pub use image;
 pub use mint;
+pub use multisel::*;
 
 use image::GenericImage;
 

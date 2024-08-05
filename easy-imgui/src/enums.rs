@@ -954,3 +954,34 @@ imgui_flags! {
         AutoClosePopups,
     }
 }
+
+imgui_flags! {
+    pub MultiSelectFlags: ImGuiMultiSelectFlags_ {
+        None,
+        SingleSelect,
+        NoSelectAll,
+        NoRangeSelect,
+        NoAutoSelect,
+        NoAutoClear,
+        NoAutoClearOnReselect,
+        BoxSelect1d,
+        BoxSelect2d,
+        BoxSelectNoScroll,
+        ClearOnEscape,
+        ClearOnClickVoid,
+        ScopeWindow,
+        ScopeRect,
+        SelectOnClick,
+        SelectOnClickRelease,
+        //RangeSelect2d,
+        NavWrapX,
+    }
+}
+
+imgui_scoped_enum! {
+    pub SelectionRequestType: ImGuiSelectionRequestType {
+        None,
+        SetAll,
+        SetRange,
+    }
+}

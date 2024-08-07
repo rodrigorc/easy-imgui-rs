@@ -10,7 +10,7 @@ categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
-easy-imgui = { version = "0.6.0", path = "../easy-imgui" }
+easy-imgui = { version = "0.7.0", path = "../easy-imgui" }
 image = "0.25"
 glob = "0.3"
 time = { version = "0.3", features = ["macros", "formatting"] }
@@ -18,8 +18,8 @@ bitflags = "2"
 bytesize = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.57", features = ["Win32_Storage_FileSystem"] }
+windows = { version = "0.58", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
-easy-imgui-window = { version = "0.6.0", path = "../easy-imgui-window" }
+easy-imgui-window = { version = "0.7.0", path = "../easy-imgui-window" }
 

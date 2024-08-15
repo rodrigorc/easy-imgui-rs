@@ -13,7 +13,8 @@ use easy_imgui_renderer::{
     glr::{self, GlContext, UniformField},
 };
 use glutin::surface::GlSurface;
-use imgui::cgmath::SquareMatrix;
+use imgui::{cgmath::SquareMatrix, lbl};
+
 const VSH: &str = r"#version 140
 uniform mat3 m;
 in vec2 pos;
@@ -455,7 +456,7 @@ impl imgui::UiBuilder for App {
         );
         ui.set_next_window_bg_alpha(0.75);
         ui.with_push(self.font_big, || {
-            ui.window_config("menu")
+            ui.window_config(lbl("menu"))
                 .flags(
                     imgui::WindowFlags::NoTitleBar
                         | imgui::WindowFlags::NoResize
@@ -487,43 +488,46 @@ impl imgui::UiBuilder for App {
                             ui.text("    Player #2: P/; (key below P)");
                         });
                         ui.set_cursor_pos_y(380.0);
-                        if ui.button("Ok") {
+                        if ui.button(lbl("Ok")) {
                             self.set_show_menu(Menu::Main);
                         }
                     }
                     Menu::Main => {
-                        if ui.button("New game") {
+                        if ui.button(lbl("New game")) {
                             self.pong = Pong::default();
                             self.set_show_menu(Menu::None);
                         }
                         ui.set_cursor_pos_y(ui.get_cursor_pos_y() + 20.0);
-                        if ui.button("Continue") {
+                        if ui.button(lbl("Continue")) {
                             self.set_show_menu(Menu::None);
                         }
                         ui.set_cursor_pos_y(ui.get_cursor_pos_y() + 20.0);
-                        if ui.button("Options") {
+                        if ui.button(lbl("Options")) {
                             self.set_show_menu(Menu::Options);
                         }
                         ui.set_cursor_pos_y(380.0);
-                        if ui.button("Quit") {
+                        if ui.button(lbl("Quit")) {
                             self.ui_request.insert(UiRequest::Quit);
                         }
                     }
                     Menu::Options => {
                         if ui.checkbox(
-                            "Full-screen",
+                            lbl("Full-screen"),
                             &mut self.ui_status.contains(UiRequest::Fullscreen),
                         ) {
                             self.ui_request.insert(UiRequest::Fullscreen);
                         }
                         ui.set_cursor_pos_y(ui.get_cursor_pos_y() + 20.0);
-                        if ui.checkbox("V-Sync", &mut self.ui_status.contains(UiRequest::VSync)) {
+                        if ui.checkbox(
+                            lbl("V-Sync"),
+                            &mut self.ui_status.contains(UiRequest::VSync),
+                        ) {
                             self.ui_request.insert(UiRequest::VSync);
                         }
                         ui.set_cursor_pos_y(ui.get_cursor_pos_y() + 20.0);
-                        ui.checkbox("ImGui Demo", &mut self.show_demo);
+                        ui.checkbox(lbl("ImGui Demo"), &mut self.show_demo);
                         ui.set_cursor_pos_y(380.0);
-                        if ui.button("Back") {
+                        if ui.button(lbl("Back")) {
                             self.set_show_menu(Menu::Main);
                         }
                     }

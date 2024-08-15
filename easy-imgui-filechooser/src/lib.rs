@@ -5,7 +5,7 @@
  * proper place.
  */
 use bytesize::ByteSize;
-use easy_imgui::{self as imgui, CustomRectIndex};
+use easy_imgui::{self as imgui, id, lbl, lbl_id, CustomRectIndex};
 pub use glob::{self, Pattern};
 use image::DynamicImage;
 use std::io::Result;
@@ -429,7 +429,7 @@ impl FileChooser {
         let mut my_path = PathBuf::new();
 
         let style = ui.style();
-        ui.child_config("path")
+        ui.child_config(lbl("path"))
             //.child_flags(imgui::ChildFlags::AutoResizeY)
             .size(imgui::Vector2::new(
                 0.0,
@@ -486,11 +486,7 @@ impl FileChooser {
 
                     my_path.push(&piece);
                     if ui
-                        .button_config(format!(
-                            "{}##{}",
-                            piece.to_string_lossy(),
-                            my_path.to_string_lossy()
-                        ))
+                        .button_config(lbl_id(piece.to_string_lossy(), my_path.to_string_lossy()))
                         .build()
                     {
                         next_path = Some(my_path.clone());
@@ -517,7 +513,7 @@ impl FileChooser {
                         popup_dirs.sort_by(|a, b| a.0.cmp(&b.0));
                         self.popup_dirs = popup_dirs;
                         if !self.popup_dirs.is_empty() {
-                            ui.open_popup("###popup_dirs");
+                            ui.open_popup(id(c"popup_dirs"));
                         }
                     }
                     ui.same_line();
@@ -530,14 +526,13 @@ impl FileChooser {
                     self.path_size_overflow = path_size_overflow;
                 }
 
-                ui.popup_config("###popup_dirs").with(|| {
+                ui.popup_config(id(c"popup_dirs")).with(|| {
                     for (dir, sel) in &self.popup_dirs {
                         let name = dir.file_name().unwrap_or_else(|| dir.as_os_str());
                         if ui
-                            .selectable_config(&format!(
-                                "{}##{}",
+                            .selectable_config(lbl_id(
                                 name.to_string_lossy(),
-                                dir.display()
+                                dir.display().to_string(),
                             ))
                             .selected(*sel)
                             .build()
@@ -552,7 +547,7 @@ impl FileChooser {
         ui.same_line();
         ui.set_next_item_width(-ui.get_frame_height() - style.ItemSpacing.x);
         if ui
-            .input_text_config("###Search", &mut self.search_term)
+            .input_text_config(lbl_id(c"", c"Search"), &mut self.search_term)
             .build()
         {
             self.visible_dirty = true;
@@ -592,19 +587,19 @@ impl FileChooser {
                 let pad = ui.style().FramePadding;
                 ui.table_setup_column("", imgui::TableColumnFlags::None, 0.00, 0);
                 ui.table_setup_column(
-                    &tr!("Name"),
+                    tr!("Name"),
                     imgui::TableColumnFlags::WidthStretch | imgui::TableColumnFlags::DefaultSort,
                     0.0,
                     0,
                 );
                 ui.table_setup_column(
-                    &tr!("Size"),
+                    tr!("Size"),
                     imgui::TableColumnFlags::WidthFixed,
                     ui.calc_text_size("999.9 GiB").x + 2.0 * pad.x,
                     0,
                 );
                 ui.table_setup_column(
-                    &tr!("Modified"),
+                    tr!("Modified"),
                     imgui::TableColumnFlags::WidthFixed,
                     ui.calc_text_size("2024-12-31 23:59:59").x + 2.0 * pad.x,
                     0,
@@ -666,7 +661,7 @@ impl FileChooser {
                     ui.table_set_column_index(1);
                     let is_selected = Some(i_entry) == self.selected;
                     if ui
-                        .selectable_config(&*entry.name.to_string_lossy())
+                        .selectable_config(entry.name.to_string_lossy().into())
                         .flags(
                             imgui::SelectableFlags::SpanAllColumns
                                 | imgui::SelectableFlags::AllowOverlap
@@ -747,14 +742,14 @@ impl FileChooser {
         if ui.is_window_appearing() {
             ui.set_keyboard_focus_here(0);
         }
-        ui.input_os_string_config("###input", &mut self.file_name)
+        ui.input_os_string_config(lbl_id(c"", c"input"), &mut self.file_name)
             .build();
 
         if !self.filters.is_empty() {
             ui.same_line();
             ui.set_next_item_width(-f32::EPSILON);
             if ui.combo(
-                "###Filter",
+                lbl_id(c"", c"Filter"),
                 0..self.filters.len(),
                 |i| &self.filters[i].text,
                 &mut self.active_filter_idx,
@@ -767,7 +762,7 @@ impl FileChooser {
         let can_ok = !self.file_name.is_empty() && !self.path.as_os_str().is_empty();
         ui.with_disabled(!can_ok, || {
             if ui
-                .button_config(tr!("OK"))
+                .button_config(lbl_id(tr!("OK"), "ok"))
                 .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
                 .build()
                 | ui.shortcut(imgui::Key::Enter)
@@ -778,7 +773,7 @@ impl FileChooser {
         });
         ui.same_line();
         if ui
-            .button_config(tr!("Cancel"))
+            .button_config(lbl_id(tr!("Cancel"), "cancel"))
             .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
             .build()
             | ui.shortcut(imgui::Key::Escape)
@@ -793,7 +788,7 @@ impl FileChooser {
             ui.set_cursor_pos_x(
                 ui.get_cursor_pos_x() + ui.get_content_region_avail().x - check_width,
             );
-            ui.checkbox(text, &mut self.read_only);
+            ui.checkbox(text.into(), &mut self.read_only);
         }
 
         if let Some(next_path) = next_path {

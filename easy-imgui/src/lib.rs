@@ -569,9 +569,22 @@ impl FontInfo {
 }
 
 /// Represents any type that can be converted into something that can be deref'ed to a `&CStr`.
-pub trait IntoCStr {
+pub trait IntoCStr: Sized {
     type Temp: Deref<Target = CStr>;
     fn into(self) -> Self::Temp;
+    fn into_cstring(self) -> CString;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    // Unsafe because we will not check there are no NULs.
+    // Reimplement this if `fn into()` does extra allocations.
+    unsafe fn push_to_non_null_vec(self, bs: &mut Vec<u8>) {
+        let c = IntoCStr::into(self);
+        let c = c.to_bytes();
+        bs.extend(c);
+    }
 }
 
 impl IntoCStr for &str {
@@ -580,12 +593,34 @@ impl IntoCStr for &str {
     fn into(self) -> Self::Temp {
         CString::new(self).unwrap()
     }
+    fn into_cstring(self) -> CString {
+        IntoCStr::into(self)
+    }
+    fn len(&self) -> usize {
+        str::len(self)
+    }
+    unsafe fn push_to_non_null_vec(self, bs: &mut Vec<u8>) {
+        let c = self.as_bytes();
+        if c.contains(&0) {
+            panic!("NUL error");
+        }
+        bs.extend(c);
+    }
 }
 impl IntoCStr for &String {
     type Temp = CString;
 
     fn into(self) -> Self::Temp {
         CString::new(self.as_str()).unwrap()
+    }
+    fn into_cstring(self) -> CString {
+        IntoCStr::into(self)
+    }
+    fn len(&self) -> usize {
+        self.as_str().len()
+    }
+    unsafe fn push_to_non_null_vec(self, bs: &mut Vec<u8>) {
+        self.as_str().push_to_non_null_vec(bs);
     }
 }
 impl IntoCStr for String {
@@ -594,11 +629,23 @@ impl IntoCStr for String {
     fn into(self) -> Self::Temp {
         CString::new(self).unwrap()
     }
+    fn into_cstring(self) -> CString {
+        IntoCStr::into(self)
+    }
+    fn len(&self) -> usize {
+        self.len()
+    }
 }
 impl IntoCStr for &CStr {
     type Temp = Self;
     fn into(self) -> Self {
         self
+    }
+    fn into_cstring(self) -> CString {
+        self.to_owned()
+    }
+    fn len(&self) -> usize {
+        self.to_bytes().len()
     }
 }
 impl IntoCStr for CString {
@@ -607,12 +654,150 @@ impl IntoCStr for CString {
     fn into(self) -> Self {
         self
     }
+    fn into_cstring(self) -> CString {
+        self
+    }
+    fn len(&self) -> usize {
+        self.as_bytes().len()
+    }
 }
 impl<'a> IntoCStr for &'a CString {
     type Temp = &'a CStr;
 
     fn into(self) -> &'a CStr {
         self.as_c_str()
+    }
+    fn into_cstring(self) -> CString {
+        self.clone()
+    }
+    fn len(&self) -> usize {
+        self.as_c_str().len()
+    }
+}
+
+impl<'a, B> IntoCStr for Cow<'a, B>
+where
+    B: 'a + ToOwned + ?Sized,
+    &'a B: IntoCStr,
+    B::Owned: IntoCStr,
+    <&'a B as IntoCStr>::Temp: Into<Cow<'a, CStr>>,
+{
+    type Temp = Cow<'a, CStr>;
+
+    fn into(self) -> Cow<'a, CStr> {
+        match self {
+            Cow::Owned(o) => Cow::Owned(IntoCStr::into_cstring(o)),
+            Cow::Borrowed(b) => IntoCStr::into(b).into(),
+        }
+    }
+    fn into_cstring(self) -> CString {
+        match self {
+            Cow::Owned(o) => o.into_cstring(),
+            Cow::Borrowed(b) => b.into_cstring(),
+        }
+    }
+    fn len(&self) -> usize {
+        match self {
+            Cow::Owned(o) => o.len(),
+            Cow::Borrowed(b) => b.len(),
+        }
+    }
+}
+
+/// A string that works as a widget identifier.
+///
+/// Think of for example `"###ok"`.
+///
+/// Use the function `id()` to build it.
+pub struct Id<C: IntoCStr>(C);
+
+/// A string that works as both a label and identifier.
+///
+/// For example `"Enter the data###data1"`.
+///
+/// Prefer to use function `lbl_id()` function to construct it from two strings.
+///
+/// Or use function `lbl()` to build it from an old compatible `label###id`.
+pub struct LblId<C: IntoCStr>(C);
+
+impl<C: IntoCStr> Id<C> {
+    pub fn into(self) -> C::Temp {
+        self.0.into()
+    }
+    pub fn into_inner(self) -> C {
+        self.0
+    }
+}
+
+impl<C: IntoCStr> LblId<C> {
+    pub fn into(self) -> C::Temp {
+        self.0.into()
+    }
+    pub fn into_inner(self) -> C {
+        self.0
+    }
+}
+
+/// Uses the given string as an ImGui id.
+///
+/// It prepends `###`, for consistency with `lbl_id()`.
+pub fn id<C: IntoCStr>(c: C) -> Id<CString> {
+    let mut bs = Vec::with_capacity(c.len() + 4);
+    bs.push(b'#');
+    bs.push(b'#');
+    bs.push(b'#');
+    // SAFETY:
+    // Converts one CString into another CString with the ### prefix.
+    unsafe {
+        IntoCStr::push_to_non_null_vec(c, &mut bs);
+        bs.push(0);
+        Id(CString::from_vec_unchecked(bs))
+    }
+}
+
+/// Uses the given string as an ImGui id, without prepending `###`.
+pub fn raw_id<C: IntoCStr>(c: C) -> Id<C> {
+    Id(c)
+}
+
+/// Uses the given string directly as an ImGui parameter that contains a label plus an id.
+///
+/// The usual Dear ImGui syntax applies:
+///  * `"hello"`: is both a label and an id.
+///  * `"hello##world"`: the label is `hello`, the id is the whole string`.
+///  * `"hello###world"`: the label is `hello`, the id is `###world`.
+pub fn lbl<C: IntoCStr>(c: C) -> LblId<C> {
+    LblId(c)
+}
+
+/// Uses the first string as label, the second one as id.
+///
+/// The id has `###` prepended.
+pub fn lbl_id<C1: IntoCStr, C2: IntoCStr>(lbl: C1, id: C2) -> LblId<CString> {
+    let lbl = lbl.into_cstring();
+    let both = if id.is_empty() {
+        lbl
+    } else {
+        let mut bs = lbl.into_bytes();
+        bs.extend(b"###");
+        // SAFETY:
+        // bs can't have NULs, and the `push_to_non_null_vec` safe requirements forbids extra NULs.
+        // We add one NUL at the end, so all is good.
+        unsafe {
+            IntoCStr::push_to_non_null_vec(id, &mut bs);
+            bs.push(0);
+            CString::from_vec_unchecked(bs)
+        }
+    };
+    LblId(both)
+}
+
+/// Same as the `lbl()` functions, but may be easier to use.
+///
+/// This will be recommended by the compiler if you do it wrong.
+impl<C: IntoCStr> From<C> for LblId<C> {
+    fn from(c: C) -> LblId<C> {
+        LblId(c)
     }
 }
 
@@ -856,7 +1041,7 @@ decl_builder_with! {Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
         decl_builder_setter!{window_flags: WindowFlags}
     }
     {
-        pub fn child_config<S: IntoCStr>(&self, name: S) -> Child<S> {
+        pub fn child_config<S: IntoCStr>(&self, name: LblId<S>) -> Child<S> {
             Child {
                 name: name.into(),
                 size: im_vec2(0.0, 0.0),
@@ -879,7 +1064,7 @@ decl_builder_with! {Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
         decl_builder_setter!{flags: WindowFlags}
     }
     {
-        pub fn window_config<S: IntoCStr>(&self, name: S) -> Window<S> {
+        pub fn window_config<S: IntoCStr>(&self, name: LblId<S>) -> Window<S> {
             Window {
                 name: name.into(),
                 open: None,
@@ -913,7 +1098,7 @@ decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
         decl_builder_setter!{enabled: bool}
     }
     {
-        pub fn menu_item_config<S: IntoCStr>(&self, label: S) -> MenuItem<S, &str> {
+        pub fn menu_item_config<S: IntoCStr>(&self, label: LblId<S>) -> MenuItem<S, &str> {
             MenuItem {
                 label: label.into(),
                 shortcut: None,
@@ -933,13 +1118,13 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn button_config<S: IntoCStr>(&self, label: S) -> Button<S> {
+        pub fn button_config<S: IntoCStr>(&self, label: LblId<S>) -> Button<S> {
             Button {
                 label: label.into(),
                 size: im_vec2(0.0, 0.0),
             }
         }
-        pub fn button<S: IntoCStr>(&self, label: S) -> bool {
+        pub fn button<S: IntoCStr>(&self, label: LblId<S>) -> bool {
             self.button_config(label).build()
         }
     }
@@ -951,12 +1136,12 @@ decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn small_button_config<S: IntoCStr>(&self, label: S) -> SmallButton<S> {
+        pub fn small_button_config<S: IntoCStr>(&self, label: LblId<S>) -> SmallButton<S> {
             SmallButton {
                 label: label.into(),
             }
         }
-        pub fn small_button<S: IntoCStr>(&self, label: S) -> bool {
+        pub fn small_button<S: IntoCStr>(&self, label: LblId<S>) -> bool {
             self.small_button_config(label).build()
         }
     }
@@ -1009,13 +1194,13 @@ decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
     )
     {}
     {
-        pub fn checkbox_config<'v, S: IntoCStr>(&self, label: S, value: &'v mut bool) -> Checkbox<'v, S> {
+        pub fn checkbox_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut bool) -> Checkbox<'v, S> {
             Checkbox {
                 label: label.into(),
                 value,
             }
         }
-        pub fn checkbox<S: IntoCStr>(&self, label: S, value: &mut bool) -> bool {
+        pub fn checkbox<S: IntoCStr>(&self, label: LblId<S>, value: &mut bool) -> bool {
             self.checkbox_config(label, value).build()
         }
     }
@@ -1028,7 +1213,7 @@ decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn radio_button_config<S: IntoCStr>(&self, label: S, active: bool) -> RadioButton<S> {
+        pub fn radio_button_config<S: IntoCStr>(&self, label: LblId<S>, active: bool) -> RadioButton<S> {
             RadioButton {
                 label: label.into(),
                 active,
@@ -1165,7 +1350,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn selectable_config<S: IntoCStr>(&self, label: S) -> Selectable<S> {
+        pub fn selectable_config<S: IntoCStr>(&self, label: LblId<S>) -> Selectable<S> {
             Selectable {
                 label: label.into(),
                 selected: false,
@@ -1173,7 +1358,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
                 size: im_vec2(0.0, 0.0),
             }
         }
-        pub fn selectable<S: IntoCStr>(&self, label: S) -> bool {
+        pub fn selectable<S: IntoCStr>(&self, label: LblId<S>) -> bool {
             self.selectable_config(label).build()
         }
     }
@@ -1201,7 +1386,7 @@ macro_rules! decl_builder_drag {
                 decl_builder_setter!{flags: SliderFlags}
             }
             {
-                pub fn $func<$life, S: IntoCStr>(&self, label: S, value: $ty) -> $name<$life, S> {
+                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<$life, S> {
                     $name {
                         label: label.into(),
                         value,
@@ -1271,7 +1456,7 @@ macro_rules! decl_builder_slider {
                 decl_builder_setter!{flags: SliderFlags}
             }
             {
-                pub fn $func<$life, S: IntoCStr>(&self, label: S, value: $ty) -> $name<$life, S> {
+                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<$life, S> {
                     $name {
                         label: label.into(),
                         value,
@@ -1316,7 +1501,7 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
         decl_builder_setter!{flags: SliderFlags}
     }
     {
-        pub fn slider_angle_config<'v, S: IntoCStr>(&self, label: S, v_rad: &'v mut f32) -> SliderAngle<'v, S> {
+        pub fn slider_angle_config<'v, S: IntoCStr>(&self, label: LblId<S>, v_rad: &'v mut f32) -> SliderAngle<'v, S> {
             SliderAngle {
                 label: label.into(),
                 v_rad,
@@ -1341,7 +1526,7 @@ decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_edit_3_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut [f32; 3]) -> ColorEdit3<'v, S> {
+        pub fn color_edit_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorEdit3<'v, S> {
             ColorEdit3 {
                 label: label.into(),
                 color,
@@ -1361,7 +1546,7 @@ decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_edit_4_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut Color) -> ColorEdit4<'v, S> {
+        pub fn color_edit_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorEdit4<'v, S> {
             ColorEdit4 {
                 label: label.into(),
                 color: color.as_mut(),
@@ -1381,7 +1566,7 @@ decl_builder! { ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_picker_3_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut [f32; 3]) -> ColorPicker3<'v, S> {
+        pub fn color_picker_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorPicker3<'v, S> {
             ColorPicker3 {
                 label: label.into(),
                 color,
@@ -1406,7 +1591,7 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
         }
     }
     {
-        pub fn color_picker_4_config<'v, S: IntoCStr>(&self, label: S, color: &'v mut Color) -> ColorPicker4<'v, S> {
+        pub fn color_picker_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorPicker4<'v, S> {
             ColorPicker4 {
                 label: label.into(),
                 color: color.as_mut(),
@@ -1474,7 +1659,7 @@ decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_text_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut String) -> InputText<'v, S> {
+        pub fn input_text_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputText<'v, S> {
             InputText {
                 label: label.into(),
                 text,
@@ -1509,7 +1694,7 @@ decl_builder! { InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_os_string_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut OsString) -> InputOsString<'v, S> {
+        pub fn input_os_string_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut OsString) -> InputOsString<'v, S> {
             InputOsString {
                 label: label.into(),
                 text,
@@ -1552,7 +1737,7 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn input_text_multiline_config<'v, S: IntoCStr>(&self, label: S, text: &'v mut String) -> InputTextMultiline<'v, S> {
+        pub fn input_text_multiline_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputTextMultiline<'v, S> {
             InputTextMultiline {
                 label:label.into(),
                 text,
@@ -1595,7 +1780,7 @@ decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCSt
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_text_hint_config<'v, S1: IntoCStr, S2: IntoCStr>(&self, label: S1, hint: S2, text: &'v mut String) -> InputTextHint<'v, S1, S2> {
+        pub fn input_text_hint_config<'v, S1: IntoCStr, S2: IntoCStr>(&self, label: LblId<S1>, hint: S2, text: &'v mut String) -> InputTextHint<'v, S1, S2> {
             InputTextHint {
                 label:label.into(),
                 hint: hint.into(),
@@ -1631,7 +1816,7 @@ decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: f32}
     }
     {
-        pub fn input_float_config<'v, S: IntoCStr>(&self, label: S, value: &'v mut f32) -> InputFloat<'v, S> {
+        pub fn input_float_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut f32) -> InputFloat<'v, S> {
             InputFloat {
                 label:label.into(),
                 value,
@@ -1658,7 +1843,7 @@ decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: i32}
     }
     {
-        pub fn input_int_config<'v, S: IntoCStr>(&self, label: S, value: &'v mut i32) -> InputInt<'v, S> {
+        pub fn input_int_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut i32) -> InputInt<'v, S> {
             InputInt {
                 label:label.into(),
                 value,
@@ -1683,9 +1868,9 @@ macro_rules! decl_builder_input_f {
             decl_builder_setter!{flags: InputTextFlags}
         }
         {
-            pub fn $func<'v, S: IntoCStr>(&self, label: S, value: &'v mut [f32; $len]) -> $name<'v, S> {
+            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [f32; $len]) -> $name<'v, S> {
                 $name {
-                    label:label.into(),
+                    label: label.into(),
                     value,
                     format: Cow::Borrowed(c"%.3f"),
                     flags: InputTextFlags::None,
@@ -1718,9 +1903,9 @@ macro_rules! decl_builder_input_i {
             decl_builder_setter!{flags: InputTextFlags}
         }
         {
-            pub fn $func<'v, S: IntoCStr>(&self, label: S, value: &'v mut [i32; $len]) -> $name<'v, S> {
+            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [i32; $len]) -> $name<'v, S> {
                 $name {
-                    label:label.into(),
+                    label: label.into(),
                     value,
                     flags: InputTextFlags::None,
                 }
@@ -1744,7 +1929,7 @@ decl_builder_with_opt! {Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
         decl_builder_setter!{enabled: bool}
     }
     {
-        pub fn menu_config<S: IntoCStr>(&self, name: S) -> Menu<S> {
+        pub fn menu_config<S: IntoCStr>(&self, name: LblId<S>) -> Menu<S> {
             Menu {
                 name: name.into(),
                 enabled: true,
@@ -1763,7 +1948,7 @@ decl_builder_with_opt! {CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: I
         decl_builder_setter!{flags: TreeNodeFlags}
     }
     {
-        pub fn collapsing_header_config<S: IntoCStr>(&self, label: S) -> CollapsingHeader<S> {
+        pub fn collapsing_header_config<S: IntoCStr>(&self, label: LblId<S>) -> CollapsingHeader<S> {
             CollapsingHeader {
                 label: label.into(),
                 flags: TreeNodeFlags::None,
@@ -1774,7 +1959,7 @@ decl_builder_with_opt! {CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: I
 }
 
 enum LabelId<'a, S: IntoCStr, H: Hashable> {
-    Label(S),
+    LblId(LblId<S>),
     LabelId(&'a str, H),
 }
 
@@ -1783,7 +1968,7 @@ unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(
     flags: TreeNodeFlags,
 ) -> bool {
     match label_id {
-        LabelId::Label(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
+        LabelId::LblId(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
         LabelId::LabelId(lbl, id) => {
             let (start, end) = text_ptrs(lbl);
             // Warning! internal imgui API ahead, the alterative would be to call all the TreeNodeEx* functions without the Hashable generics
@@ -1801,9 +1986,9 @@ decl_builder_with_opt! {TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: In
         decl_builder_setter!{flags: TreeNodeFlags}
     }
     {
-        pub fn tree_node_config<S: IntoCStr>(&self, label: S) -> TreeNode<'static, S, usize> {
+        pub fn tree_node_config<S: IntoCStr>(&self, label: LblId<S>) -> TreeNode<'static, S, usize> {
             TreeNode {
-                label: LabelId::Label(label),
+                label: LabelId::LblId(label),
                 flags: TreeNodeFlags::None,
                 push: (),
             }
@@ -1827,7 +2012,7 @@ decl_builder_with_opt! {Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
         decl_builder_setter!{flags: WindowFlags}
     }
     {
-        pub fn popup_config<S: IntoCStr>(&self, str_id: S) -> Popup<S> {
+        pub fn popup_config<S: IntoCStr>(&self, str_id: Id<S>) -> Popup<S> {
             Popup {
                 str_id: str_id.into(),
                 flags: WindowFlags::None,
@@ -1879,7 +2064,7 @@ decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup ('a) (
         }
     }
     {
-        pub fn popup_modal_config<S: IntoCStr>(&self, name: S) -> PopupModal<'static, S> {
+        pub fn popup_modal_config<S: IntoCStr>(&self, name: LblId<S>) -> PopupModal<'static, S> {
             PopupModal {
                 name: name.into(),
                 opened: PopupOpened::None,
@@ -1946,7 +2131,7 @@ decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr
         }
     }
     {
-        pub fn combo_config<'a, S: IntoCStr>(&self, label: S) -> Combo<S, &'a str> {
+        pub fn combo_config<'a, S: IntoCStr>(&self, label: LblId<S>) -> Combo<S, &'a str> {
             Combo {
                 label: label.into(),
                 preview_value: None,
@@ -1955,9 +2140,9 @@ decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr
             }
         }
         // Helper function for simple use cases
-        pub fn combo<V: Copy + PartialEq, S2: IntoCStr>(
+        pub fn combo<V: Copy + PartialEq, S1: IntoCStr, S2: IntoCStr>(
             &self,
-            label: impl IntoCStr,
+            label: LblId<S1>,
             values: impl IntoIterator<Item=V>,
             f_name: impl Fn(V) -> S2,
             current: &mut V
@@ -1967,8 +2152,8 @@ decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr
             self.combo_config(label)
                 .preview_value(f_name(*current))
                 .with(|| {
-                    for val in values {
-                        if self.selectable_config(f_name(val))
+                    for (i, val) in values.into_iter().enumerate() {
+                        if self.selectable_config(lbl_id(f_name(val), i.to_string()))
                             .selected(*current == val)
                             .build()
                         {
@@ -1991,7 +2176,7 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn list_box_config<S: IntoCStr>(&self, label: S) -> ListBox<S> {
+        pub fn list_box_config<S: IntoCStr>(&self, label: LblId<S>) -> ListBox<S> {
             ListBox {
                 label: label.into(),
                 size: im_vec2(0.0, 0.0),
@@ -1999,9 +2184,9 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
             }
         }
         // Helper function for simple use cases
-        pub fn list_box<V: Copy + PartialEq, S2: IntoCStr>(
+        pub fn list_box<V: Copy + PartialEq, S1: IntoCStr, S2: IntoCStr>(
             &self,
-            label: impl IntoCStr,
+            label: LblId<S1>,
             mut height_in_items: i32,
             values: impl IntoIterator<Item=V>,
             f_name: impl Fn(V) -> S2,
@@ -2020,8 +2205,8 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
             self.list_box_config(label)
                 .size(vec2(0.0, height_in_pixels.floor()))
                 .with(|| {
-                    for val in values {
-                        if self.selectable_config(f_name(val))
+                    for (i, val) in values.into_iter().enumerate() {
+                        if self.selectable_config(lbl_id(f_name(val), i.to_string()))
                             .selected(*current == val)
                             .build()
                         {
@@ -2037,16 +2222,16 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
 
 decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCStr)
     (
-        std_id (S::Temp) (std_id.as_ptr()),
+        str_id (S::Temp) (str_id.as_ptr()),
         flags (TabBarFlags) (flags.bits()),
     )
     {
         decl_builder_setter!{flags: TabBarFlags}
     }
     {
-        pub fn tab_bar_config<S: IntoCStr>(&self, std_id: S) -> TabBar<S> {
+        pub fn tab_bar_config<S: IntoCStr>(&self, str_id: S) -> TabBar<S> {
             TabBar {
-                std_id: std_id.into(),
+                str_id: str_id.into(),
                 flags: TabBarFlags::None,
                 push: (),
             }
@@ -2056,7 +2241,7 @@ decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCS
 
 decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: IntoCStr)
     (
-        std_id (S::Temp) (std_id.as_ptr()),
+        str_id (S::Temp) (str_id.as_ptr()),
         opened (Option<&'o mut bool>) (optional_mut_bool(&mut opened)),
         flags (TabItemFlags) (flags.bits()),
     )
@@ -2065,20 +2250,20 @@ decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: I
         decl_builder_setter!{opened: &'o mut bool}
     }
     {
-        pub fn tab_item_config<S: IntoCStr>(&self, std_id: S) -> TabItem<S> {
+        pub fn tab_item_config<S: IntoCStr>(&self, str_id: LblId<S>) -> TabItem<S> {
             TabItem {
-                std_id: std_id.into(),
+                str_id: str_id.into(),
                 opened: None,
                 flags: TabItemFlags::None,
                 push: (),
             }
         }
-        pub fn tab_item_button(label: impl IntoCStr, flags: TabItemFlags) -> bool {
+        pub fn tab_item_button(label: LblId<impl IntoCStr>, flags: TabItemFlags) -> bool {
             unsafe {
                 ImGui_TabItemButton(label.into().as_ptr(), flags.bits())
             }
         }
-        pub fn set_tab_item_closed(tab_or_docked_window_label: impl IntoCStr) {
+        pub fn set_tab_item_closed(tab_or_docked_window_label: LblId<impl IntoCStr>) {
             unsafe {
                 ImGui_SetTabItemClosed(tab_or_docked_window_label.into().as_ptr());
             }
@@ -2317,11 +2502,11 @@ impl<A> Ui<A> {
         let text = text.into();
         unsafe { ImGui_TextWrapped(c"%s".as_ptr(), text.as_ptr()) }
     }
-    pub fn text_link(&self, label: impl IntoCStr) -> bool {
+    pub fn text_link(&self, label: LblId<impl IntoCStr>) -> bool {
         let label = label.into();
         unsafe { ImGui_TextLink(label.as_ptr()) }
     }
-    pub fn text_link_open_url(&self, label: impl IntoCStr, url: impl IntoCStr) {
+    pub fn text_link_open_url(&self, label: LblId<impl IntoCStr>, url: impl IntoCStr) {
         let label = label.into();
         let url = url.into();
         unsafe { ImGui_TextLinkOpenURL(label.as_ptr(), url.as_ptr()) }
@@ -2725,14 +2910,14 @@ impl<A> Ui<A> {
     pub fn get_frame_count(&self) -> i32 {
         unsafe { ImGui_GetFrameCount() }
     }
-    pub fn is_popup_open(&self, str_id: Option<&str>) -> bool {
+    pub fn is_popup_open(&self, str_id: Option<Id<impl IntoCStr>>) -> bool {
         self.is_popup_open_ex(str_id, PopupFlags::None)
     }
-    pub fn is_popup_open_ex(&self, str_id: Option<&str>, flags: PopupFlags) -> bool {
+    pub fn is_popup_open_ex(&self, str_id: Option<Id<impl IntoCStr>>, flags: PopupFlags) -> bool {
         let temp;
         let str_id = match str_id {
             Some(s) => {
-                temp = IntoCStr::into(s);
+                temp = IntoCStr::into(s.0);
                 temp.as_ptr()
             }
             None => null(),
@@ -2755,10 +2940,10 @@ impl<A> Ui<A> {
             !modal.is_null()
         }
     }
-    pub fn open_popup(&self, str_id: impl IntoCStr) {
+    pub fn open_popup(&self, str_id: Id<impl IntoCStr>) {
         self.open_popup_ex(str_id, PopupFlags::None)
     }
-    pub fn open_popup_ex(&self, str_id: impl IntoCStr, flags: PopupFlags) {
+    pub fn open_popup_ex(&self, str_id: Id<impl IntoCStr>, flags: PopupFlags) {
         let str_id = str_id.into();
         unsafe {
             ImGui_OpenPopup(str_id.as_ptr(), flags.bits());

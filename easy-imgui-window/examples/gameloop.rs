@@ -308,7 +308,7 @@ impl easy_imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &easy_imgui::Ui<Self>) {
         use easy_imgui::*;
         ui.set_next_window_pos((10.0, 10.0).into(), Cond::Always, (0.0, 0.0).into());
-        ui.window_config("Instructions")
+        ui.window_config(lbl("Instructions"))
             .flags(
                 WindowFlags::NoMove
                     | WindowFlags::NoResize

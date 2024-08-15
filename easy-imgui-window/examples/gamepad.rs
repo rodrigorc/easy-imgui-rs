@@ -4,7 +4,7 @@
  */
 use std::time::Duration;
 
-use easy_imgui::{vec2, Color, Cond, DrawFlags, UiBuilder, Vector2, WindowFlags};
+use easy_imgui::{lbl, vec2, Color, Cond, DrawFlags, UiBuilder, Vector2, WindowFlags};
 use easy_imgui_window::{winit, AppHandler, Application, Args, EventResult};
 use winit::{
     event::WindowEvent,
@@ -159,13 +159,13 @@ impl UiBuilder for MyApp {
         }
 
         ui.set_next_window_size(vec2(360.0, 300.0), Cond::Always);
-        ui.window_config(&format!(
+        ui.window_config(lbl(format!(
             "Gamepad: {}###gamepad",
             self.connected
                 .as_ref()
                 .map(|info| info.name.as_str())
                 .unwrap_or("disconnected")
-        ))
+        )))
         .flags(WindowFlags::AlwaysAutoResize)
         .with(|| {
             let p0 = ui.get_cursor_screen_pos();

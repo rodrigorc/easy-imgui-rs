@@ -1,0 +1,32 @@
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr ""
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr ""
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr ""
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr ""
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr ""
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr ""
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr ""
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr ""

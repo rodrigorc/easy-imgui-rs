@@ -1,0 +1,42 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Hledat"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Název"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Velikost"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Změněno"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Název souboru"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "OK"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Zrušit"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Jen pro čtení"

@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-filechooser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bitflags 2.6.0",
  "bytesize",
@@ -572,7 +572,10 @@ dependencies = [
  "easy-imgui-window",
  "glob",
  "image",
+ "include-po",
+ "sys-locale",
  "time",
+ "tr",
  "windows",
 ]
 
@@ -971,6 +974,17 @@ name = "imgref"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44feda355f4159a7c757171a77de25daf6411e217b4cabd03bd6650690468126"
+
+[[package]]
+name = "include-po"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7c801ec145d90735e27cc2bf8de11b42e23f5f0e78354421aadbe3e0b5fa9c6"
+dependencies = [
+ "nom",
+ "thiserror",
+ "tr",
+]
 
 [[package]]
 name = "indexmap"
@@ -2170,6 +2184,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sys-locale"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e801cf239ecd6ccd71f03d270d67dd53d13e90aab208bf4b8fe4ad957ea949b0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "system-deps"
 version = "6.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,6 +2343,15 @@ dependencies = [
  "serde_spanned",
  "toml_datetime",
  "winnow 0.6.18",
+]
+
+[[package]]
+name = "tr"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a592877f7cb2e5a6327b8c908fa6d51098482b1c87d478abdd783e61218f8151"
+dependencies = [
+ "lazy_static",
 ]
 
 [[package]]

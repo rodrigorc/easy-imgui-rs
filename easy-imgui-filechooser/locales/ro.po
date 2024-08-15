@@ -1,0 +1,43 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ro\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=n==1 ? 0 : (n==0 || (n%100 > 0 && n%100 < "
+"20)) ? 1 : 2;\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Caută"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Nume"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Mărime"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Modificat"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Nume de fișier"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "OK"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Renunță"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Doar citire"

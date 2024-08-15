@@ -1,0 +1,42 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Rechercher"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Nom"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Taille"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Modifié"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Nom du fichier"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "Valider"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Annuler"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Lecture seule"

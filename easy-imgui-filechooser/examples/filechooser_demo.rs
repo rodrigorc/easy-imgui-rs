@@ -4,6 +4,9 @@ use winit::event_loop::EventLoop;
 use easy_imgui_filechooser as filechooser;
 
 fn main() {
+    if let Some(locale) = sys_locale::get_locale() {
+        filechooser::set_locale(&locale);
+    }
     let event_loop = EventLoop::new().unwrap();
 
     let mut main = AppHandler::<App>::default();

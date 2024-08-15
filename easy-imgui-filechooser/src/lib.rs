@@ -18,6 +18,26 @@ use std::{
 };
 use time::macros::format_description;
 
+#[cfg(feature = "tr")]
+include!(concat!(env!("OUT_DIR"), "/locale/translators.rs"));
+
+/// Sets the language for this widget
+#[cfg(feature = "tr")]
+pub fn set_locale(locale: &str) {
+    translators::set_locale(locale);
+}
+
+#[cfg(not(feature = "tr"))]
+pub fn set_locale(_locale: &str) {}
+
+#[cfg(feature = "tr")]
+use tr::tr;
+
+#[cfg(not(feature = "tr"))]
+macro_rules! tr {
+    ($($args:tt)*) => { format!($($args)*) };
+}
+
 /// Main widget to create a file chooser.
 ///
 /// Create one of these when the widget is opened, and then call `do_ui` for each frame.
@@ -528,7 +548,7 @@ impl FileChooser {
                 });
             });
 
-        ui.text("Search:");
+        ui.text(&tr!("Search"));
         ui.same_line();
         ui.set_next_item_width(-ui.get_frame_height() - style.ItemSpacing.x);
         if ui
@@ -572,19 +592,19 @@ impl FileChooser {
                 let pad = ui.style().FramePadding;
                 ui.table_setup_column("", imgui::TableColumnFlags::None, 0.00, 0);
                 ui.table_setup_column(
-                    "Name",
+                    &tr!("Name"),
                     imgui::TableColumnFlags::WidthStretch | imgui::TableColumnFlags::DefaultSort,
                     0.0,
                     0,
                 );
                 ui.table_setup_column(
-                    "Size",
+                    &tr!("Size"),
                     imgui::TableColumnFlags::WidthFixed,
                     ui.calc_text_size("999.9 GiB").x + 2.0 * pad.x,
                     0,
                 );
                 ui.table_setup_column(
-                    "Modified",
+                    &tr!("Modified"),
                     imgui::TableColumnFlags::WidthFixed,
                     ui.calc_text_size("2024-12-31 23:59:59").x + 2.0 * pad.x,
                     0,
@@ -708,7 +728,7 @@ impl FileChooser {
                 }
             });
 
-        ui.text("File name:");
+        ui.text(&tr!("File name"));
         ui.same_line();
 
         if self.filters.is_empty() {
@@ -747,7 +767,7 @@ impl FileChooser {
         let can_ok = !self.file_name.is_empty() && !self.path.as_os_str().is_empty();
         ui.with_disabled(!can_ok, || {
             if ui
-                .button_config("OK")
+                .button_config(tr!("OK"))
                 .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
                 .build()
                 | ui.shortcut(imgui::Key::Enter)
@@ -758,7 +778,7 @@ impl FileChooser {
         });
         ui.same_line();
         if ui
-            .button_config("Cancel")
+            .button_config(tr!("Cancel"))
             .size(imgui::Vector2::new(5.5 * font_sz, 0.0))
             .build()
             | ui.shortcut(imgui::Key::Escape)
@@ -767,9 +787,9 @@ impl FileChooser {
         }
         if self.flags.contains(Flags::SHOW_READ_ONLY) {
             ui.same_line();
-            let text = "Read only";
+            let text = tr!("Read only");
             let check_width =
-                ui.get_frame_height() + style.ItemInnerSpacing.x + ui.calc_text_size(text).x;
+                ui.get_frame_height() + style.ItemInnerSpacing.x + ui.calc_text_size(&text).x;
             ui.set_cursor_pos_x(
                 ui.get_cursor_pos_x() + ui.get_content_region_avail().x - check_width,
             );

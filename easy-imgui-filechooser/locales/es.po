@@ -1,0 +1,39 @@
+msgid ""
+msgstr ""
+"PO-Revision-Date: 2024-07-31 23:26+0200\n"
+"Last-Translator:  <rodrigorivascosta@gmail.com>\n"
+"Language: es\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Buscar"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Nombre"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Tamaño"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Modificado"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Nombre"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "Aceptar"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Solo lectura"

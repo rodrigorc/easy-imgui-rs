@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: id\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=ASCII\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Pencarian"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Nama"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Ukuran"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Diubah"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Nama berkas"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "OK"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Batal"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Hanya baca"

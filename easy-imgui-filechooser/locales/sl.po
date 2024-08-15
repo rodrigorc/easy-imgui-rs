@@ -1,0 +1,43 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: sl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || "
+"n%100==4 ? 2 : 3);\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Išči"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Ime"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Velikost"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Spremenjeno"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Ime datoteke"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "V redu"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Prekliči"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Samo branje"

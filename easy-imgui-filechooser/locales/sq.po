@@ -1,0 +1,41 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: sq\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/lib.rs:538
+msgid "Search"
+msgstr "Kërko"
+
+#: src/lib.rs:582
+msgid "Name"
+msgstr "Emër"
+
+#: src/lib.rs:588
+msgid "Size"
+msgstr "Madhësi"
+
+#: src/lib.rs:594
+msgid "Modified"
+msgstr "Ndryshuar më"
+
+#: src/lib.rs:718
+msgid "File name"
+msgstr "Emër kartele"
+
+#: src/lib.rs:757
+msgid "OK"
+msgstr "OK"
+
+#: src/lib.rs:768
+msgid "Cancel"
+msgstr "Anuloje"
+
+#: src/lib.rs:777
+msgid "Read only"
+msgstr "Vetëm lexim"

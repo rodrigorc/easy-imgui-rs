@@ -499,13 +499,17 @@ pub mod clipboard {
                 ctx,
                 text: CString::default(),
             };
-            let io = imgui.io_mut();
-            io.ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
-            io.SetClipboardTextFn = Some(set_clipboard_text);
-            io.GetClipboardTextFn = Some(get_clipboard_text);
+            let pio = imgui.platform_io_mut();
+            pio.Platform_ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
+            pio.Platform_SetClipboardTextFn = Some(set_clipboard_text);
+            pio.Platform_GetClipboardTextFn = Some(get_clipboard_text);
         }
     }
-    unsafe extern "C" fn set_clipboard_text(user: *mut c_void, text: *const c_char) {
+    unsafe extern "C" fn set_clipboard_text(
+        _: *mut easy_imgui_sys::ImGuiContext,
+        text: *const c_char,
+    ) {
+        let user = (*easy_imgui_sys::ImGui_GetPlatformIO()).Platform_ClipboardUserData;
         let clip = &mut *(user as *mut MyClipboard);
         if text.is_null() {
             let _ = clip.ctx.clear();
@@ -517,7 +521,8 @@ pub mod clipboard {
     }
 
     // The returned pointer should be valid for a while...
-    unsafe extern "C" fn get_clipboard_text(user: *mut c_void) -> *const c_char {
+    unsafe extern "C" fn get_clipboard_text(_: *mut easy_imgui_sys::ImGuiContext) -> *const c_char {
+        let user = (*easy_imgui_sys::ImGui_GetPlatformIO()).Platform_ClipboardUserData;
         let clip = &mut *(user as *mut MyClipboard);
         let Ok(text) = clip.ctx.get_text() else {
             return std::ptr::null();

@@ -356,6 +356,12 @@ impl CurrentContext<'_> {
     pub fn io_mut(&mut self) -> &mut ImGuiIO {
         unsafe { &mut *ImGui_GetIO() }
     }
+    pub fn platform_io(&self) -> &ImGuiPlatformIO {
+        unsafe { &*ImGui_GetPlatformIO() }
+    }
+    pub fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
+        unsafe { &mut *ImGui_GetPlatformIO() }
+    }
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
     pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
@@ -3943,6 +3949,8 @@ impl<const N: usize> Pushable for [StyleColorF; N] {
 pub enum StyleValue {
     F32(f32),
     Vec2(Vector2),
+    X(f32),
+    Y(f32),
 }
 
 pub type Style = (StyleVar, StyleValue);
@@ -3952,6 +3960,8 @@ impl Pushable for Style {
         match self.1 {
             StyleValue::F32(f) => ImGui_PushStyleVar(self.0.bits(), f),
             StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v2_to_im(v)),
+            StyleValue::X(x) => ImGui_PushStyleVarX(self.0.bits(), x),
+            StyleValue::Y(y) => ImGui_PushStyleVarX(self.0.bits(), y),
         }
     }
     unsafe fn pop(&self) {

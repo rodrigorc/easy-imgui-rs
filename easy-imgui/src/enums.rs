@@ -285,7 +285,7 @@ imgui_flags! {
 imgui_flags! {
     pub ChildFlags: ImGuiChildFlags_ {
         None,
-        Border,
+        Borders,
         AlwaysUseWindowPadding,
         ResizeX,
         ResizeY,

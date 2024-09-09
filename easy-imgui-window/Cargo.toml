@@ -35,7 +35,7 @@ winit = { version = "0.30", features = ["x11", "mint"] }
 
 # For the examples
 [dev-dependencies]
-simple_logger = "5.0.0"
+simple_logger = "5"
 gilrs = "0.10"
 anyhow = "1"
 image = { version = "0.25" }

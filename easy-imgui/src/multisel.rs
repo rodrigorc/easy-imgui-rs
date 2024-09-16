@@ -249,7 +249,7 @@ pub struct SelectionBasicStorageWithCallback<'a> {
 impl SelectionBasicStorageWithCallback<'_> {
     /// Gets the inner container.
     pub fn inner(&mut self) -> &mut SelectionBasicStorage {
-        &mut self.inner
+        self.inner
     }
     /// Returns `self.inner().contains(id)`.
     ///
@@ -293,13 +293,13 @@ pub struct SelectionExternalStorage<'f, Storage> {
     storage: StorageAndSet<'f, Storage>,
 }
 
-extern "C" fn adapter_set_item_selected<'f, Storage>(
+extern "C" fn adapter_set_item_selected<Storage>(
     this: *mut ImGuiSelectionExternalStorage,
     idx: i32,
     selected: bool,
 ) {
     unsafe {
-        let storage_and_set = (*this).UserData as *mut StorageAndSet<'f, Storage>;
+        let storage_and_set = (*this).UserData as *mut StorageAndSet<'_, Storage>;
         let (storage, setter) = &mut *storage_and_set;
         setter(storage, idx as usize, selected);
     }

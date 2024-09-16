@@ -28,11 +28,11 @@ impl winit::application::ApplicationHandler for AppHandler {
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let wattr_1 = Window::default_attributes().with_title("Example #1");
-        let main_window_1 = MainWindow::new::<()>(&event_loop, wattr_1).unwrap();
+        let main_window_1 = MainWindow::new::<()>(event_loop, wattr_1).unwrap();
         let mut window_1 = MainWindowWithRenderer::new(main_window_1);
 
         let wattr_2 = Window::default_attributes().with_title("Example #2");
-        let main_window_2 = MainWindow::new::<()>(&event_loop, wattr_2).unwrap();
+        let main_window_2 = MainWindow::new::<()>(event_loop, wattr_2).unwrap();
         // The GL context can be reused, but the imgui context cannot
         let mut renderer_2 = Renderer::new(Rc::clone(window_1.renderer().gl_context())).unwrap();
         renderer_2.set_background_color(Some(imgui::Color::GREEN));

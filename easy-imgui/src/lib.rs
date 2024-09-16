@@ -11,6 +11,28 @@
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
  * The simplest `easy-imgui` program would be something like this:
  *
+ * ## A note about labels and ids.
+ *
+ * In [Dear ImGui][1], many controls take a string argument as both a label and an identifier. You can
+ * use `##` or a `###` as a separator between the label and the idenfifier if you want to make them
+ * apart.
+ *
+ * In `easy_imgui`, since version 0.8, this is represented by the [`LblId`] type, not by a plain
+ * string.
+ *
+ * If you want to keep on using the same type just write `lbl("foo")`, `lbl("foo##bar")` or
+ * `"foo".into()` and it will behave the same as before. But if you want to use them
+ * separately, you can write `lbl_id("Label", "id")` and it will join the two strings for you,
+ * separated by `###`. This is particularly nice if you pretend to translate the UI: the labels change,
+ * but the ids should remain constant.
+ *
+ * Some functions only take an id, no label. Those will take an argument of type [`Id`], that you
+ * can construct with the function [`id`], that will prepend the `###` or [`raw_id`] to use the
+ * string as-is. Like before, you can also write `"id".into()` to behave as previous versions of
+ * this crate.
+ *
+ * [1]: https://github.com/ocornut/imgui/blob/master/docs/FAQ.md#q-about-the-id-stack-system
+ *
  * ```rust, no_run
  * use easy_imgui_window::{
  *     easy_imgui as imgui,
@@ -760,6 +782,15 @@ pub fn raw_id<C: IntoCStr>(c: C) -> Id<C> {
     Id(c)
 }
 
+/// Same as the `raw_id()` function, but may be easier to use.
+///
+/// This will be recommended by the compiler if you do it wrong.
+impl<C: IntoCStr> From<C> for Id<C> {
+    fn from(c: C) -> Id<C> {
+        Id(c)
+    }
+}
+
 /// Uses the given string directly as an ImGui parameter that contains a label plus an id.
 ///
 /// The usual Dear ImGui syntax applies:
@@ -792,7 +823,7 @@ pub fn lbl_id<C1: IntoCStr, C2: IntoCStr>(lbl: C1, id: C2) -> LblId<CString> {
     LblId(both)
 }
 
-/// Same as the `lbl()` functions, but may be easier to use.
+/// Same as the `lbl()` function, but may be easier to use.
 ///
 /// This will be recommended by the compiler if you do it wrong.
 impl<C: IntoCStr> From<C> for LblId<C> {

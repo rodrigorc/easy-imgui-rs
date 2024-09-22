@@ -446,7 +446,7 @@ impl FileChooser {
                 {
                     let scale = ui.get_font_size() / 16.0;
                     if ui
-                        .image_button_with_custom_rect_config("::super", atlas.mypc_rr, scale)
+                        .image_button_with_custom_rect_config(id("::super"), atlas.mypc_rr, scale)
                         .build()
                     {
                         self.set_path_super_root();

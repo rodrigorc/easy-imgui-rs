@@ -952,6 +952,7 @@ imgui_flags! {
         NoNavDefaultFocus,
         ButtonRepeat,
         AutoClosePopups,
+        AllowDuplicateId,
     }
 }
 

@@ -323,6 +323,11 @@ impl Context {
             {
                 (*io).ConfigFlags |= ConfigFlags::DockingEnable.bits();
             }
+            if cfg!(debug_assertions) {
+                (*io).ConfigDebugHighlightIdConflicts = true;
+            } else {
+                (*io).ConfigDebugHighlightIdConflicts = false;
+            }
 
             //ImGui_StyleColorsDark(null_mut());
             imgui
@@ -1340,7 +1345,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         decl_builder_setter!{tint_col: Color}
     }
     {
-        pub fn image_button_config<S: IntoCStr>(&self, str_id: S, user_texture_id: TextureId, size: Vector2) -> ImageButton<S> {
+        pub fn image_button_config<S: IntoCStr>(&self, str_id: Id<S>, user_texture_id: TextureId, size: Vector2) -> ImageButton<S> {
             ImageButton {
                 str_id: str_id.into(),
                 user_texture_id,
@@ -1351,7 +1356,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
                 tint_col: Color::WHITE.into(),
             }
         }
-        pub fn image_button_with_custom_rect_config<S: IntoCStr>(&self, str_id: S, ridx: CustomRectIndex, scale: f32) -> ImageButton<S> {
+        pub fn image_button_with_custom_rect_config<S: IntoCStr>(&self, str_id: Id<S>, ridx: CustomRectIndex, scale: f32) -> ImageButton<S> {
             let atlas = self.font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
@@ -2115,7 +2120,7 @@ macro_rules! decl_builder_popup_context {
             )
             {
                 decl_builder_setter!{flags: PopupFlags}
-                pub fn str_id<S2: IntoCStr>(self, str_id: S2) -> $struct<S2, P> {
+                pub fn str_id<S2: IntoCStr>(self, str_id: LblId<S2>) -> $struct<S2, P> {
                     $struct {
                         str_id: Some(str_id.into()),
                         flags: self.flags,
@@ -2260,7 +2265,7 @@ decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCS
         decl_builder_setter!{flags: TabBarFlags}
     }
     {
-        pub fn tab_bar_config<S: IntoCStr>(&self, str_id: S) -> TabBar<S> {
+        pub fn tab_bar_config<S: IntoCStr>(&self, str_id: LblId<S>) -> TabBar<S> {
             TabBar {
                 str_id: str_id.into(),
                 flags: TabBarFlags::None,
@@ -4298,7 +4303,7 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
         decl_builder_setter!{inner_width: f32}
     }
     {
-        pub fn table_config<S: IntoCStr>(&self, str_id: S, column: i32) -> TableConfig<S> {
+        pub fn table_config<S: IntoCStr>(&self, str_id: LblId<S>, column: i32) -> TableConfig<S> {
             TableConfig {
                 str_id: str_id.into(),
                 column,

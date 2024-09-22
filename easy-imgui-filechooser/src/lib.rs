@@ -562,7 +562,7 @@ impl FileChooser {
             || {
                 let scale = ui.get_font_size() / 16.0;
                 if ui
-                    .image_button_with_custom_rect_config("hidden", atlas.hidden_rr, scale)
+                    .image_button_with_custom_rect_config(id("hidden"), atlas.hidden_rr, scale)
                     .build()
                 {
                     self.show_hidden ^= true;
@@ -574,7 +574,7 @@ impl FileChooser {
         let style = ui.style();
         // Two rows of full controls
         let reserve = 2.0 * ui.get_frame_height_with_spacing();
-        ui.table_config("FileChooser", 4)
+        ui.table_config(lbl("FileChooser"), 4)
             .flags(
                 imgui::TableFlags::RowBg
                     | imgui::TableFlags::ScrollY

@@ -342,11 +342,13 @@ imgui_flags! {
 imgui_flags! {
     pub SliderFlags: ImGuiSliderFlags_ {
         None,
-        AlwaysClamp,
         Logarithmic,
         NoRoundToFormat,
         NoInput,
         WrapAround,
+        ClampOnInput,
+        ClampZeroRange,
+        AlwaysClamp,
     }
 }
 

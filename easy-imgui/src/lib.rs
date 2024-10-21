@@ -3930,6 +3930,7 @@ impl<'ui, A> WindowDrawList<'ui, A> {
                 self.ptr,
                 Some(call_drawlist_callback::<A>),
                 id as *mut c_void,
+                0,
             );
         }
     }
@@ -3941,7 +3942,7 @@ impl<'ui, A> WindowDrawList<'ui, A> {
 }
 
 unsafe extern "C" fn call_drawlist_callback<A>(
-    _parent_lilst: *const ImDrawList,
+    _parent_list: *const ImDrawList,
     cmd: *const ImDrawCmd,
 ) {
     let id = (*cmd).UserCallbackData as usize;

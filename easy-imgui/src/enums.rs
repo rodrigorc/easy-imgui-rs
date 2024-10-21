@@ -206,7 +206,7 @@ imgui_enum! {
         TableRowBgAlt,
         TextSelectedBg,
         DragDropTarget,
-        NavHighlight,
+        NavCursor,
         NavWindowingHighlight,
         NavWindowingDimBg,
         ModalWindowDimBg,
@@ -667,8 +667,6 @@ imgui_flags! {
         None,
         NavEnableKeyboard,
         NavEnableGamepad,
-        NavEnableSetMousePos,
-        NavNoCaptureKeyboard,
         NoMouse,
         NoMouseCursorChange,
         #[cfg(feature="docking")]

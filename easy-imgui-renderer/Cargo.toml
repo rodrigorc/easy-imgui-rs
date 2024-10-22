@@ -18,5 +18,5 @@ easy-imgui = { version = "=0.9.1", path = "../easy-imgui" }
 anyhow = "1"
 cgmath = "0.18"
 smallvec = "1"
-glow = "0.14"
+glow = "0.15"
 log = "0.4"

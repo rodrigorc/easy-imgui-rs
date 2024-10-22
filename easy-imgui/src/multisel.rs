@@ -61,7 +61,7 @@ impl MultiSelect {
             (*self.0).RangeSrcReset = true;
         }
     }
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = SelectionRequest<'a>> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = SelectionRequest<'_>> {
         unsafe { (*self.0).Requests.iter().map(SelectionRequest) }
     }
 }
@@ -289,6 +289,7 @@ type StorageAndSet<'f, Storage> = (Storage, BoxFnExtSetter<'f, Storage>);
 /// `'f` is the lifetime of the setter function, usually `'static`.
 pub struct SelectionExternalStorage<'f, Storage> {
     inner: ImGuiSelectionExternalStorage,
+    #[allow(clippy::type_complexity)]
     selection_size: Box<dyn Fn(&Storage) -> Option<usize> + 'f>,
     storage: StorageAndSet<'f, Storage>,
 }

@@ -196,7 +196,7 @@ impl<'a> MainWindowPieces<'a> {
 }
 
 /// Default implementation if you have all the pieces.
-impl<'a> MainWindowRef for MainWindowPieces<'a> {
+impl MainWindowRef for MainWindowPieces<'_> {
     fn window(&self) -> &Window {
         self.window
     }
@@ -226,7 +226,7 @@ impl<'a> MainWindowRef for MainWindowPieces<'a> {
 }
 
 /// Simple implementation if you only have a window, no pre/post render, no resize.
-impl<'a> MainWindowRef for &'a Window {
+impl MainWindowRef for &Window {
     fn window(&self) -> &Window {
         self
     }
@@ -235,7 +235,7 @@ impl<'a> MainWindowRef for &'a Window {
 // NewType to disable the HiDPI scaling.
 pub struct NoScale<'a>(pub &'a Window);
 
-impl<'a> MainWindowRef for NoScale<'a> {
+impl MainWindowRef for NoScale<'_> {
     fn window(&self) -> &Window {
         self.0
     }

@@ -323,11 +323,7 @@ impl Context {
             {
                 (*io).ConfigFlags |= ConfigFlags::DockingEnable.bits();
             }
-            if cfg!(debug_assertions) {
-                (*io).ConfigDebugHighlightIdConflicts = true;
-            } else {
-                (*io).ConfigDebugHighlightIdConflicts = false;
-            }
+            (*io).ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
 
             //ImGui_StyleColorsDark(null_mut());
             imgui
@@ -2064,7 +2060,7 @@ enum PopupOpened<'a> {
     None,
 }
 
-impl<'a> PopupOpened<'a> {
+impl PopupOpened<'_> {
     unsafe fn pointer(&mut self) -> *mut bool {
         match self {
             PopupOpened::Literal(x) => x,
@@ -3264,7 +3260,7 @@ pub struct FontAtlasMut<'ui, A: ?Sized> {
 ///
 /// You get a value of this type when implementing [`UiBuilder::build_custom_atlas`]. If you want
 /// that function to be called again, call [`Context::invalidate_font_atlas`].
-impl<'ui, A> FontAtlasMut<'ui, A> {
+impl<A> FontAtlasMut<'_, A> {
     /// Adds the given font to the atlas.
     ///
     /// It returns the id to use this font. `FontId` implements `Pushable` so you can use it with
@@ -3486,7 +3482,7 @@ pub struct WindowDrawList<'ui, A> {
     ptr: *mut ImDrawList,
 }
 
-impl<'ui, A> WindowDrawList<'ui, A> {
+impl<A> WindowDrawList<'_, A> {
     pub fn add_line(&self, p1: Vector2, p2: Vector2, color: Color, thickness: f32) {
         unsafe {
             ImDrawList_AddLine(
@@ -4439,7 +4435,7 @@ pub enum DragDropPayloadCond {
     Once,
 }
 
-impl<'a> DragDropPayloadSetter<'a> {
+impl DragDropPayloadSetter<'_> {
     pub fn set(self, type_: impl IntoCStr, data: &[u8], cond: DragDropPayloadCond) -> bool {
         // For some reason ImGui does not accept a non-null pointer with length 0.
         let ptr = if data.is_empty() {
@@ -4505,7 +4501,7 @@ impl<'a> DragDropPayloadGetter<'a> {
     }
 }
 
-impl<'a> DragDropPayload<'a> {
+impl DragDropPayload<'_> {
     //WARNING: inline functions
     pub fn is_data_type(&self, type_: impl IntoCStr) -> bool {
         if self.pay.DataFrameCount == -1 {

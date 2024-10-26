@@ -848,13 +848,13 @@ pub trait BinderFBOTarget {
     const GET_BINDING: u32;
 }
 
-pub struct BinderFramebuffer<TGT: BinderFBOTarget> {
+pub struct BinderFramebufferT<TGT: BinderFBOTarget> {
     gl: GlContext,
     id: Option<glow::Framebuffer>,
     _pd: PhantomData<TGT>,
 }
 
-impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
+impl<TGT: BinderFBOTarget> BinderFramebufferT<TGT> {
     pub fn new(gl: &GlContext) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         let id = unsafe {
@@ -863,7 +863,7 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
         };
         #[cfg(target_arch = "wasm32")]
         let id = None;
-        BinderFramebuffer {
+        BinderFramebufferT {
             gl: gl.clone(),
             id,
             _pd: PhantomData,
@@ -876,7 +876,7 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
         unsafe {
             fb.gl.bind_framebuffer(TGT::TARGET, Some(fb.id));
         }
-        BinderFramebuffer {
+        BinderFramebufferT {
             gl: fb.gl.clone(),
             id: None,
             _pd: PhantomData,
@@ -889,13 +889,22 @@ impl<TGT: BinderFBOTarget> BinderFramebuffer<TGT> {
     }
 }
 
-impl<TGT: BinderFBOTarget> Drop for BinderFramebuffer<TGT> {
+impl<TGT: BinderFBOTarget> Drop for BinderFramebufferT<TGT> {
     fn drop(&mut self) {
         unsafe {
             self.gl.bind_framebuffer(TGT::TARGET, self.id);
         }
     }
 }
+
+pub struct BinderFBO;
+
+impl BinderFBOTarget for BinderFBO {
+    const TARGET: u32 = glow::FRAMEBUFFER;
+    const GET_BINDING: u32 = glow::FRAMEBUFFER_BINDING;
+}
+
+pub type BinderFramebuffer = BinderFramebufferT<BinderFBO>;
 
 pub struct BinderFBODraw;
 
@@ -904,7 +913,7 @@ impl BinderFBOTarget for BinderFBODraw {
     const GET_BINDING: u32 = glow::DRAW_FRAMEBUFFER_BINDING;
 }
 
-pub type BinderDrawFramebuffer = BinderFramebuffer<BinderFBODraw>;
+pub type BinderDrawFramebuffer = BinderFramebufferT<BinderFBODraw>;
 
 pub struct BinderFBORead;
 
@@ -913,7 +922,7 @@ impl BinderFBOTarget for BinderFBORead {
     const GET_BINDING: u32 = glow::READ_FRAMEBUFFER_BINDING;
 }
 
-pub type BinderReadFramebuffer = BinderFramebuffer<BinderFBORead>;
+pub type BinderReadFramebuffer = BinderFramebufferT<BinderFBORead>;
 
 pub unsafe fn as_u8_slice<T>(data: &[T]) -> &[u8] {
     std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))

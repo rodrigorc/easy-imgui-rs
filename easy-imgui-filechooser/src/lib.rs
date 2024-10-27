@@ -415,7 +415,15 @@ impl FileChooser {
         self.visible_dirty = true;
     }
     /// Draws the widget in the current frame.
-    pub fn do_ui<A>(&mut self, ui: &imgui::Ui<A>, atlas: &CustomAtlas) -> Output {
+    ///
+    /// `params` is a `UiParameters` value that contains additional parameters for the UI.
+    /// The only mandatory parameter is the `CustomAtlas`. If you just want this one, you
+    /// can pass a `&CustomAtlas` directly.
+    pub fn do_ui<'a, A, Params, Preview>(&mut self, ui: &'a imgui::Ui<A>, params: Params) -> Output
+    where
+        Params: Into<UiParameters<'a, Preview>>,
+        Preview: PreviewBuilder<A>,
+    {
         if self.entries.is_empty() {
             let res = self.set_path(".");
             if res.is_err() {
@@ -423,6 +431,7 @@ impl FileChooser {
             }
         }
 
+        let UiParameters { atlas, mut preview } = params.into();
         let mut next_path = None;
         let mut output = Output::Continue;
 
@@ -574,6 +583,7 @@ impl FileChooser {
         let style = ui.style();
         // Two rows of full controls
         let reserve = 2.0 * ui.get_frame_height_with_spacing();
+        let preview_width = preview.width();
         ui.table_config(lbl("FileChooser"), 4)
             .flags(
                 imgui::TableFlags::RowBg
@@ -582,7 +592,7 @@ impl FileChooser {
                     | imgui::TableFlags::Sortable
                     | imgui::TableFlags::SizingFixedFit,
             )
-            .outer_size(imgui::Vector2::new(0.0, -reserve))
+            .outer_size(imgui::Vector2::new(-preview_width, -reserve))
             .with(|| {
                 let pad = ui.style().FramePadding;
                 ui.table_setup_column("", imgui::TableColumnFlags::None, 0.00, 0);
@@ -722,6 +732,12 @@ impl FileChooser {
                     ui.set_scroll_y(0.0);
                 }
             });
+        if preview_width > 0.0 {
+            ui.same_line();
+            ui.child_config(lbl("preview"))
+                .size(imgui::Vector2::new(0.0, -reserve))
+                .with(|| preview.do_ui(ui, self));
+        }
 
         ui.text(&tr!("File name"));
         ui.same_line();
@@ -867,6 +883,54 @@ impl FileChooser {
                         Some(i_entry)
                     }),
             );
+    }
+}
+
+/// Extra arguments for the `FileChooser::do_ui()` function.
+pub struct UiParameters<'a, Preview> {
+    atlas: &'a CustomAtlas,
+    preview: Preview,
+}
+
+/// A trait to build the "preview" section of the UI.
+pub trait PreviewBuilder<A> {
+    /// The width reserved for the preview. Return 0.0 for no preview.
+    fn width(&self) -> f32;
+    /// Builds the UI for the preview.
+    fn do_ui(&mut self, ui: &imgui::Ui<A>, chooser: &FileChooser);
+}
+
+/// A dummy implementation for `PreviewBuilder` that does nothing.
+pub struct NoPreview;
+
+impl<A> PreviewBuilder<A> for NoPreview {
+    fn width(&self) -> f32 {
+        0.0
+    }
+    fn do_ui(&mut self, _ui: &easy_imgui::Ui<A>, _chooser: &FileChooser) {}
+}
+
+impl<'a> UiParameters<'a, NoPreview> {
+    /// Builds a `UiParameters` without preview.
+    pub fn new(atlas: &'a CustomAtlas) -> Self {
+        UiParameters {
+            atlas,
+            preview: NoPreview,
+        }
+    }
+    /// Adds a preview object to this `UiParameters`.
+    pub fn with_preview<A, P: PreviewBuilder<A>>(self, preview: P) -> UiParameters<'a, P> {
+        UiParameters {
+            atlas: self.atlas,
+            preview: preview,
+        }
+    }
+}
+
+/// Converts a `&CustomAtlas` into a UiParameters, with all other values to their default.
+impl<'a> From<&'a CustomAtlas> for UiParameters<'a, NoPreview> {
+    fn from(value: &'a CustomAtlas) -> Self {
+        UiParameters::new(value)
     }
 }
 

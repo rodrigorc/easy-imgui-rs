@@ -922,7 +922,7 @@ impl<'a> UiParameters<'a, NoPreview> {
     pub fn with_preview<A, P: PreviewBuilder<A>>(self, preview: P) -> UiParameters<'a, P> {
         UiParameters {
             atlas: self.atlas,
-            preview: preview,
+            preview,
         }
     }
 }

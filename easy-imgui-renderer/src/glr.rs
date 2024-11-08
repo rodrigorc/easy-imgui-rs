@@ -795,6 +795,9 @@ impl Renderbuffer {
 pub struct BinderRenderbuffer(GlContext);
 
 impl BinderRenderbuffer {
+    pub fn none(gl: &GlContext) -> BinderRenderbuffer {
+        BinderRenderbuffer(gl.clone())
+    }
     pub fn bind(rb: &Renderbuffer) -> BinderRenderbuffer {
         unsafe {
             rb.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rb.id));
@@ -855,6 +858,13 @@ pub struct BinderFramebufferT<TGT: BinderFBOTarget> {
 }
 
 impl<TGT: BinderFBOTarget> BinderFramebufferT<TGT> {
+    pub fn none(gl: &GlContext) -> Self {
+        BinderFramebufferT {
+            gl: gl.clone(),
+            id: None,
+            _pd: PhantomData,
+        }
+    }
     pub fn new(gl: &GlContext) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         let id = unsafe {

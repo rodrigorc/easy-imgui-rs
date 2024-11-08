@@ -365,7 +365,7 @@ impl FileChooser {
     pub fn read_only(&self) -> bool {
         self.read_only
     }
-    /// Combine `path + file_name` and optinally an extension.
+    /// Combine `path + file_name` and optionally an extension.
     ///
     /// The `default_extension` will only be used if `file_name` has no extension
     /// of its own, and it doesn't exist in disk. This is useful if you want to set

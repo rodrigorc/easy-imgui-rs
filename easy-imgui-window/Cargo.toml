@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-window"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
 license = "MIT"
@@ -20,9 +20,9 @@ docking = ["easy-imgui/docking"]
 # docking = ["easy-imgui/docking"]
 
 [dependencies]
-easy-imgui-sys = { version = "=0.10.0", path = "../easy-imgui-sys" }
-easy-imgui = { version = "=0.10.0", path = "../easy-imgui" }
-easy-imgui-renderer = { version = "=0.10.0", path = "../easy-imgui-renderer" }
+easy-imgui-sys = { version = "=0.11.0", path = "../easy-imgui-sys" }
+easy-imgui = { version = "=0.11.0", path = "../easy-imgui" }
+easy-imgui-renderer = { version = "=0.11.0", path = "../easy-imgui-renderer" }
 
 log ="0.4"
 anyhow = "1"

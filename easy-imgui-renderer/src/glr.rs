@@ -560,17 +560,34 @@ unsafe impl<T: UniformField, const N: usize> UniformField for [T; N] {
     }
 }
 
-impl<A0: AttribProviderList, A1: AttribProviderList> AttribProviderList for (A0, A1) {
-    type KeepType = (A0::KeepType, A1::KeepType);
-    fn len(&self) -> usize {
-        self.0.len().min(self.1.len())
-    }
-    fn bind(&self, p: &Program) -> (A0::KeepType, A1::KeepType) {
-        let k0 = self.0.bind(p);
-        let k1 = self.1.bind(p);
-        (k0, k1)
-    }
+macro_rules! impl_attrib_provider_list {
+    ($($An:ident)*) => {
+        #[allow(non_snake_case)]
+        impl<$($An: AttribProviderList),*> AttribProviderList for ($($An),*) {
+            type KeepType = ($($An::KeepType),*);
+            fn len(&self) -> usize {
+                let ($($An),*) = self;
+                impl_attrib_provider_list!(@MINLEN $($An)*)
+            }
+            fn bind(&self, p: &Program) -> Self::KeepType {
+                let ($($An),*) = self;
+                $(
+                    let $An = $An.bind(p);
+                )*
+                ($($An),*)
+            }
+        }
+    };
+
+    (@MINLEN $A0:ident) =>  { $A0.len() };
+    (@MINLEN $A0:ident $($An:ident)*) =>  { $A0.len().min(impl_attrib_provider_list!(@MINLEN $($An)*)) };
 }
+
+impl_attrib_provider_list! {A0 A1}
+impl_attrib_provider_list! {A0 A1 A2}
+impl_attrib_provider_list! {A0 A1 A2 A3}
+impl_attrib_provider_list! {A0 A1 A2 A3 A4}
+impl_attrib_provider_list! {A0 A1 A2 A3 A4 A5}
 
 pub struct DynamicVertexArray<A> {
     data: Vec<A>,

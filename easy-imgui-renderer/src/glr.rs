@@ -231,7 +231,7 @@ impl Program {
     pub fn uniform_by_name(&self, name: &str) -> Option<&Uniform> {
         self.uniforms.iter().find(|u| u.name == name)
     }
-    pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: u32)
+    pub unsafe fn draw_func<U, AS>(&self, uniforms: &U, attribs: AS, f_draw: impl FnOnce())
     where
         U: UniformProvider,
         AS: AttribProviderList,
@@ -246,11 +246,21 @@ impl Program {
                 uniforms.apply(&self.gl, u);
             }
 
-            let _bufs = attribs.bind(self);
-            self.gl.draw_arrays(primitive, 0, attribs.len() as i32);
+            let _bufs = attribs.bind(glow::ARRAY_BUFFER, self);
+            f_draw();
             if let Err(e) = check_gl(&self.gl) {
                 log::error!("Error {e:?}");
             }
+        }
+    }
+    pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: u32)
+    where
+        U: UniformProvider,
+        AS: AttribProviderList,
+    {
+        let len = attribs.len() as i32;
+        unsafe {
+            self.draw_func(uniforms, attribs, || self.gl.draw_arrays(primitive, 0, len));
         }
     }
 }
@@ -358,7 +368,7 @@ pub unsafe trait AttribProvider: Copy {
 pub trait AttribProviderList {
     type KeepType;
     fn len(&self) -> usize;
-    fn bind(&self, p: &Program) -> Self::KeepType;
+    fn bind(&self, target: u32, p: &Program) -> Self::KeepType;
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -376,7 +386,7 @@ impl AttribProviderList for NilVertexAttrib {
     fn len(&self) -> usize {
         self.0
     }
-    fn bind(&self, _p: &Program) {}
+    fn bind(&self, _target: u32, _p: &Program) {}
 }
 
 /// Uses a normal array as attrib provider.
@@ -388,12 +398,12 @@ impl<A: AttribProvider> AttribProviderList for &[A] {
     fn len(&self) -> usize {
         <[A]>::len(self)
     }
-    fn bind(&self, p: &Program) -> (Buffer, SmallVec<[EnablerVertexAttribArray; 8]>) {
+    fn bind(&self, target: u32, p: &Program) -> (Buffer, SmallVec<[EnablerVertexAttribArray; 8]>) {
         let buf = Buffer::generate(&p.gl).unwrap();
         let mut vas = SmallVec::new();
         unsafe {
-            p.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buf.id()));
-            p.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_u8_slice(self), glow::STATIC_DRAW);
+            p.gl.bind_buffer(target, Some(buf.id()));
+            p.gl.buffer_data_u8_slice(target, as_u8_slice(self), glow::STATIC_DRAW);
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location();
@@ -464,6 +474,12 @@ unsafe impl<F: AttribField> AttribField for cgmath::Vector3<F> {
         (3 * d, t)
     }
 }
+unsafe impl<F: AttribField> AttribField for cgmath::Vector4<F> {
+    fn detail() -> (usize, u32) {
+        let (d, t) = F::detail();
+        (4 * d, t)
+    }
+}
 
 /// # Safety
 ///
@@ -497,6 +513,21 @@ unsafe impl UniformField for cgmath::Matrix3<f32> {
     }
 }
 
+unsafe impl UniformField for cgmath::Vector2<f32> {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
+        unsafe {
+            gl.uniform_2_f32(Some(&location), self.x, self.y);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice: &[f32; 2] = self.as_ref();
+            let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
+            gl.uniform_2_f32_slice(Some(&location), slice);
+        }
+    }
+}
+
 unsafe impl UniformField for cgmath::Vector3<f32> {
     fn apply(&self, gl: &GlContext, location: UniformLocation) {
         unsafe {
@@ -508,6 +539,21 @@ unsafe impl UniformField for cgmath::Vector3<f32> {
             let slice: &[f32; 3] = self.as_ref();
             let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
             gl.uniform_3_f32_slice(Some(&location), slice);
+        }
+    }
+}
+
+unsafe impl UniformField for cgmath::Vector4<f32> {
+    fn apply(&self, gl: &GlContext, location: UniformLocation) {
+        unsafe {
+            gl.uniform_4_f32(Some(&location), self.x, self.y, self.z, self.w);
+        }
+    }
+    unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
+        unsafe {
+            let slice: &[f32; 4] = self.as_ref();
+            let slice = std::slice::from_raw_parts(slice.as_ptr(), slice.len() * count);
+            gl.uniform_4_f32_slice(Some(&location), slice);
         }
     }
 }
@@ -569,10 +615,10 @@ macro_rules! impl_attrib_provider_list {
                 let ($($An),*) = self;
                 impl_attrib_provider_list!(@MINLEN $($An)*)
             }
-            fn bind(&self, p: &Program) -> Self::KeepType {
+            fn bind(&self, target: u32, p: &Program) -> Self::KeepType {
                 let ($($An),*) = self;
                 $(
-                    let $An = $An.bind(p);
+                    let $An = $An.bind(target, p);
                 )*
                 ($($An),*)
             }
@@ -596,7 +642,7 @@ pub struct DynamicVertexArray<A> {
     dirty: Cell<bool>,
 }
 
-impl<A: AttribProvider> DynamicVertexArray<A> {
+impl<A: Copy> DynamicVertexArray<A> {
     pub fn new(gl: &GlContext) -> Result<Self> {
         Self::from_data(gl, Vec::new())
     }
@@ -621,31 +667,31 @@ impl<A: AttribProvider> DynamicVertexArray<A> {
     pub fn data(&self) -> &[A] {
         &self.data[..]
     }
+    pub fn data_mut(&mut self) -> &mut Vec<A> {
+        self.dirty.set(true);
+        &mut self.data
+    }
     pub fn sub(&self, range: std::ops::Range<usize>) -> DynamicVertexArraySub<'_, A> {
         DynamicVertexArraySub { array: self, range }
     }
-    pub fn bind_buffer(&self) {
+    pub fn bind_buffer(&self, target: u32) {
         if self.data.is_empty() {
             return;
         }
         unsafe {
-            self.buf
-                .gl
-                .bind_buffer(glow::ARRAY_BUFFER, Some(self.buf.id()));
+            self.buf.gl.bind_buffer(target, Some(self.buf.id()));
             if self.dirty.get() {
                 if self.data.len() > self.buf_len.get() {
                     self.buf.gl.buffer_data_u8_slice(
-                        glow::ARRAY_BUFFER,
+                        target,
                         as_u8_slice(&self.data),
                         glow::DYNAMIC_DRAW,
                     );
                     self.buf_len.set(self.data.len());
                 } else {
-                    self.buf.gl.buffer_sub_data_u8_slice(
-                        glow::ARRAY_BUFFER,
-                        0,
-                        as_u8_slice(&self.data),
-                    );
+                    self.buf
+                        .gl
+                        .buffer_sub_data_u8_slice(target, 0, as_u8_slice(&self.data));
                 }
                 self.dirty.set(false);
             }
@@ -653,7 +699,7 @@ impl<A: AttribProvider> DynamicVertexArray<A> {
     }
 }
 
-impl<A: AttribProvider> std::ops::Index<usize> for DynamicVertexArray<A> {
+impl<A: Copy> std::ops::Index<usize> for DynamicVertexArray<A> {
     type Output = A;
 
     fn index(&self, index: usize) -> &A {
@@ -661,7 +707,7 @@ impl<A: AttribProvider> std::ops::Index<usize> for DynamicVertexArray<A> {
     }
 }
 
-impl<A: AttribProvider> std::ops::IndexMut<usize> for DynamicVertexArray<A> {
+impl<A: Copy> std::ops::IndexMut<usize> for DynamicVertexArray<A> {
     fn index_mut(&mut self, index: usize) -> &mut A {
         self.dirty.set(true);
         &mut self.data[index]
@@ -675,10 +721,10 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
         self.data.len()
     }
 
-    fn bind(&self, p: &Program) -> SmallVec<[EnablerVertexAttribArray; 8]> {
+    fn bind(&self, target: u32, p: &Program) -> SmallVec<[EnablerVertexAttribArray; 8]> {
         let mut vas = SmallVec::new();
         unsafe {
-            self.bind_buffer();
+            self.bind_buffer(target);
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location();
@@ -698,7 +744,7 @@ impl<A: AttribProvider> AttribProviderList for &DynamicVertexArray<A> {
     }
 }
 
-pub struct DynamicVertexArraySub<'a, A> {
+pub struct DynamicVertexArraySub<'a, A: Copy> {
     array: &'a DynamicVertexArray<A>,
     range: std::ops::Range<usize>,
 }
@@ -710,10 +756,10 @@ impl<A: AttribProvider> AttribProviderList for DynamicVertexArraySub<'_, A> {
         self.range.len()
     }
 
-    fn bind(&self, p: &Program) -> Self::KeepType {
+    fn bind(&self, target: u32, p: &Program) -> Self::KeepType {
         let mut vas = SmallVec::new();
         unsafe {
-            self.array.bind_buffer();
+            self.array.bind_buffer(target);
             for a in &p.attribs {
                 if let Some((size, ty, offs)) = A::apply(&p.gl, a) {
                     let loc = a.location();

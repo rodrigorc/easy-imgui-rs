@@ -438,7 +438,22 @@ unsafe impl AttribField for f32 {
 }
 unsafe impl AttribField for u8 {
     fn detail() -> (usize, u32) {
+        (1, glow::UNSIGNED_BYTE)
+    }
+}
+unsafe impl AttribField for i8 {
+    fn detail() -> (usize, u32) {
         (1, glow::BYTE)
+    }
+}
+unsafe impl AttribField for u16 {
+    fn detail() -> (usize, u32) {
+        (1, glow::UNSIGNED_SHORT)
+    }
+}
+unsafe impl AttribField for i16 {
+    fn detail() -> (usize, u32) {
+        (1, glow::SHORT)
     }
 }
 unsafe impl AttribField for u32 {

@@ -9,8 +9,8 @@ use easy_imgui_window::{
 use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
 
 use easy_imgui_renderer::{
+    easy_opengl::{self as glr, GlContext, UniformField},
     glow,
-    glr::{self, GlContext, UniformField},
 };
 use glutin::surface::GlSurface;
 use imgui::{cgmath::SquareMatrix, lbl};
@@ -32,13 +32,13 @@ void main(void) {
 type Matrix3 = imgui::cgmath::Matrix3<f32>;
 type Vector2 = imgui::cgmath::Vector2<f32>;
 
-easy_imgui_renderer::uniform! {
+glr::uniform! {
     struct Uniform {
         m: Matrix3,
     }
 }
 
-easy_imgui_renderer::attrib! {
+glr::attrib! {
     #[derive(Copy, Clone)]
     struct Vertex {
         pos: Vector2,

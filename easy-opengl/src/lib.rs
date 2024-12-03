@@ -4,6 +4,9 @@
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc)]
 
+/// Re-export glow
+pub use glow;
+
 use std::rc::Rc;
 use std::{cell::Cell, marker::PhantomData};
 
@@ -1014,4 +1017,73 @@ pub type BinderReadFramebuffer = BinderFramebufferT<BinderFBORead>;
 
 pub unsafe fn as_u8_slice<T>(data: &[T]) -> &[u8] {
     std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))
+}
+
+#[macro_export]
+macro_rules! uniform {
+    (
+        $(
+            $(#[$a:meta])* $v:vis struct $name:ident {
+                $(
+                    $fv:vis $f:ident : $ft:tt
+                ),*
+                $(,)?
+            }
+        )*
+    ) => {
+        $(
+            $(#[$a])* $v struct $name {
+                $(
+                    $fv $f: $ft ,
+                )*
+            }
+            impl $crate::UniformProvider for $name {
+                fn apply(&self, gl: &$crate::GlContext, u: &$crate::Uniform) {
+                    let name = u.name();
+                    $(
+                        if name == $crate::uniform!{ @NAME $f: $ft }  {
+                            self.$f.apply(gl, u.location());
+                            return;
+                        }
+                    )*
+                }
+            }
+        )*
+    };
+    (@NAME $f:ident : [ $ft:ty; $n:literal ]) => { concat!(stringify!($f), "[0]") };
+    (@NAME $f:ident : $ft:ty) => { stringify!($f) };
+}
+
+#[macro_export]
+macro_rules! attrib {
+    (
+        $(
+            $(#[$a:meta])* $v:vis struct $name:ident {
+                $(
+                    $fv:vis $f:ident : $ft:ty
+                ),*
+                $(,)?
+            }
+        )*
+    ) => {
+        $(
+            $(#[$a])* $v struct $name {
+                $(
+                    $fv $f: $ft ,
+                )*
+            }
+            unsafe impl $crate::AttribProvider for $name {
+                fn apply(gl: &$crate::GlContext, a: &$crate::Attribute) -> Option<(usize, u32, usize)> {
+                    let name = a.name();
+                    $(
+                        if name == stringify!($f) {
+                            let (n, t) = <$ft as $crate::AttribField>::detail();
+                            return Some((n, t, std::mem::offset_of!($name, $f)));
+                        }
+                    )*
+                    None
+                }
+            }
+        )*
+    }
 }

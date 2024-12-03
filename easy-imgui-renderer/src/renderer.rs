@@ -1,12 +1,11 @@
 use std::mem::size_of;
 
+use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
-use easy_imgui_sys::*;
-use glow::HasContext;
-
-use crate::glr;
 use easy_imgui as imgui;
+use easy_imgui_sys::*;
+use easy_opengl as glr;
 use imgui::{Color, TextureId, Vector2};
 
 /// The main `Renderer` type.

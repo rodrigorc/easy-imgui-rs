@@ -222,10 +222,10 @@ impl Renderer {
             glow::RGBA,
             glow::UNSIGNED_BYTE,
             //glow::RED, glow::UNSIGNED_BYTE,
-            Some(std::slice::from_raw_parts(
+            glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
                 data,
                 (width * height * pixel_size) as usize,
-            )),
+            ))),
         );
         gl.bind_texture(glow::TEXTURE_2D, None);
 

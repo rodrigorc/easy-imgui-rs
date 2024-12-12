@@ -7,7 +7,7 @@ pub use easy_imgui;
 pub use easy_imgui_sys;
 
 // Handy re-exports of core dependencies
-pub use easy_opengl::{self, glow};
+pub use easy_imgui_opengl::{self, glow};
 
 mod renderer;
 pub use renderer::*;

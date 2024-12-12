@@ -9,7 +9,7 @@ use easy_imgui_window::{
 use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
 
 use easy_imgui_renderer::{
-    easy_opengl::{self as glr, GlContext, UniformField},
+    easy_imgui_opengl::{self as glr, GlContext, UniformField},
     glow,
 };
 use glutin::surface::GlSurface;

@@ -14,7 +14,7 @@ keywords = ["imgui", "ui", "graphics"]
 [dependencies]
 easy-imgui-sys = { version = "=0.12.0", path = "../easy-imgui-sys" }
 easy-imgui = { version = "=0.12.0", path = "../easy-imgui" }
-easy-opengl = { version = "0.1", path = "../easy-opengl" }
+easy-imgui-opengl = { version = "0.1", path = "../easy-imgui-opengl" }
 
 anyhow = "1"
 cgmath = "0.18"

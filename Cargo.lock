@@ -588,14 +588,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "easy-imgui-opengl"
+version = "0.1.0"
+dependencies = [
+ "cgmath",
+ "glow",
+ "log",
+ "smallvec",
+]
+
+[[package]]
 name = "easy-imgui-renderer"
 version = "0.12.0"
 dependencies = [
  "anyhow",
  "cgmath",
  "easy-imgui",
+ "easy-imgui-opengl",
  "easy-imgui-sys",
- "easy-opengl",
  "log",
  "smallvec",
 ]
@@ -629,16 +639,6 @@ dependencies = [
  "raw-window-handle",
  "simple_logger",
  "winit",
-]
-
-[[package]]
-name = "easy-opengl"
-version = "0.1.0"
-dependencies = [
- "cgmath",
- "glow",
- "log",
- "smallvec",
 ]
 
 [[package]]

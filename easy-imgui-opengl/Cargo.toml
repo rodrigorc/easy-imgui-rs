@@ -1,5 +1,5 @@
 [package]
-name = "easy-opengl"
+name = "easy-imgui-opengl"
 version = "0.1.0"
 edition = "2021"
 description = "OpenGL helper types, designed to work with easy-imgui"

@@ -378,6 +378,9 @@ imgui_flags! {
         NoHorizontalScroll,
         NoUndoRedo,
 
+        // Elide display / Alignment
+        ElideLeft,
+
         // Callback features
         CallbackCompletion,
         CallbackHistory,

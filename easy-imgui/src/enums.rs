@@ -349,6 +349,7 @@ imgui_flags! {
         ClampOnInput,
         ClampZeroRange,
         AlwaysClamp,
+        NoSpeedTweaks,
     }
 }
 
@@ -695,11 +696,12 @@ imgui_flags! {
         FramePadding,
         SpanAvailWidth,
         SpanFullWidth,
-        SpanTextWidth,
+        SpanLabelWidth,
         SpanAllColumns,
         NavLeftJumpsBackHere,
         //NoScrollOnOpen,
         CollapsingHeader,
+        LabelSpanAllColumns,
     }
 }
 

@@ -2835,6 +2835,10 @@ impl<A> Ui<A> {
             ImGui_SetColorEditOptions(flags.bits());
         }
     }
+    pub fn key_mods(&self) -> KeyMod {
+        let mods = unsafe { (*ImGui_GetIO()).KeyMods };
+        KeyMod::from_bits_truncate(mods & ImGuiKey::ImGuiMod_Mask_.0)
+    }
     pub fn is_key_down(&self, key: Key) -> bool {
         unsafe { ImGui_IsKeyDown(key.bits()) }
     }
@@ -4563,11 +4567,11 @@ impl KeyChord {
     }
     pub fn key(&self) -> Key {
         let key = self.bits() & !ImGuiKey::ImGuiMod_Mask_.0;
-        Key::from_bits(ImGuiKey(key)).unwrap()
+        Key::from_bits(ImGuiKey(key)).unwrap_or(Key::None)
     }
     pub fn mods(&self) -> KeyMod {
         let mods = self.bits() & ImGuiKey::ImGuiMod_Mask_.0;
-        KeyMod::from_bits(mods).unwrap()
+        KeyMod::from_bits_truncate(mods)
     }
 }
 

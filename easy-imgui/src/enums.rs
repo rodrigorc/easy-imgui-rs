@@ -618,6 +618,20 @@ imgui_flags_ex! {
     }
 }
 
+impl TryFrom<Key> for KeyMod {
+    type Error = ();
+    fn try_from(key: Key) -> Result<KeyMod, Self::Error> {
+        match key {
+            Key::ModCtrl => Ok(KeyMod::Ctrl),
+            Key::ModShift => Ok(KeyMod::Shift),
+            Key::ModAlt => Ok(KeyMod::Alt),
+            Key::ModSuper => Ok(KeyMod::Super),
+            // KeyMod is a bitflags, but only one can be converted to Key
+            _ => Err(()),
+        }
+    }
+}
+
 imgui_flags! {
     pub ViewportFlags: ImGuiViewportFlags_ {
         None,

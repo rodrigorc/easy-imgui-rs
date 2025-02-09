@@ -578,13 +578,10 @@ mod main_window {
 
     impl MainWindow {
         /// Creates a `MainWindow` with default values.
-        pub fn new<EventUserType>(
-            event_loop: &ActiveEventLoop,
-            wattr: WindowAttributes,
-        ) -> Result<MainWindow> {
+        pub fn new(event_loop: &ActiveEventLoop, wattr: WindowAttributes) -> Result<MainWindow> {
             // For standard UI, we need as few fancy things as available
             let score = |c: &Config| (c.num_samples(), c.depth_size(), c.stencil_size());
-            Self::with_gl_chooser::<EventUserType>(event_loop, wattr, |cfg1, cfg2| {
+            Self::with_gl_chooser(event_loop, wattr, |cfg1, cfg2| {
                 if score(&cfg2) < score(&cfg1) {
                     cfg2
                 } else {
@@ -596,7 +593,7 @@ mod main_window {
         ///
         /// If you don't have specific OpenGL needs, prefer using [`MainWindow::new`]. If you do,
         /// consider using a _FramebufferObject_ and do an offscreen rendering instead.
-        pub fn with_gl_chooser<EventUserType>(
+        pub fn with_gl_chooser(
             event_loop: &ActiveEventLoop,
             wattr: WindowAttributes,
             f_choose_cfg: impl FnMut(Config, Config) -> Config,
@@ -1014,7 +1011,7 @@ mod main_window {
             self.window = None;
         }
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-            let main_window = MainWindow::new::<()>(event_loop, self.wattrs.clone()).unwrap();
+            let main_window = MainWindow::new(event_loop, self.wattrs.clone()).unwrap();
             let mut window = MainWindowWithRenderer::new(main_window);
 
             let args = Args {

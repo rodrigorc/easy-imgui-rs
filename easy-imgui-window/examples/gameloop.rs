@@ -24,7 +24,7 @@ struct Init {
 impl ApplicationHandler for Init {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let wattrs = Window::default_attributes().with_title("game_loop");
-        let window = MainWindow::new::<()>(event_loop, wattrs).unwrap();
+        let window = MainWindow::new(event_loop, wattrs).unwrap();
         let gl = Rc::new(window.create_gl_context());
         let (gl_context, surface, window) = unsafe { window.into_pieces() };
         let window = Arc::new(window);

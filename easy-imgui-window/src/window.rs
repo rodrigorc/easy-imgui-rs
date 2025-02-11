@@ -553,10 +553,8 @@ mod main_window {
     };
     use glutin_winit::DisplayBuilder;
     use raw_window_handle::HasWindowHandle;
-    use winit::event_loop::ActiveEventLoop;
+    use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
     use winit::window::WindowAttributes;
-    //use raw_window_handle::HasWindowHandle;
-    //use winit::{event_loop::EventLoopWindowTarget, window::WindowBuilder};
 
     /// This type represents a `winit` window and an OpenGL context.
     pub struct MainWindow {
@@ -845,16 +843,18 @@ mod main_window {
     ///
     /// With this you don't need to have a buch of `use` that you probably
     /// don't care about.
-    pub struct Args<'a, D> {
+    #[non_exhaustive]
+    pub struct Args<'a, A: Application> {
         pub window: &'a mut MainWindowWithRenderer,
         pub event_loop: &'a ActiveEventLoop,
-        pub data: &'a mut D,
+        pub event_proxy: &'a EventLoopProxy<AppEvent<A>>,
+        pub data: &'a mut A::Data,
     }
 
     /// Trait that connects a `UiBuilder` with an `AppHandler`.
     ///
     /// Implement this to manage the main loop of your application.
-    pub trait Application: imgui::UiBuilder + Sized {
+    pub trait Application: imgui::UiBuilder + Sized + 'static {
         /// The custom event for the `EventLoop`, usually `()`.
         type UserEvent: 'static;
         /// The custom data for your `AppHandler`.
@@ -864,7 +864,7 @@ mod main_window {
         const EVENT_FLAGS: EventFlags = EventFlags::empty();
 
         /// The main window has been created, please create the application.
-        fn new(args: Args<'_, Self::Data>) -> Self;
+        fn new(args: Args<'_, Self>) -> Self;
 
         /// A new window event has been received.
         ///
@@ -873,7 +873,7 @@ mod main_window {
         /// The default impl will end the application when the window is closed.
         fn window_event(
             &mut self,
-            args: Args<'_, Self::Data>,
+            args: Args<'_, Self>,
             _event: winit::event::WindowEvent,
             res: EventResult,
         ) {
@@ -885,11 +885,7 @@ mod main_window {
         /// Advanced handling for window events.
         ///
         /// The default impl will pass the event to ImGui and then call `window_event`.
-        fn window_event_full(
-            &mut self,
-            args: Args<'_, Self::Data>,
-            event: winit::event::WindowEvent,
-        ) {
+        fn window_event_full(&mut self, args: Args<'_, Self>, event: winit::event::WindowEvent) {
             let res = args.window.window_event(self, &event, Self::EVENT_FLAGS);
             self.window_event(args, event, res);
         }
@@ -899,20 +895,63 @@ mod main_window {
         /// This event is not handled in any way, just passed laong.
         fn device_event(
             &mut self,
-            _args: Args<'_, Self::Data>,
+            _args: Args<'_, Self>,
             _device_id: winit::event::DeviceId,
             _event: winit::event::DeviceEvent,
         ) {
         }
 
         /// A custom event has been received.
-        fn user_event(&mut self, _args: Args<'_, Self::Data>, _event: Self::UserEvent) {}
+        fn user_event(&mut self, _args: Args<'_, Self>, _event: Self::UserEvent) {}
 
         /// Corresponds to `winit` `suspended`` function.
-        fn suspended(&mut self, _args: Args<'_, Self::Data>) {}
+        fn suspended(&mut self, _args: Args<'_, Self>) {}
 
         /// Corresponds to `winit` `resumed` function.
-        fn resumed(&mut self, _args: Args<'_, Self::Data>) {}
+        fn resumed(&mut self, _args: Args<'_, Self>) {}
+    }
+
+    #[non_exhaustive]
+    pub enum AppEvent<A: Application> {
+        PingUserInput,
+        RunIdle(Box<dyn FnOnce(&mut A, Args<'_, A>) + Send + Sync>),
+        User(A::UserEvent),
+    }
+
+    impl<A: Application> std::fmt::Debug for AppEvent<A> {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(fmt, "<AppEvent>")
+        }
+    }
+
+    pub trait EventLoopExt<A: Application> {
+        fn send_user(
+            &self,
+            u: A::UserEvent,
+        ) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>>;
+        fn ping_user_input(&self) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>>;
+        fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + Send + Sync + 'static>(
+            &self,
+            f: F,
+        ) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>>;
+    }
+
+    impl<A: Application> EventLoopExt<A> for EventLoopProxy<AppEvent<A>> {
+        fn send_user(
+            &self,
+            u: A::UserEvent,
+        ) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>> {
+            self.send_event(AppEvent::User(u))
+        }
+        fn ping_user_input(&self) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>> {
+            self.send_event(AppEvent::PingUserInput)
+        }
+        fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + Send + Sync + 'static>(
+            &self,
+            f: F,
+        ) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>> {
+            self.send_event(AppEvent::RunIdle(Box::new(f)))
+        }
     }
 
     /// Default implementation for `winit::application::ApplicationHandler`.
@@ -931,6 +970,7 @@ mod main_window {
     /// of `winit::application::ApplicationHandler`.
     pub struct AppHandler<A: Application> {
         wattrs: WindowAttributes,
+        event_proxy: EventLoopProxy<AppEvent<A>>,
         window: Option<MainWindowWithRenderer>,
         app: Option<A>,
         app_data: A::Data,
@@ -940,9 +980,10 @@ mod main_window {
         /// Creates a new `AppHandler`.
         ///
         /// Nothing interesting, just creates an empty handler.
-        pub fn new(app_data: A::Data) -> Self {
+        pub fn new(event_loop: &EventLoop<AppEvent<A>>, app_data: A::Data) -> Self {
             AppHandler {
                 wattrs: Window::default_attributes(),
+                event_proxy: event_loop.create_proxy(),
                 window: None,
                 app: None,
                 app_data,
@@ -982,17 +1023,13 @@ mod main_window {
         pub fn into_inner(self) -> (Option<A>, A::Data) {
             (self.app, self.app_data)
         }
-    }
-    impl<A: Application> Default for AppHandler<A>
-    where
-        A::Data: Default,
-    {
-        fn default() -> Self {
-            Self::new(A::Data::default())
+
+        pub fn event_proxy(&self) -> &EventLoopProxy<AppEvent<A>> {
+            &self.event_proxy
         }
     }
 
-    impl<A> winit::application::ApplicationHandler<A::UserEvent> for AppHandler<A>
+    impl<A> winit::application::ApplicationHandler<AppEvent<A>> for AppHandler<A>
     where
         A: Application,
     {
@@ -1004,6 +1041,7 @@ mod main_window {
                 let args = Args {
                     window,
                     event_loop,
+                    event_proxy: &self.event_proxy,
                     data: &mut self.app_data,
                 };
                 app.suspended(args);
@@ -1017,6 +1055,7 @@ mod main_window {
             let args = Args {
                 window: &mut window,
                 event_loop,
+                event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
             match &mut self.app {
@@ -1042,6 +1081,7 @@ mod main_window {
             let args = Args {
                 window,
                 event_loop,
+                event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
             app.window_event_full(args, event);
@@ -1058,20 +1098,26 @@ mod main_window {
             let args = Args {
                 window,
                 event_loop,
+                event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
             app.device_event(args, device_id, event);
         }
-        fn user_event(&mut self, event_loop: &ActiveEventLoop, event: A::UserEvent) {
+        fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent<A>) {
             let (Some(window), Some(app)) = (self.window.as_mut(), self.app.as_mut()) else {
                 return;
             };
             let args = Args {
                 window,
                 event_loop,
+                event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
-            app.user_event(args, event);
+            match event {
+                AppEvent::PingUserInput => window.ping_user_input(),
+                AppEvent::RunIdle(f) => f(app, args),
+                AppEvent::User(uevent) => app.user_event(args, uevent),
+            }
         }
         fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: winit::event::StartCause) {
             let Some(window) = self.window.as_mut() else {

@@ -12,14 +12,22 @@ use std::rc::Rc;
 fn main() {
     let event_loop = EventLoop::new().unwrap();
 
-    let mut main = AppHandler::default();
+    let mut main = AppHandler::new();
     event_loop.run_app(&mut main).unwrap();
 }
 
-#[derive(Default)]
 struct AppHandler {
     windows: Vec<MainWindowWithRenderer>,
     app: App,
+}
+
+impl AppHandler {
+    fn new() -> AppHandler {
+        AppHandler {
+            windows: Vec::new(),
+            app: App,
+        }
+    }
 }
 
 impl winit::application::ApplicationHandler for AppHandler {
@@ -74,7 +82,6 @@ impl winit::application::ApplicationHandler for AppHandler {
     }
 }
 
-#[derive(Default)]
 struct App;
 
 impl imgui::UiBuilder for App {

@@ -545,7 +545,7 @@ impl Application for App {
 
     const EVENT_FLAGS: EventFlags = EventFlags::DoNotResize;
 
-    fn new(args: Args<()>) -> App {
+    fn new(args: Args<Self>) -> App {
         args.window
             .renderer()
             .set_background_color(Some(imgui::Color {
@@ -567,7 +567,7 @@ impl Application for App {
         app
     }
 
-    fn window_event(&mut self, args: Args<()>, event: WindowEvent, ui_res: EventResult) {
+    fn window_event(&mut self, args: Args<Self>, event: WindowEvent, ui_res: EventResult) {
         if ui_res.window_closed || self.ui_request.contains(UiRequest::Quit) {
             args.event_loop.exit();
         }
@@ -669,8 +669,8 @@ impl Application for App {
 
 fn main() {
     //simple_logger::SimpleLogger::new().init().unwrap();
-    let event_loop = EventLoop::new().unwrap();
-    let mut main = AppHandler::<App>::default();
+    let event_loop = EventLoop::with_user_event().build().unwrap();
+    let mut main = AppHandler::<App>::new(&event_loop, ());
     *main.attributes() = Window::default_attributes().with_title("Pong");
 
     event_loop.run_app(&mut main).unwrap();

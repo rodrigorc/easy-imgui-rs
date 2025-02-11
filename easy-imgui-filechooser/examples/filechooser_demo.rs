@@ -7,9 +7,9 @@ fn main() {
     if let Some(locale) = sys_locale::get_locale() {
         filechooser::set_locale(&locale);
     }
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop = EventLoop::with_user_event().build().unwrap();
 
-    let mut main = AppHandler::<App>::default();
+    let mut main = AppHandler::<App>::new(&event_loop, ());
     main.attributes().title = String::from("Example");
     event_loop.run_app(&mut main).unwrap();
 }
@@ -23,7 +23,7 @@ impl Application for App {
     type UserEvent = ();
     type Data = ();
 
-    fn new(args: easy_imgui_window::Args<'_, Self::Data>) -> Self {
+    fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
         unsafe {
             args.window
                 .renderer()

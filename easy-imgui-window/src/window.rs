@@ -543,8 +543,11 @@ pub mod clipboard {
 #[cfg(feature = "main-window")]
 mod main_window {
     use super::*;
+    use std::future::Future;
+    mod fut;
     use anyhow::{anyhow, Result};
     use easy_imgui_renderer::glow;
+    pub use fut::{FutureBackCaller, FutureHandle};
     use glutin::{
         config::{Config, ConfigTemplateBuilder},
         context::{ContextApi, ContextAttributesBuilder},
@@ -851,12 +854,71 @@ mod main_window {
         pub data: &'a mut A::Data,
     }
 
+    pub struct LocalProxy<A: Application> {
+        event_proxy: EventLoopProxy<AppEvent<A>>,
+        // !Send + !Sync
+        pd: std::marker::PhantomData<*const ()>,
+    }
+
+    impl<A: Application> Clone for LocalProxy<A> {
+        fn clone(&self) -> Self {
+            LocalProxy {
+                event_proxy: self.event_proxy.clone(),
+                pd: std::marker::PhantomData,
+            }
+        }
+    }
+
+    macro_rules! local_proxy_impl {
+        () => {
+            pub fn spawn_idle<T: 'static, F: Future<Output = T> + 'static>(
+                &self,
+                f: F,
+            ) -> crate::FutureHandle<T> {
+                unsafe { fut::spawn_idle(&self.event_proxy, f) }
+            }
+            pub fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + 'static>(
+                &self,
+                f: F,
+            ) -> Result<(), winit::event_loop::EventLoopClosed<()>> {
+                // Self is !Send+!Sync, so this must be in the main loop,
+                // and the idle callback will be run in the same loop.
+                let f = send_wrapper::SendWrapper::new(f);
+                // If it fails, drop the message instead of returing it, because the
+                // message is Send but the f inside is not.
+                self.event_proxy
+                    .run_idle(move |app, args| (f.take())(app, args))
+                    .map_err(|_| winit::event_loop::EventLoopClosed(()))
+            }
+            pub fn future_back(&self) -> crate::FutureBackCaller<A> {
+                fut::future_back_caller_new()
+            }
+        };
+    }
+
+    impl<A: Application> Args<'_, A> {
+        pub fn local_proxy(&self) -> LocalProxy<A> {
+            LocalProxy {
+                event_proxy: self.event_proxy.clone(),
+                pd: std::marker::PhantomData,
+            }
+        }
+        local_proxy_impl! {}
+    }
+
+    impl<A: Application> LocalProxy<A> {
+        pub fn event_proxy(&self) -> &EventLoopProxy<AppEvent<A>> {
+            &self.event_proxy
+        }
+        local_proxy_impl! {}
+    }
+
     /// Trait that connects a `UiBuilder` with an `AppHandler`.
     ///
     /// Implement this to manage the main loop of your application.
     pub trait Application: imgui::UiBuilder + Sized + 'static {
         /// The custom event for the `EventLoop`, usually `()`.
-        type UserEvent: 'static;
+        type UserEvent: Send + 'static;
         /// The custom data for your `AppHandler`.
         type Data;
 
@@ -915,6 +977,7 @@ mod main_window {
     pub enum AppEvent<A: Application> {
         PingUserInput,
         RunIdle(Box<dyn FnOnce(&mut A, Args<'_, A>) + Send + Sync>),
+        RunIdleSimple(Box<dyn FnOnce() + Send + Sync>),
         User(A::UserEvent),
     }
 
@@ -1113,9 +1176,11 @@ mod main_window {
                 event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
+
             match event {
                 AppEvent::PingUserInput => window.ping_user_input(),
                 AppEvent::RunIdle(f) => f(app, args),
+                AppEvent::RunIdleSimple(f) => fut::future_back_caller_prepare((app, args), f),
                 AppEvent::User(uevent) => app.user_event(args, uevent),
             }
         }

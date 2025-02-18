@@ -105,6 +105,7 @@ pub trait MainWindowRef {
     fn ping_user_input(&mut self) {}
     /// There are no more messages, going to idle.
     fn about_to_wait(&mut self, _pinged: bool) {}
+    /// Transform the given `pos` by using the current scale factor.
     fn transform_position(&self, pos: Vector2) -> Vector2 {
         pos / self.scale_factor()
     }
@@ -175,6 +176,7 @@ pub struct MainWindowPieces<'a> {
 }
 
 impl<'a> MainWindowPieces<'a> {
+    /// Creates a value from the pieces.
     pub fn new(
         window: &'a Window,
         surface: &'a Surface<WindowSurface>,
@@ -232,7 +234,7 @@ impl MainWindowRef for &Window {
     }
 }
 
-// NewType to disable the HiDPI scaling.
+/// NewType to disable the HiDPI scaling.
 pub struct NoScale<'a>(pub &'a Window);
 
 impl MainWindowRef for NoScale<'_> {
@@ -260,6 +262,7 @@ pub struct EventResult {
     pub want_text_input: bool,
 }
 
+/// Corresponds to winit's `ApplicationHandler::new_events`.
 pub fn new_events(renderer: &mut Renderer, status: &mut MainWindowStatus) {
     let now = Instant::now();
     let mut imgui = unsafe { renderer.imgui().set_current() };
@@ -268,6 +271,7 @@ pub fn new_events(renderer: &mut Renderer, status: &mut MainWindowStatus) {
     status.last_frame = now;
 }
 
+/// Corresponds to winit's `ApplicationHandler::about_to_wait`.
 pub fn about_to_wait(main_window: &mut impl MainWindowRef, renderer: &mut Renderer) {
     let imgui = unsafe { renderer.imgui().set_current() };
     let io = imgui.io();
@@ -281,6 +285,7 @@ pub fn about_to_wait(main_window: &mut impl MainWindowRef, renderer: &mut Render
     main_window.about_to_wait(mouse);
 }
 
+/// Corresponds to winit's `ApplicationHandler::window_event`.
 pub fn window_event(
     main_window: &mut impl MainWindowRef,
     renderer: &mut Renderer,
@@ -488,6 +493,10 @@ pub fn window_event(
 }
 
 #[cfg(feature = "clipboard")]
+/// Easy wrapper for the clipboard functions.
+///
+/// This module depends on the `clipboard` feature. Usually this is set up automatically just by
+/// enabling the faature.
 pub mod clipboard {
     use easy_imgui as imgui;
     use std::ffi::{c_char, c_void, CStr, CString};
@@ -675,6 +684,7 @@ mod main_window {
         ) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
             (self.gl_context, self.surface, self.window)
         }
+        /// Returns the `glutin` context.
         pub fn glutin_context(&self) -> &PossiblyCurrentContext {
             &self.gl_context
         }
@@ -687,6 +697,7 @@ mod main_window {
         pub fn window(&self) -> &Window {
             &self.window
         }
+        /// Returns the `glutin` surface.
         pub fn surface(&self) -> &Surface<WindowSurface> {
             &self.surface
         }
@@ -846,14 +857,24 @@ mod main_window {
     ///
     /// With this you don't need to have a buch of `use` that you probably
     /// don't care about.
+    ///
+    /// Since this is not `Send` it is always used from the main loop, and it can be
+    /// used to send non `Send` callbacks to the idle loop.
     #[non_exhaustive]
     pub struct Args<'a, A: Application> {
+        /// The main window.
         pub window: &'a mut MainWindowWithRenderer,
+        /// The event loop.
         pub event_loop: &'a ActiveEventLoop,
+        /// A proxy to send messages to the main loop.
         pub event_proxy: &'a EventLoopProxy<AppEvent<A>>,
+        /// The custom application data.
         pub data: &'a mut A::Data,
     }
 
+    /// This type is a wrapper for `EventLoopProxy` that is not `Send`.
+    ///
+    /// Since it can only be used from the main loop, it can send events that are not `Send`.
     pub struct LocalProxy<A: Application> {
         event_proxy: EventLoopProxy<AppEvent<A>>,
         // !Send + !Sync
@@ -871,12 +892,14 @@ mod main_window {
 
     macro_rules! local_proxy_impl {
         () => {
+            /// Registers a future to be run during the idle step of the main loop.
             pub fn spawn_idle<T: 'static, F: Future<Output = T> + 'static>(
                 &self,
                 f: F,
             ) -> crate::FutureHandle<T> {
                 unsafe { fut::spawn_idle(&self.event_proxy, f) }
             }
+            /// Registers a callback to be called during the idle step of the main loop.
             pub fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + 'static>(
                 &self,
                 f: F,
@@ -890,6 +913,7 @@ mod main_window {
                     .run_idle(move |app, args| (f.take())(app, args))
                     .map_err(|_| winit::event_loop::EventLoopClosed(()))
             }
+            /// Creates a `FutureBackCaller` for this application.
             pub fn future_back(&self) -> crate::FutureBackCaller<A> {
                 fut::future_back_caller_new()
             }
@@ -897,6 +921,7 @@ mod main_window {
     }
 
     impl<A: Application> Args<'_, A> {
+        /// Creates a `LocalProxy` that is `Clone` but not `Send`.
         pub fn local_proxy(&self) -> LocalProxy<A> {
             LocalProxy {
                 event_proxy: self.event_proxy.clone(),
@@ -907,6 +932,7 @@ mod main_window {
     }
 
     impl<A: Application> LocalProxy<A> {
+        /// Gets the inner real proxy, that is `Send`.
         pub fn event_proxy(&self) -> &EventLoopProxy<AppEvent<A>> {
             &self.event_proxy
         }
@@ -973,11 +999,19 @@ mod main_window {
         fn resumed(&mut self, _args: Args<'_, Self>) {}
     }
 
+    /// The main event type to be used with `winit::EventLoop`.
+    ///
+    /// It is generic on the `Application` type.
     #[non_exhaustive]
     pub enum AppEvent<A: Application> {
+        /// Calls `ping_user_input` on the main window.
         PingUserInput,
+        /// Runs the given callback in the main loop idle step, with the regular arguments.
+        #[allow(clippy::type_complexity)]
         RunIdle(Box<dyn FnOnce(&mut A, Args<'_, A>) + Send + Sync>),
+        /// Runs the given callback in the main loop idle step, without arguments.
         RunIdleSimple(Box<dyn FnOnce() + Send + Sync>),
+        /// Sends the custom user event.
         User(A::UserEvent),
     }
 
@@ -987,12 +1021,16 @@ mod main_window {
         }
     }
 
+    /// Helper trait to extend `winit::EventLoopProxy` with useful functions.
     pub trait EventLoopExt<A: Application> {
+        /// Sends a `AppEvent::User` event.
         fn send_user(
             &self,
             u: A::UserEvent,
         ) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>>;
+        /// Sends a `AppEvent::PingUserInput` event.
         fn ping_user_input(&self) -> Result<(), winit::event_loop::EventLoopClosed<AppEvent<A>>>;
+        /// Sends a `AppEvent::RunIdle` event.
         fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + Send + Sync + 'static>(
             &self,
             f: F,
@@ -1042,7 +1080,7 @@ mod main_window {
     impl<A: Application> AppHandler<A> {
         /// Creates a new `AppHandler`.
         ///
-        /// Nothing interesting, just creates an empty handler.
+        /// It creates an empty handler. It automatically creates an `EventLoopProxy`.
         pub fn new(event_loop: &EventLoop<AppEvent<A>>, app_data: A::Data) -> Self {
             AppHandler {
                 wattrs: Window::default_attributes(),
@@ -1087,6 +1125,7 @@ mod main_window {
             (self.app, self.app_data)
         }
 
+        /// Gets the inner `EventLoopProxy`.
         pub fn event_proxy(&self) -> &EventLoopProxy<AppEvent<A>> {
             &self.event_proxy
         }

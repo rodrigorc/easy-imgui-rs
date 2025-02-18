@@ -1,3 +1,7 @@
+/*!
+* Helper module to convert between common types.
+*/
+
 use easy_imgui as imgui;
 use easy_imgui_sys::*;
 use winit::{
@@ -6,6 +10,7 @@ use winit::{
     window::CursorIcon,
 };
 
+/// Convert a `winit` mouse button to the `imgui` one.
 pub fn to_imgui_button(btncode: MouseButton) -> Option<imgui::MouseButton> {
     let btn = match btncode {
         MouseButton::Left => imgui::MouseButton::Left,
@@ -18,6 +23,8 @@ pub fn to_imgui_button(btncode: MouseButton) -> Option<imgui::MouseButton> {
     };
     Some(btn)
 }
+
+/// Convert an `winit` key to the `imgui` one.
 pub fn to_imgui_key(phys_key: PhysicalKey) -> Option<imgui::Key> {
     let key = match phys_key {
         PhysicalKey::Code(code) => match code {
@@ -133,6 +140,7 @@ pub fn to_imgui_key(phys_key: PhysicalKey) -> Option<imgui::Key> {
     Some(key)
 }
 
+/// Convert a mouse cursor from the `imgui` enum to the `winit` one.
 pub fn from_imgui_cursor(cursor: imgui::MouseCursor) -> Option<CursorIcon> {
     use CursorIcon::*;
     let c = match cursor {

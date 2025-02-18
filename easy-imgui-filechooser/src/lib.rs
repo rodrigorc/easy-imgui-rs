@@ -27,6 +27,7 @@ pub fn set_locale(locale: &str) {
     translators::set_locale(locale);
 }
 
+/// Sets the language for this widget
 #[cfg(not(feature = "tr"))]
 pub fn set_locale(_locale: &str) {}
 

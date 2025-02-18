@@ -197,11 +197,13 @@ impl<T> FutureHandle<T> {
         self.res.take().unwrap()
     }
 
+    /// Creates a `FutureHandleGuard` that cancels the future on drop.
     pub fn guard(self) -> FutureHandleGuard<T> {
         FutureHandleGuard(ManuallyDrop::new(self))
     }
 }
 
+/// Helper newtype that cancels a future on drop.
 pub struct FutureHandleGuard<T>(ManuallyDrop<FutureHandle<T>>);
 
 impl<T> Drop for FutureHandleGuard<T> {
@@ -211,13 +213,34 @@ impl<T> Drop for FutureHandleGuard<T> {
     }
 }
 
+impl<T> FutureHandleGuard<T> {
+    /// Gets the inner handle. It is no longer cancelled automatically.
+    pub fn into_inner(mut self) -> FutureHandle<T> {
+        let res = unsafe { ManuallyDrop::take(&mut self.0) };
+        std::mem::forget(self);
+        res
+    }
+}
+
 /////////////////////////////////////
 
+/// Helper type to get the application arguments during an idle future.
+///
+/// Idle futures don't have access to the main application, because they must be `'static`.
+/// But calling `FutureBackCaller::run` a future can use the application data freely.
+/// The main limitation is that you can't await inside `run`, obviously.
+/// Another limitation is that you can't call `run` recursively, because it returns a mutable
+/// (exclusive) reference to the application.
 pub struct FutureBackCaller<A: Application> {
     pd: std::marker::PhantomData<*const A>,
 }
 
 impl<A: Application> FutureBackCaller<A> {
+    /// Runs the given function with the current application as argument.
+    ///
+    /// It returns `Some(x)` being `x` the return value of your function.
+    /// If you call it recursively, or from a function outside of an idle future it will return
+    /// `None`.
     pub fn run<F, R>(&self, f: F) -> Option<R>
     where
         F: FnOnce(&mut A, Args<'_, A>) -> R,

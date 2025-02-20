@@ -149,8 +149,8 @@ impl Application for MyApp {
             args.event_loop.exit();
         }
     }
-    fn user_event(&mut self, args: Args<Self>, event: MyEvent) {
-        args.window.ping_user_input();
+    fn user_event(&mut self, mut args: Args<Self>, event: MyEvent) {
+        args.ping_user_input();
         self.update_gamepad(event);
     }
 }

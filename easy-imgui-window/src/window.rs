@@ -928,6 +928,10 @@ mod main_window {
                 pd: std::marker::PhantomData,
             }
         }
+        /// Helper function to call `ping_user_input` in the main window.
+        pub fn ping_user_input(&mut self) {
+            self.window.ping_user_input();
+        }
         local_proxy_impl! {}
     }
 

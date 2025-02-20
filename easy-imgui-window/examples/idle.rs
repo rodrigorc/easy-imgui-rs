@@ -57,8 +57,8 @@ impl Application for App {
             let mut receiver = download_progress_3_watch.subscribe();
             async move {
                 while let Ok(()) = receiver.changed().await {
-                    cb.run(|_app, args| {
-                        args.window.ping_user_input();
+                    cb.run(|_app, mut args| {
+                        args.ping_user_input();
                     });
                 }
             }
@@ -101,11 +101,11 @@ impl imgui::UiBuilder for App {
                         let handle = self.proxy.spawn_idle(async move {
                             loop {
                                 async_std::task::sleep(Duration::from_millis(250)).await;
-                                cb.run(|this, args| {
+                                cb.run(|this, mut args| {
                                     this.tick += 1;
                                     // Without this ping the UI will not be updated with the last
                                     // value. The future would still run, though.
-                                    args.window.ping_user_input();
+                                    args.ping_user_input();
                                 });
                             }
                         });
@@ -221,9 +221,9 @@ async fn test_download_1(cb: FutureBackCaller<App>) -> Result<(), Box<dyn std::e
     let mut total = 0u64;
     while let Some(chunk) = response.chunk().await? {
         total += chunk.len() as u64;
-        cb.run(|app, args| {
+        cb.run(|app, mut args| {
             app.download_progress_1 = (len, total);
-            args.window.ping_user_input();
+            args.ping_user_input();
         });
     }
     Ok(())
@@ -244,9 +244,9 @@ async fn test_download_2(
     while let Some(chunk) = response.chunk().await? {
         total += chunk.len() as u64;
         let proxy = proxy.clone();
-        let _ = proxy.run_idle(move |app, _args| {
+        let _ = proxy.run_idle(move |app, mut args| {
             app.download_progress_2 = (len, total);
-            _args.window.ping_user_input();
+            args.ping_user_input();
         });
     }
     Ok(())
@@ -256,7 +256,7 @@ async fn test_download_2(
 ///
 /// But instead of using winit events to update the UI, it uses a tokio `watch` channel.
 /// This watch channel stores the progress; its receiving end lives in an idle future, that does the
-/// `ping_user_event`. That idle future runs at the UI frame rate, but that is actually a plus.
+/// `ping_user_input`. That idle future runs at the UI frame rate, but that is actually a plus.
 async fn test_download_3(
     progress_watch: tokio::sync::watch::Sender<(Option<u64>, u64)>,
 ) -> Result<(), Box<dyn std::error::Error>> {

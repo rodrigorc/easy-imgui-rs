@@ -556,7 +556,7 @@ mod main_window {
     mod fut;
     use anyhow::{anyhow, Result};
     use easy_imgui_renderer::glow;
-    pub use fut::{FutureBackCaller, FutureHandle};
+    pub use fut::{FutureBackCaller, FutureHandle, FutureHandleGuard};
     use glutin::{
         config::{Config, ConfigTemplateBuilder},
         context::{ContextApi, ContextAttributesBuilder},

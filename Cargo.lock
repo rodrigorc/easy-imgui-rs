@@ -739,7 +739,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-filechooser"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "bitflags 2.8.0",
  "bytesize",

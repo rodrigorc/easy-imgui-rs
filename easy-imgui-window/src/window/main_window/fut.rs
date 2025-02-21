@@ -1,4 +1,8 @@
-use futures::FutureExt;
+use futures_util::{
+    task::{waker, ArcWake},
+    FutureExt,
+};
+use send_wrapper::SendWrapper;
 use std::{
     cell::Cell,
     future::Future,
@@ -6,103 +10,108 @@ use std::{
     pin::Pin,
     rc::Rc,
     sync::Arc,
-    task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
+    task::{Context, Poll},
 };
 use winit::event_loop::EventLoopProxy;
 
 use crate::{AppEvent, Application, Args};
 
-trait IdleRunner {
-    fn idle_run(&self, f: Box<dyn FnOnce() + Send + Sync>) -> Result<(), ()>;
+type Action = Box<dyn FnOnce() + Send + Sync>;
+trait IdleRunner: Send + Sync {
+    fn idle_run(&self, f: Action) -> Result<(), Action>;
 }
 
 impl<A: Application> IdleRunner for EventLoopProxy<AppEvent<A>> {
-    fn idle_run(&self, f: Box<dyn FnOnce() + Send + Sync>) -> Result<(), ()> {
-        self.send_event(AppEvent::RunIdleSimple(f)).map_err(drop)
+    fn idle_run(&self, f: Action) -> Result<(), Action> {
+        self.send_event(AppEvent::RunIdleSimple(f))
+            .map_err(|e| match e.0 {
+                AppEvent::RunIdleSimple(a) => a,
+                _ => unreachable!(),
+            })
     }
 }
 
-//The raw pointer in the RawWaker will be a pointer to an Arc-allocated IdleTask
 struct IdleTask {
     runner: Box<dyn IdleRunner>,
-    future: Cell<Option<Pin<Box<dyn Future<Output = ()> + 'static>>>>,
+    //Actually the inner future is not Send, but IdleTask is private to this module, so if
+    //we are careful we can move it between threads, as long as we only use the future in the
+    //main thread.
+    future: Cell<Option<SendWrapper<Pin<Box<dyn Future<Output = ()> + 'static>>>>>,
 }
 
 impl Drop for IdleTask {
-    fn drop(&mut self) {}
-}
-
-#[inline]
-unsafe fn increment_arc_count(ptr: *const ()) {
-    let rc = Arc::from_raw(ptr as *const IdleTask);
-    std::mem::forget(rc.clone());
-    std::mem::forget(rc);
-}
-#[inline]
-unsafe fn decrement_arc_count(ptr: *const ()) {
-    Arc::from_raw(ptr as *const IdleTask);
-}
-
-unsafe fn gwaker_clone(ptr: *const ()) -> RawWaker {
-    increment_arc_count(ptr);
-    RawWaker::new(ptr, &GWAKER_VTABLE)
-}
-unsafe fn gwaker_wake(ptr: *const ()) {
-    //poll_idle consumes one reference count, as wake requires, so nothing to do
-    poll_idle(ptr);
-}
-unsafe fn gwaker_wake_by_ref(ptr: *const ()) {
-    //poll_idle consumes one reference count, so we have to increment it here one
-    increment_arc_count(ptr);
-    poll_idle(ptr);
-}
-unsafe fn gwaker_drop(ptr: *const ()) {
-    decrement_arc_count(ptr);
-}
-
-static GWAKER_VTABLE: RawWakerVTable =
-    RawWakerVTable::new(gwaker_clone, gwaker_wake, gwaker_wake_by_ref, gwaker_drop);
-
-//Actually the inner future is not Send, but IdleTask is private to this module, so if
-//we are careful we can move it between threads, as long as we only use the future in the
-//main thread.
-unsafe impl Send for IdleTask {}
-unsafe impl Sync for IdleTask {}
-
-//poll_idle() can be called from an arbitrary thread, because Waker is Send,
-//but once we are in the idle callback we are in the main loop.
-//When it ends, Waker::drop decrements the counter for the Arc<IdleTask>.
-fn poll_idle(ptr: *const ()) {
-    let task = unsafe { &*(ptr as *const IdleTask) };
-
-    let res = task.runner.idle_run(Box::new(move || {
-        let raw = RawWaker::new(task as *const IdleTask as *const (), &GWAKER_VTABLE);
-        let waker = unsafe { Waker::from_raw(raw) };
-
-        // It is unlikely but the call to poll could reenter the this idle call.
-        // We avoid reentering the future by taking it from the
-        // IdleTask and storing it later if it returns pending.
-        // This has the additional advantage that the future is automatically fused.
-        let mut op_future = task.future.take();
-
-        if let Some(future) = op_future.as_mut() {
-            let mut ctx = Context::from_waker(&waker);
-            match future.as_mut().poll(&mut ctx) {
-                Poll::Ready(()) => {}
-                Poll::Pending => {
-                    task.future.set(op_future);
+    fn drop(&mut self) {
+        // A future task is usually dropped in one of two ways:
+        // * The future is cancelled (`FutureHandle::cancel): then self.future has already been
+        //   taken and it is `None` now.
+        // * The future has completed: then self.future has been taken in the `poll` call and it is
+        //   also `None` now.
+        // The only way `self.future` can be `Some` here is if the future has been cancelled by
+        // surprise, such as by shutting down the whole async runtime.This usually happens at the
+        // end of the program...
+        // Now, if this drop happens to be run from the main loop, all is well. But if it runs from
+        // a random thread, we can't drop the future. We'll first try to send it to the main loop,
+        // but it this fails, it'll just leak.
+        if let Some(future) = self.future.take() {
+            // Checks the SendWrapper invariant
+            if future.valid() {
+                // If we are in the correct thread, drop it.
+                drop(future);
+            } else {
+                // If not, we have to try and send it to the main loop
+                let err = self.runner.idle_run(Box::new(move || {
+                    let _ = future;
+                }));
+                // But if idle_run fails, the future can't be dropped, forget the whole thing.
+                // The future now lives inside the callback that is returned by the failed
+                // `idle_run`.
+                if let Err(e) = err {
+                    log::warn!(target: "easy_imgui", "future leaked in drop");
+                    std::mem::forget(e);
                 }
             }
         }
-    }));
+    }
+}
 
-    if res.is_err() {
-        // If running the idle task fails the future and the IdleTask will leak.
-        // Try to release everything here, first the future because it usually contains a
-        // hidden referece to the waker, then the waker reference that would have consumed
-        // the idle task.
-        task.future.take();
-        unsafe { gwaker_drop(ptr) };
+// SAFETY: Idle Task is already Send by the `SendWrapper` magic.
+// It is not auto-sync because of the `Cell`. but that cell is only touched from the main loop or the
+// drop implementation, and those can't break the `Sync` invariant.
+// We could add the `Cell` inside the `SendWrapper`, but then `IdleTask::drop` could not reliably get to the
+// inner `Option` without calling `idle_run`. If only `SendWrapper` had a `fn unsafe_take()`
+// function...
+unsafe impl Sync for IdleTask {}
+
+//wake_by_ref() can be called from an arbitrary thread, because Waker is Send,
+//but once we are in the idle callback we are in the main loop.
+impl ArcWake for IdleTask {
+    fn wake_by_ref(arc_self: &Arc<Self>) {
+        let task = arc_self.clone();
+        let err = arc_self.runner.idle_run(Box::new(move || {
+            // It is unlikely but the call to poll could reenter the this idle call.
+            // We avoid reentering the future by taking it from the
+            // IdleTask and storing it later if it returns pending.
+            // This has the additional advantage that the future is automatically fused.
+            let waker = waker(task.clone());
+            let mut op_future = task.future.take();
+
+            if let Some(future) = op_future.as_mut() {
+                let mut ctx = Context::from_waker(&waker);
+                match future.as_mut().poll(&mut ctx) {
+                    Poll::Ready(()) => {}
+                    Poll::Pending => {
+                        task.future.set(op_future);
+                    }
+                }
+            }
+        }));
+
+        // If idle_run fails, the future can't be dropped because it is not actually Send, forget the whole thing.
+        // It will leak, but there is nothing we can do about it.
+        if let Err(e) = err {
+            log::warn!(target: "easy_imgui", "future leaked in poll");
+            std::mem::forget(e);
+        }
     }
 }
 
@@ -128,20 +137,17 @@ where
     A: Application,
 {
     let runner = Box::new(event_proxy.clone());
-    //Check that we are in the main loop
-    //assert!(glib::MainContext::default().is_owner(), "idle_spawn can only be called from the main loop");
 
     let res: Rc<Cell<Option<T>>> = Rc::new(Cell::new(None));
     let task = Arc::new(IdleTask {
         runner,
-        future: Cell::new(Some(Box::pin(future.map({
+        future: Cell::new(Some(SendWrapper::new(Box::pin(future.map({
             let res = res.clone();
             move |t| res.set(Some(t))
-        })))),
+        }))))),
     });
     let wtask = Arc::downgrade(&task);
-    let ptr = Arc::into_raw(task) as *const ();
-    poll_idle(ptr);
+    ArcWake::wake_by_ref(&task);
     FutureHandle { task: wtask, res }
 }
 
@@ -152,6 +158,8 @@ where
 ///
 /// If the Handle is dropped, the future will keep on running, and there will
 /// be no way to cancel it or get the return value.
+///
+/// This type is notably `!Send`.
 pub struct FutureHandle<T> {
     task: std::sync::Weak<IdleTask>,
     res: Rc<Cell<Option<T>>>,
@@ -187,7 +195,7 @@ impl<T> FutureHandle<T> {
     pub async fn future(self) -> T {
         if let Some(task) = self.task.upgrade() {
             if let Some(fut) = task.future.take() {
-                fut.await;
+                fut.take().await;
             }
         }
         //This unwrap() cannot fail: if the future has finished, then self.res must be Some,

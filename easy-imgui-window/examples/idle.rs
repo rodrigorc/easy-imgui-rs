@@ -16,6 +16,11 @@ use winit::{
 };
 
 fn main() {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .init();
+
     // We could just use `#[tokio::main]`
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

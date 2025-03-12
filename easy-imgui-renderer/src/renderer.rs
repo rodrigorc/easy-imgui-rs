@@ -3,10 +3,10 @@ use std::mem::size_of;
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
-use easy_imgui as imgui;
+use easy_imgui::{self as imgui, TextureId};
 use easy_imgui_opengl as glr;
 use easy_imgui_sys::*;
-use imgui::{Color, TextureId, Vector2};
+use imgui::{Color, Vector2};
 
 /// The main `Renderer` type.
 pub struct Renderer {
@@ -18,7 +18,6 @@ pub struct Renderer {
 }
 
 struct GlObjects {
-    atlas: glr::Texture,
     program: glr::Program,
     vao: glr::VertexArray,
     vbuf: glr::Buffer,
@@ -35,7 +34,6 @@ impl Renderer {
     ///
     /// You need to provide the OpenGL context yourself.
     pub fn new(gl: glr::GlContext) -> Result<Renderer> {
-        let atlas;
         let program;
         let vao;
         let (vbuf, ibuf);
@@ -52,11 +50,11 @@ impl Renderer {
                 let io = &mut *ImGui_GetIO();
                 io.BackendFlags |= (imgui::BackendFlags::HasMouseCursors
                     | imgui::BackendFlags::HasSetMousePos
-                    | imgui::BackendFlags::RendererHasVtxOffset)
+                    | imgui::BackendFlags::RendererHasVtxOffset
+                    | imgui::BackendFlags::RendererHasTextures)
                     .bits();
             }
 
-            atlas = glr::Texture::generate(&gl)?;
             let glsl_version = if cfg!(not(target_arch = "wasm32")) {
                 "#version 150\n"
             } else {
@@ -93,7 +91,6 @@ impl Renderer {
             bg_color: Some(Color::new(0.45, 0.55, 0.60, 1.0)),
             matrix: None,
             objs: GlObjects {
-                atlas,
                 program,
                 vao,
                 vbuf,
@@ -147,13 +144,11 @@ impl Renderer {
         unsafe {
             let mut imgui = self.imgui.set_current();
 
-            if imgui.update_atlas(app) {
-                Self::update_atlas(&self.gl, &self.objs.atlas);
-            }
+            imgui.update_atlas(app);
 
             imgui.do_frame(
                 app,
-                || {
+                |pio| {
                     let io = &*ImGui_GetIO();
                     if self.matrix.is_none() {
                         self.gl.viewport(
@@ -167,6 +162,7 @@ impl Renderer {
                         self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
                         self.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
+                    Self::update_textures(&self.gl, &*pio);
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
@@ -174,66 +170,101 @@ impl Renderer {
             );
         }
     }
-    unsafe fn update_atlas(gl: &glr::GlContext, atlas_tex: &glr::Texture) {
-        let io = ImGui_GetIO();
-        let mut data = std::ptr::null_mut();
-        let mut width = 0;
-        let mut height = 0;
-        let mut pixel_size = 0;
-        ImFontAtlas_GetTexDataAsRGBA32(
-            (*io).Fonts,
-            &mut data,
-            &mut width,
-            &mut height,
-            &mut pixel_size,
-        );
 
-        gl.bind_texture(glow::TEXTURE_2D, Some(atlas_tex.id()));
-
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_S,
-            glow::CLAMP_TO_EDGE as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_WRAP_T,
-            glow::CLAMP_TO_EDGE as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MIN_FILTER,
-            glow::LINEAR as i32,
-        );
-        gl.tex_parameter_i32(
-            glow::TEXTURE_2D,
-            glow::TEXTURE_MAG_FILTER,
-            glow::LINEAR as i32,
-        );
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
-        gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGBA as i32, //glow::RED as i32,
-            width,
-            height,
-            0,
-            glow::RGBA,
-            glow::UNSIGNED_BYTE,
-            //glow::RED, glow::UNSIGNED_BYTE,
-            glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
-                data,
-                (width * height * pixel_size) as usize,
-            ))),
-        );
-        gl.bind_texture(glow::TEXTURE_2D, None);
-
-        // bindgen: ImFontAtlas_SetTexID is inline
-        (*(*io).Fonts).TexID = Self::map_tex(atlas_tex.id()).id();
-
-        // We keep this, no need for imgui to hold a copy
-        ImFontAtlas_ClearTexData((*io).Fonts);
+    unsafe fn update_textures(gl: &glr::GlContext, pio: &ImGuiPlatformIO) {
+        for tex in &pio.Textures {
+            let tex = &mut **tex;
+            Self::update_texture(gl, tex);
+        }
     }
+    unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
+        match tex.Status {
+            ImTextureStatus::ImTextureStatus_WantCreate => {
+                let pixels = tex.Pixels;
+                let tex_id = glr::Texture::generate(&gl).unwrap();
+                gl.bind_texture(glow::TEXTURE_2D, Some(tex_id.id()));
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_WRAP_S,
+                    glow::CLAMP_TO_EDGE as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_WRAP_T,
+                    glow::CLAMP_TO_EDGE as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MIN_FILTER,
+                    glow::LINEAR as i32,
+                );
+                gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
+                    glow::TEXTURE_MAG_FILTER,
+                    glow::LINEAR as i32,
+                );
+                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                gl.tex_image_2d(
+                    glow::TEXTURE_2D,
+                    0,
+                    glow::RGBA as i32,
+                    tex.Width,
+                    tex.Height,
+                    0,
+                    glow::RGBA,
+                    glow::UNSIGNED_BYTE,
+                    glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
+                        pixels,
+                        (tex.Width * tex.Height * 4) as usize,
+                    ))),
+                );
+                gl.bind_texture(glow::TEXTURE_2D, None);
+                tex.Status = ImTextureStatus::ImTextureStatus_OK;
+                // Warning: SetTexUserId() is inline;
+                tex.TexID = Self::map_tex(tex_id.id()).id();
+                std::mem::forget(tex_id);
+            }
+            ImTextureStatus::ImTextureStatus_WantUpdates => {
+                let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
+                gl.bind_texture(glow::TEXTURE_2D, Some(tex_id));
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, tex.Width);
+                // TODO: GL ES doesn't have GL_UNPACK_ROW_LENGTH, so we need to (A) copy to a contiguous buffer or (B) upload line by line.
+                for r in &tex.Updates {
+                    let ptr = tex.Pixels.offset(
+                        ((i32::from(r.x) + i32::from(r.y) * tex.Width) * tex.BytesPerPixel)
+                            as isize,
+                    );
+                    // the length of the slice is fake :-(
+                    let mem = std::slice::from_raw_parts(ptr, 1);
+                    gl.tex_sub_image_2d(
+                        glow::TEXTURE_2D,
+                        0,
+                        i32::from(r.x),
+                        i32::from(r.y),
+                        i32::from(r.w),
+                        i32::from(r.h),
+                        glow::RGBA,
+                        glow::UNSIGNED_BYTE,
+                        glow::PixelUnpackData::Slice(Some(mem)),
+                    );
+                }
+                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                tex.Status = ImTextureStatus::ImTextureStatus_OK;
+                gl.bind_texture(glow::TEXTURE_2D, None);
+            }
+            ImTextureStatus::ImTextureStatus_WantDestroy => {
+                if let Some(ntex) = std::num::NonZero::new(tex.TexID as u32) {
+                    let ntex = glow::NativeTexture(ntex);
+                    gl.delete_texture(ntex);
+                    tex.TexID = 0;
+                }
+                tex.Status = ImTextureStatus::ImTextureStatus_Destroyed;
+            }
+            _ => {}
+        }
+    }
+
     unsafe fn render(
         gl: &glow::Context,
         objs: &GlObjects,
@@ -403,10 +434,9 @@ impl Renderer {
                         cb(cmd_list, cmd);
                     }
                     None => {
-                        gl.bind_texture(
-                            glow::TEXTURE_2D,
-                            Self::unmap_tex(TextureId::from_id(cmd.TextureId)),
-                        );
+                        // Warning: inline function
+                        let tex_id = TextureId::from_tex_ref(&cmd.TexRef);
+                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(tex_id));
 
                         if cfg!(target_arch = "wasm32") {
                             gl.draw_elements(
@@ -479,6 +509,16 @@ impl Drop for Renderer {
         unsafe {
             let io = ImGui_GetIO();
             ImFontAtlas_Clear((*io).Fonts);
+
+            // Destroy all textures
+            let pio = ImGui_GetPlatformIO();
+            for tex in &(*pio).Textures {
+                let tex = &mut **tex;
+                if tex.RefCount == 1 {
+                    tex.Status = ImTextureStatus::ImTextureStatus_WantDestroy;
+                    Self::update_texture(&self.gl, tex);
+                }
+            }
         }
     }
 }

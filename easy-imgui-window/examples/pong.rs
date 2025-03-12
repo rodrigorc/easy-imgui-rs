@@ -436,7 +436,7 @@ impl imgui::UiBuilder for App {
         }
         self.prg.draw(&self.u, &self.ds, glow::TRIANGLES);
     }
-    fn build_custom_atlas(&mut self, atlas: &mut imgui::FontAtlasMut<'_, Self>) {
+    fn build_custom_atlas(&mut self, atlas: &mut imgui::FontAtlasMut<'_>) {
         self.font_normal = atlas.add_font(imgui::FontInfo::default_font(13.0));
         self.font_medium = atlas.add_font(imgui::FontInfo::default_font(30.0));
         self.font_big = atlas.add_font(imgui::FontInfo::default_font(60.0));

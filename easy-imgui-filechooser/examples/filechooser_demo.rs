@@ -58,7 +58,7 @@ impl Application for App {
     }
 }
 impl imgui::UiBuilder for App {
-    fn build_custom_atlas(&mut self, atlas: &mut easy_imgui::FontAtlasMut<'_, Self>) {
+    fn build_custom_atlas(&mut self, atlas: &mut easy_imgui::FontAtlasMut<'_>) {
         self.of_atlas = filechooser::build_custom_atlas(atlas);
     }
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {

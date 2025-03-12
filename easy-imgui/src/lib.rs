@@ -443,8 +443,6 @@ impl CurrentContext<'_> {
                 ptr: &mut *(*io).Fonts,
             },
             scale,
-            glyph_ranges: Vec::new(),
-            custom_rects: Vec::new(),
         };
 
         app.build_custom_atlas(&mut atlas);
@@ -453,7 +451,6 @@ impl CurrentContext<'_> {
         if atlas.ptr.ptr.Fonts.is_empty() {
             atlas.add_font(FontInfo::default_font(13.0));
         }
-        atlas.build_custom_rects(app);
         true
     }
     /// Builds and renders a UI frame.
@@ -464,12 +461,12 @@ impl CurrentContext<'_> {
     pub unsafe fn do_frame<A: UiBuilder>(
         &mut self,
         app: &mut A,
-        pre_render: impl FnOnce(),
+        pre_render: impl FnOnce(&ImGuiPlatformIO),
         render: impl FnOnce(&ImDrawData),
     ) {
         let mut ui = Ui {
             data: std::ptr::null_mut(),
-            generation: ImGui_GetFrameCount() as usize,
+            generation: ImGui_GetFrameCount() as usize % 1000 + 1, // avoid the 0
             callbacks: RefCell::new(Vec::new()),
             pending_atlas: Cell::new(false),
         };
@@ -494,10 +491,12 @@ impl CurrentContext<'_> {
 
         app.do_ui(&ui);
 
-        pre_render();
+        std::mem::drop(_guard_2);
+
+        let pio = ImGui_GetPlatformIO();
+        pre_render(&*pio);
         app.pre_render();
 
-        std::mem::forget(_guard_2);
         ImGui_Render();
 
         ui.data = app;
@@ -537,7 +536,7 @@ pub trait UiBuilder {
     /// This function is run the first time an ImGui context is used to create the font atlas.
     ///
     /// You can force new call by invalidating the current atlas by calling [`Context::invalidate_font_atlas`].
-    fn build_custom_atlas(&mut self, _atlas: &mut FontAtlasMut<'_, Self>) {}
+    fn build_custom_atlas(&mut self, _atlas: &mut FontAtlasMut<'_>) {}
     /// This function is run after `do_ui` but before rendering.
     ///
     /// It can be used to clear the framebuffer.
@@ -557,7 +556,6 @@ enum TtfData {
 pub struct FontInfo {
     ttf: TtfData,
     size: f32,
-    char_ranges: Vec<[ImWchar; 2]>,
 }
 
 impl FontInfo {
@@ -566,7 +564,6 @@ impl FontInfo {
         FontInfo {
             ttf: TtfData::Bytes(ttf.into()),
             size,
-            char_ranges: Vec::new(),
         }
     }
     /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
@@ -576,18 +573,7 @@ impl FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
             size,
-            char_ranges: Vec::new(),
         }
-    }
-    /// Adds the given char range to this font info.
-    ///
-    /// If the range list is empty, it is as if `'\u{20}'..='\u{ff}'`, that is the "ISO-8859-1"
-    /// table. But if you call this function for a font, then it will not be added by default, you
-    /// should add it yourself.
-    pub fn add_char_range(mut self, range: std::ops::RangeInclusive<char>) -> Self {
-        self.char_ranges
-            .push([ImWchar::from(*range.start()), ImWchar::from(*range.end())]);
-        self
     }
 }
 
@@ -1283,51 +1269,42 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
 
 decl_builder! { Image -> (), ImGui_Image () ()
     (
-        user_texture_id (TextureId) (user_texture_id.id()),
+        texture_ref (TextureRef) (texture_ref.tex_ref()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
-        tint_col (ImVec4) (&tint_col),
-        border_col (ImVec4) (&border_col),
     )
     {
         decl_builder_setter_vector2!{uv0: Vector2}
         decl_builder_setter_vector2!{uv1: Vector2}
-        decl_builder_setter!{tint_col: Color}
-        decl_builder_setter!{border_col: Color}
     }
     {
-        pub fn image_config(&self, user_texture_id: TextureId, size: Vector2) -> Image {
+        pub fn image_config(&self, texture_ref: TextureRef, size: Vector2) -> Image {
             Image {
-                user_texture_id,
+                texture_ref,
                 size: v2_to_im(size),
                 uv0: im_vec2(0.0, 0.0),
                 uv1: im_vec2(1.0, 1.0),
-                tint_col: Color::WHITE.into(),
-                border_col: Color::TRANSPARENT.into(),
             }
         }
         pub fn image_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> Image {
             let atlas = self.font_atlas();
             let rect = atlas.get_custom_rect(ridx);
-            let tex_id = atlas.texture_id();
-            let tex_size = atlas.texture_size();
-            let inv_tex_w = 1.0 / tex_size[0] as f32;
-            let inv_tex_h = 1.0 / tex_size[1] as f32;
-            let uv0 = vec2(rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h);
-            let uv1 = vec2((rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h);
-
-            self.image_config(tex_id, vec2(scale * rect.Width as f32, scale * rect.Height as f32))
+            let (uv0, uv1) = atlas.get_custom_rect_uv(rect);
+            self.image_config(TextureRef::FontAtlas, vec2(scale * rect.w as f32, scale * rect.h as f32))
                 .uv0(uv0)
                 .uv1(uv1)
         }
 
     }
 }
+
+// TODO: Imgui_ImageWithBg()
+
 decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
-        user_texture_id (TextureId) (user_texture_id.id()),
+        texture_ref (TextureRef) (texture_ref.tex_ref()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
@@ -1341,10 +1318,10 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         decl_builder_setter!{tint_col: Color}
     }
     {
-        pub fn image_button_config<S: IntoCStr>(&self, str_id: Id<S>, user_texture_id: TextureId, size: Vector2) -> ImageButton<S> {
+        pub fn image_button_config<S: IntoCStr>(&self, str_id: Id<S>, texture_ref: TextureRef, size: Vector2) -> ImageButton<S> {
             ImageButton {
                 str_id: str_id.into(),
-                user_texture_id,
+                texture_ref,
                 size: v2_to_im(size),
                 uv0: im_vec2(0.0, 0.0),
                 uv1: im_vec2(1.0, 1.0),
@@ -1355,14 +1332,8 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
         pub fn image_button_with_custom_rect_config<S: IntoCStr>(&self, str_id: Id<S>, ridx: CustomRectIndex, scale: f32) -> ImageButton<S> {
             let atlas = self.font_atlas();
             let rect = atlas.get_custom_rect(ridx);
-            let tex_id = atlas.texture_id();
-            let tex_size = atlas.texture_size();
-            let inv_tex_w = 1.0 / tex_size[0] as f32;
-            let inv_tex_h = 1.0 / tex_size[1] as f32;
-            let uv0 = vec2(rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h);
-            let uv1 = vec2((rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h);
-
-            self.image_button_config(str_id, tex_id, vec2(scale * rect.Width as f32, scale * rect.Height as f32))
+            let (uv0, uv1) = atlas.get_custom_rect_uv(rect);
+            self.image_button_config(str_id, TextureRef::FontAtlas, vec2(scale * rect.w as f32, scale * rect.h as f32))
                 .uv0(uv0)
                 .uv1(uv1)
         }
@@ -2332,7 +2303,7 @@ impl<A> Ui<A> {
         let cb = &mut callbacks[id];
         // disable the destructor of x, it will be run inside the callback
         let mut x = MaybeUninit::new(x);
-        cb(&mut *ui.data, x.as_mut_ptr() as *mut c_void);
+        cb(ui.data, x.as_mut_ptr() as *mut c_void);
     }
     /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
@@ -3085,20 +3056,29 @@ impl<A> Ui<A> {
     /// This is a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
     /// built, and in `build_custom_atlas` it is not yet. The only way to ensure a fully built
     /// atlas is by requiring a `&Ui`.
-    pub fn find_glyph(&self, font_id: FontId, c: char) -> FontGlyph<'_> {
+    pub fn find_glyph(&self, font_id: FontId, font_size: f32, c: char) -> FontGlyph<'_> {
         unsafe {
             let font = font_ptr(font_id);
-            FontGlyph(&*ImFont_FindGlyph(font, ImWchar::from(c)))
+            let baked = ImFont_GetFontBaked(font, font_size);
+            FontGlyph(&*ImFontBaked_FindGlyph(baked, ImWchar::from(c)))
         }
     }
+
     /// Just like `find_glyph` but doesn't use the fallback character for unavailable glyphs.
-    pub fn find_glyph_no_fallback(&self, font_id: FontId, c: char) -> Option<FontGlyph<'_>> {
+    pub fn find_glyph_no_fallback(
+        &self,
+        font_id: FontId,
+        font_size: f32,
+        c: char,
+    ) -> Option<FontGlyph<'_>> {
         unsafe {
             let font = font_ptr(font_id);
-            let p = ImFont_FindGlyphNoFallback(font, ImWchar::from(c));
+            let baked = ImFont_GetFontBaked(font, font_size);
+            let p = ImFontBaked_FindGlyphNoFallback(baked, ImWchar::from(c));
             p.as_ref().map(FontGlyph)
         }
     }
+
     /// Gets the font details for a `FontId`.
     ///
     /// TODO: do a proper ImFont wrapper?
@@ -3250,21 +3230,16 @@ pub struct FontAtlasPtr<'ui> {
 type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
 type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
 
-type FuncCustomRect<A> = Box<dyn FnOnce(&mut A, &mut SubPixelImage<'_, '_>)>;
-
-pub struct FontAtlasMut<'ui, A: ?Sized> {
+pub struct FontAtlasMut<'ui> {
     ptr: FontAtlasPtr<'ui>,
     scale: f32,
-    // glyph_ranges pointers have to live until the atlas texture is built
-    glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
-    custom_rects: Vec<Option<FuncCustomRect<A>>>,
 }
 
 /// A reference to the font altas that is to be built.
 ///
 /// You get a value of this type when implementing [`UiBuilder::build_custom_atlas`]. If you want
 /// that function to be called again, call [`Context::invalidate_font_atlas`].
-impl<A> FontAtlasMut<'_, A> {
+impl FontAtlasMut<'_> {
     /// Adds the given font to the atlas.
     ///
     /// It returns the id to use this font. `FontId` implements `Pushable` so you can use it with
@@ -3285,7 +3260,7 @@ impl<A> FontAtlasMut<'_, A> {
         }
         id
     }
-    fn add_font_priv(&mut self, mut font: FontInfo, merge: bool) -> FontId {
+    fn add_font_priv(&mut self, font: FontInfo, merge: bool) -> FontId {
         unsafe {
             let mut fc = ImFontConfig::new();
             // This is ours, do not free()
@@ -3293,18 +3268,6 @@ impl<A> FontAtlasMut<'_, A> {
 
             fc.MergeMode = merge;
 
-            // glyph_ranges must be valid for the duration of the atlas, so do not modify the existing self.fonts.
-            // You can add new fonts however, but they will not show unless you call update_altas() again
-            let glyph_ranges = if font.char_ranges.is_empty() {
-                null()
-            } else {
-                // keep the ptr alive
-                let mut char_ranges = std::mem::take(&mut font.char_ranges);
-                char_ranges.push([0, 0]); // add the marking NULs
-                let ptr = char_ranges[0].as_ptr();
-                self.glyph_ranges.push(char_ranges);
-                ptr
-            };
             let io = ImGui_GetIO();
             match font.ttf {
                 TtfData::Bytes(bytes) => {
@@ -3314,7 +3277,7 @@ impl<A> FontAtlasMut<'_, A> {
                         bytes.len() as i32,
                         font.size * self.scale,
                         &fc,
-                        glyph_ranges,
+                        std::ptr::null(),
                     );
                 }
                 TtfData::DefaultFont => {
@@ -3325,6 +3288,7 @@ impl<A> FontAtlasMut<'_, A> {
             FontId((*(*io).Fonts).Fonts.len() - 1)
         }
     }
+    /*
     /// Adds an image as a substitution for a character in a font.
     pub fn add_custom_rect_font_glyph(
         &mut self,
@@ -3352,14 +3316,14 @@ impl<A> FontAtlasMut<'_, A> {
             self.add_custom_rect_at(idx as usize, Box::new(draw));
             CustomRectIndex(idx)
         }
-    }
+    }*/
     /// Adds an arbitrary image to the font atlas.
     ///
     /// The returned `CustomRectIndex` can be used later to draw the image.
     pub fn add_custom_rect_regular(
         &mut self,
         size: impl Into<mint::Vector2<u32>>,
-        draw: impl FnOnce(&mut A, &mut SubPixelImage<'_, '_>) + 'static,
+        draw: impl FnOnce(&mut SubPixelImage<'_, '_>),
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
@@ -3370,10 +3334,31 @@ impl<A> FontAtlasMut<'_, A> {
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
             );
-            self.add_custom_rect_at(idx as usize, Box::new(draw));
-            CustomRectIndex(idx)
+            let idx = CustomRectIndex(idx);
+            let tex_data = &(*self.ptr.ptr.TexData);
+            let rect = self.ptr.get_custom_rect(idx);
+            let mut pixel_image = PixelImage::from_raw(
+                tex_data.Width as u32,
+                tex_data.Height as u32,
+                std::slice::from_raw_parts_mut(
+                    tex_data.Pixels,
+                    tex_data.Width as usize
+                        * tex_data.Height as usize
+                        * tex_data.BytesPerPixel as usize,
+                ),
+            )
+            .unwrap();
+
+            let mut sub_image =
+                pixel_image.sub_image(rect.x as u32, rect.y as u32, rect.w as u32, rect.h as u32);
+            draw(&mut sub_image);
+
+            idx
+            //let rect = *ImFontAtlas_GetCustomRectByIndex(self.ptr, idx);
+            //self.add_custom_rect_at(idx as usize, Box::new(draw));
         }
     }
+    /*
     fn add_custom_rect_at(&mut self, idx: usize, f: FuncCustomRect<A>) {
         if idx >= self.custom_rects.len() {
             self.custom_rects.resize_with(idx + 1, || None);
@@ -3422,9 +3407,10 @@ impl<A> FontAtlasMut<'_, A> {
             }
         }
     }
+    */
 }
 
-impl<'ui, A> Deref for FontAtlasMut<'ui, A> {
+impl<'ui> Deref for FontAtlasMut<'ui> {
     type Target = FontAtlasPtr<'ui>;
     fn deref(&self) -> &FontAtlasPtr<'ui> {
         &self.ptr
@@ -3443,14 +3429,22 @@ impl<'ui> Deref for FontAtlas<'ui> {
 }
 
 impl FontAtlasPtr<'_> {
-    pub fn texture_id(&self) -> TextureId {
-        unsafe { TextureId::from_id(self.ptr.TexID) }
+    pub unsafe fn texture_ref(&self) -> ImTextureRef {
+        self.ptr.TexRef
     }
-    pub fn texture_size(&self) -> [i32; 2] {
-        [self.ptr.TexWidth, self.ptr.TexHeight]
+    pub fn get_custom_rect(&self, index: CustomRectIndex) -> &ImTextureRect {
+        unsafe {
+            let p = ImFontAtlas_GetCustomRect((&raw const *self.ptr).cast_mut(), index.0);
+            &*p
+        }
     }
-    pub fn get_custom_rect(&self, index: CustomRectIndex) -> ImFontAtlasCustomRect {
-        self.ptr.CustomRects[index.0 as usize]
+    pub fn get_custom_rect_uv(&self, rect: &ImTextureRect) -> (Vector2, Vector2) {
+        let mut uv0 = ImVec2 { x: 0.0, y: 0.0 };
+        let mut uv1 = ImVec2 { x: 0.0, y: 0.0 };
+        unsafe {
+            ImFontAtlas_GetCustomRectUV(self.ptr, rect, &mut uv0, &mut uv1);
+        }
+        (im_to_v2(uv0), im_to_v2(uv1))
     }
 }
 
@@ -3841,7 +3835,7 @@ impl<A> WindowDrawList<'_, A> {
     }
     pub fn add_image(
         &self,
-        user_texture_id: TextureId,
+        texture_ref: TextureRef,
         p_min: Vector2,
         p_max: Vector2,
         uv_min: Vector2,
@@ -3851,7 +3845,7 @@ impl<A> WindowDrawList<'_, A> {
         unsafe {
             ImDrawList_AddImage(
                 self.ptr,
-                user_texture_id.id(),
+                texture_ref.tex_ref(),
                 &v2_to_im(p_min),
                 &v2_to_im(p_max),
                 &v2_to_im(uv_min),
@@ -3862,7 +3856,7 @@ impl<A> WindowDrawList<'_, A> {
     }
     pub fn add_image_quad(
         &self,
-        user_texture_id: TextureId,
+        texture_ref: TextureRef,
         p1: Vector2,
         p2: Vector2,
         p3: Vector2,
@@ -3876,7 +3870,7 @@ impl<A> WindowDrawList<'_, A> {
         unsafe {
             ImDrawList_AddImageQuad(
                 self.ptr,
-                user_texture_id.id(),
+                texture_ref.tex_ref(),
                 &v2_to_im(p1),
                 &v2_to_im(p2),
                 &v2_to_im(p3),
@@ -3891,7 +3885,7 @@ impl<A> WindowDrawList<'_, A> {
     }
     pub fn add_image_rounded(
         &self,
-        user_texture_id: TextureId,
+        texture_ref: TextureRef,
         p_min: Vector2,
         p_max: Vector2,
         uv_min: Vector2,
@@ -3903,7 +3897,7 @@ impl<A> WindowDrawList<'_, A> {
         unsafe {
             ImDrawList_AddImageRounded(
                 self.ptr,
-                user_texture_id.id(),
+                texture_ref.tex_ref(),
                 &v2_to_im(p_min),
                 &v2_to_im(p_max),
                 &v2_to_im(uv_min),
@@ -4086,7 +4080,18 @@ impl<T: Pushable> Pushable for Option<T> {
 
 impl Pushable for FontId {
     unsafe fn push(&self) {
-        ImGui_PushFont(font_ptr(*self));
+        ImGui_PushFont(font_ptr(*self), -1.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopFont();
+    }
+}
+
+pub struct FontAndSize(pub FontId, pub f32);
+
+impl Pushable for FontAndSize {
+    unsafe fn push(&self) {
+        ImGui_PushFont(font_ptr(self.0), self.1);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();
@@ -4094,6 +4099,28 @@ impl Pushable for FontId {
 }
 
 pub type StyleColor = (ColorId, Color);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TextureRef {
+    Id(ImTextureID),
+    FontAtlas,
+}
+
+impl TextureRef {
+    pub unsafe fn tex_ref(&self) -> ImTextureRef {
+        match self {
+            TextureRef::Id(id) => ImTextureRef {
+                _TexData: null_mut(),
+                _TexID: *id,
+            },
+            TextureRef::FontAtlas => {
+                let io = &*ImGui_GetIO();
+                let atlas = &*io.Fonts;
+                atlas.TexRef
+            }
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TextureId(ImTextureID);
@@ -4104,6 +4131,15 @@ impl TextureId {
     }
     pub unsafe fn from_id(id: ImTextureID) -> Self {
         Self(id)
+    }
+    // bindgen: inline function
+    pub unsafe fn from_tex_ref(id: &ImTextureRef) -> Self {
+        let uid = if id._TexData.is_null() {
+            id._TexID
+        } else {
+            (*id._TexData).TexID
+        };
+        Self::from_id(uid)
     }
 }
 

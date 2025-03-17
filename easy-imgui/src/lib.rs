@@ -1287,14 +1287,10 @@ decl_builder! { Image -> (), ImGui_Image () ()
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
-        tint_col (ImVec4) (&tint_col),
-        border_col (ImVec4) (&border_col),
     )
     {
         decl_builder_setter_vector2!{uv0: Vector2}
         decl_builder_setter_vector2!{uv1: Vector2}
-        decl_builder_setter!{tint_col: Color}
-        decl_builder_setter!{border_col: Color}
     }
     {
         pub fn image_config(&self, user_texture_id: TextureId, size: Vector2) -> Image {
@@ -1303,8 +1299,6 @@ decl_builder! { Image -> (), ImGui_Image () ()
                 size: v2_to_im(size),
                 uv0: im_vec2(0.0, 0.0),
                 uv1: im_vec2(1.0, 1.0),
-                tint_col: Color::WHITE.into(),
-                border_col: Color::TRANSPARENT.into(),
             }
         }
         pub fn image_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> Image {
@@ -1324,6 +1318,51 @@ decl_builder! { Image -> (), ImGui_Image () ()
 
     }
 }
+
+decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg () ()
+    (
+        user_texture_id (TextureId) (user_texture_id.id()),
+        size (ImVec2) (&size),
+        uv0 (ImVec2) (&uv0),
+        uv1 (ImVec2) (&uv1),
+        bg_col (ImVec4) (&bg_col),
+        tint_col (ImVec4) (&tint_col),
+    )
+    {
+        decl_builder_setter_vector2!{uv0: Vector2}
+        decl_builder_setter_vector2!{uv1: Vector2}
+        decl_builder_setter!{bg_col: Color}
+        decl_builder_setter!{tint_col: Color}
+    }
+    {
+        pub fn image_with_bg_config(&self, user_texture_id: TextureId, size: Vector2) -> ImageWithBg {
+            ImageWithBg {
+                user_texture_id,
+                size: v2_to_im(size),
+                uv0: im_vec2(0.0, 0.0),
+                uv1: im_vec2(1.0, 1.0),
+                bg_col: Color::TRANSPARENT.into(),
+                tint_col: Color::WHITE.into(),
+            }
+        }
+        pub fn image_wth_bg_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> ImageWithBg {
+            let atlas = self.font_atlas();
+            let rect = atlas.get_custom_rect(ridx);
+            let tex_id = atlas.texture_id();
+            let tex_size = atlas.texture_size();
+            let inv_tex_w = 1.0 / tex_size[0] as f32;
+            let inv_tex_h = 1.0 / tex_size[1] as f32;
+            let uv0 = vec2(rect.X as f32 * inv_tex_w, rect.Y as f32 * inv_tex_h);
+            let uv1 = vec2((rect.X + rect.Width) as f32 * inv_tex_w, (rect.Y + rect.Height) as f32 * inv_tex_h);
+
+            self.image_with_bg_config(tex_id, vec2(scale * rect.Width as f32, scale * rect.Height as f32))
+                .uv0(uv0)
+                .uv1(uv1)
+        }
+
+    }
+}
+
 decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),

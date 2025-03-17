@@ -2371,7 +2371,7 @@ impl<A> Ui<A> {
         let cb = &mut callbacks[id];
         // disable the destructor of x, it will be run inside the callback
         let mut x = MaybeUninit::new(x);
-        cb(&mut *ui.data, x.as_mut_ptr() as *mut c_void);
+        cb(ui.data, x.as_mut_ptr() as *mut c_void);
     }
     /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].

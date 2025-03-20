@@ -940,14 +940,15 @@ macro_rules! decl_builder {
         { $($constructor:tt)* }
     ) => {
         #[must_use]
-        pub struct $sname<$($life,)* $($gen_n : $gen_d, )* > {
+        pub struct $sname<'s, $($life,)* $($gen_n : $gen_d, )* > {
+            _pd: PhantomData<*const &'s ()>, // !Send + !Sync
             $(
                 $arg: $($ty)*,
             )*
         }
-        impl <$($life,)* $($gen_n : $gen_d, )* > $sname<$($life,)* $($gen_n, )* > {
+        impl <'s, $($life,)* $($gen_n : $gen_d, )* > $sname<'s, $($life,)* $($gen_n, )* > {
             pub fn build(self) -> $tres {
-                let $sname { $($arg, )* } = self;
+                let $sname { _pd, $($arg, )* } = self;
                 unsafe {
                     $func($($pass,)*)
                 }
@@ -1115,15 +1116,16 @@ decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
         enabled (bool) (enabled),
     )
     {
-        pub fn shortcut_opt<S3: IntoCStr>(self, shortcut: Option<S3>) -> MenuItem<S1, S3> {
+        pub fn shortcut_opt<S3: IntoCStr>(self, shortcut: Option<S3>) -> MenuItem<'s, S1, S3> {
             MenuItem {
+                _pd: PhantomData,
                 label: self.label,
                 shortcut: shortcut.map(|s| s.into()),
                 selected: self.selected,
                 enabled: self.enabled,
             }
         }
-        pub fn shortcut<S3: IntoCStr>(self, shortcut: S3) -> MenuItem<S1, S3> {
+        pub fn shortcut<S3: IntoCStr>(self, shortcut: S3) -> MenuItem<'s, S1, S3> {
             self.shortcut_opt(Some(shortcut))
         }
         decl_builder_setter!{selected: bool}
@@ -1132,6 +1134,7 @@ decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
     {
         pub fn menu_item_config<S: IntoCStr>(&self, label: LblId<S>) -> MenuItem<S, &str> {
             MenuItem {
+                _pd: PhantomData,
                 label: label.into(),
                 shortcut: None,
                 selected: false,
@@ -1150,8 +1153,9 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn button_config<S: IntoCStr>(&self, label: LblId<S>) -> Button<S> {
+        pub fn button_config<S: IntoCStr>(&self, label: LblId<S>) -> Button<'_, S> {
             Button {
+                _pd: PhantomData,
                 label: label.into(),
                 size: im_vec2(0.0, 0.0),
             }
@@ -1170,6 +1174,7 @@ decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     {
         pub fn small_button_config<S: IntoCStr>(&self, label: LblId<S>) -> SmallButton<S> {
             SmallButton {
+                _pd: PhantomData,
                 label: label.into(),
             }
         }
@@ -1192,6 +1197,7 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
     {
         pub fn invisible_button_config<S: IntoCStr>(&self, id: S) -> InvisibleButton<S> {
             InvisibleButton {
+                _pd: PhantomData,
                 id: id.into(),
                 size: im_vec2(0.0, 0.0),
                 flags: ButtonFlags::MouseButtonLeft,
@@ -1209,6 +1215,7 @@ decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
     {
         pub fn arrow_button_config<S: IntoCStr>(&self, id: S, dir: Dir) -> ArrowButton<S> {
             ArrowButton {
+                _pd: PhantomData,
                 id: id.into(),
                 dir,
             }
@@ -1226,8 +1233,9 @@ decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
     )
     {}
     {
-        pub fn checkbox_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut bool) -> Checkbox<'v, S> {
+        pub fn checkbox_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut bool) -> Checkbox<'_, 'v, S> {
             Checkbox {
+                _pd: PhantomData,
                 label: label.into(),
                 value,
             }
@@ -1247,6 +1255,7 @@ decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
     {
         pub fn radio_button_config<S: IntoCStr>(&self, label: LblId<S>, active: bool) -> RadioButton<S> {
             RadioButton {
+                _pd: PhantomData,
                 label: label.into(),
                 active,
             }
@@ -1262,8 +1271,9 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
     )
     {
         decl_builder_setter_vector2!{size: Vector2}
-        pub fn overlay<S2: IntoCStr>(self, overlay: S2) -> ProgressBar<S2> {
+        pub fn overlay<S2: IntoCStr>(self, overlay: S2) -> ProgressBar<'s, S2> {
             ProgressBar {
+                _pd: PhantomData,
                 fraction: self.fraction,
                 size: self.size,
                 overlay: Some(overlay.into()),
@@ -1273,6 +1283,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
     {
         pub fn progress_bar_config<'a>(&self, fraction: f32) -> ProgressBar<&'a str> {
             ProgressBar {
+                _pd: PhantomData,
                 fraction,
                 size: im_vec2(-f32::MIN_POSITIVE, 0.0),
                 overlay: None,
@@ -1295,6 +1306,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
     {
         pub fn image_config(&self, user_texture_id: TextureId, size: Vector2) -> Image {
             Image {
+                _pd: PhantomData,
                 user_texture_id,
                 size: v2_to_im(size),
                 uv0: im_vec2(0.0, 0.0),
@@ -1337,6 +1349,7 @@ decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg () ()
     {
         pub fn image_with_bg_config(&self, user_texture_id: TextureId, size: Vector2) -> ImageWithBg {
             ImageWithBg {
+                _pd: PhantomData,
                 user_texture_id,
                 size: v2_to_im(size),
                 uv0: im_vec2(0.0, 0.0),
@@ -1382,6 +1395,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
     {
         pub fn image_button_config<S: IntoCStr>(&self, str_id: Id<S>, user_texture_id: TextureId, size: Vector2) -> ImageButton<S> {
             ImageButton {
+                _pd: PhantomData,
                 str_id: str_id.into(),
                 user_texture_id,
                 size: v2_to_im(size),
@@ -1423,6 +1437,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
     {
         pub fn selectable_config<S: IntoCStr>(&self, label: LblId<S>) -> Selectable<S> {
             Selectable {
+                _pd: PhantomData,
                 label: label.into(),
                 selected: false,
                 flags: SelectableFlags::None,
@@ -1457,8 +1472,9 @@ macro_rules! decl_builder_drag {
                 decl_builder_setter!{flags: SliderFlags}
             }
             {
-                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<$life, S> {
+                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<'_, $life, S> {
                     $name {
+                        _pd: PhantomData,
                         label: label.into(),
                         value,
                         speed: 1.0,
@@ -1478,7 +1494,7 @@ macro_rules! impl_float_format {
         impl_float_format! {$name c"%g" c"%.0f" c"%.3f" "%.{}f"}
     };
     ($name:ident $g:literal $f0:literal $f3:literal $f_n:literal) => {
-        impl<S: IntoCStr> $name<'_, S> {
+        impl<S: IntoCStr> $name<'_, '_, S> {
             pub fn display_format(mut self, format: FloatFormat) -> Self {
                 self.format = match format {
                     FloatFormat::G => Cow::Borrowed($g),
@@ -1527,8 +1543,9 @@ macro_rules! decl_builder_slider {
                 decl_builder_setter!{flags: SliderFlags}
             }
             {
-                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<$life, S> {
+                pub fn $func<$life, S: IntoCStr>(&self, label: LblId<S>, value: $ty) -> $name<'_, $life, S> {
                     $name {
+                        _pd: PhantomData,
                         label: label.into(),
                         value,
                         min: <$argty>::default(),
@@ -1572,8 +1589,9 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
         decl_builder_setter!{flags: SliderFlags}
     }
     {
-        pub fn slider_angle_config<'v, S: IntoCStr>(&self, label: LblId<S>, v_rad: &'v mut f32) -> SliderAngle<'v, S> {
+        pub fn slider_angle_config<'v, S: IntoCStr>(&self, label: LblId<S>, v_rad: &'v mut f32) -> SliderAngle<'_, 'v, S> {
             SliderAngle {
+                _pd: PhantomData,
                 label: label.into(),
                 v_rad,
                 v_degrees_min: -360.0,
@@ -1597,8 +1615,9 @@ decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_edit_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorEdit3<'v, S> {
+        pub fn color_edit_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorEdit3<'_, 'v, S> {
             ColorEdit3 {
+                _pd: PhantomData,
                 label: label.into(),
                 color,
                 flags: ColorEditFlags::None,
@@ -1617,8 +1636,9 @@ decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_edit_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorEdit4<'v, S> {
+        pub fn color_edit_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorEdit4<'_, 'v, S> {
             ColorEdit4 {
+                _pd: PhantomData,
                 label: label.into(),
                 color: color.as_mut(),
                 flags: ColorEditFlags::None,
@@ -1637,8 +1657,9 @@ decl_builder! { ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
         decl_builder_setter!{flags: ColorEditFlags}
     }
     {
-        pub fn color_picker_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorPicker3<'v, S> {
+        pub fn color_picker_3_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut [f32; 3]) -> ColorPicker3<'_, 'v, S> {
             ColorPicker3 {
+                _pd: PhantomData,
                 label: label.into(),
                 color,
                 flags: ColorEditFlags::None,
@@ -1662,8 +1683,9 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
         }
     }
     {
-        pub fn color_picker_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorPicker4<'v, S> {
+        pub fn color_picker_4_config<'v, S: IntoCStr>(&self, label: LblId<S>, color: &'v mut Color) -> ColorPicker4<'_, 'v, S> {
             ColorPicker4 {
+                _pd: PhantomData,
                 label: label.into(),
                 color: color.as_mut(),
                 flags: ColorEditFlags::None,
@@ -1730,8 +1752,9 @@ decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_text_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputText<'v, S> {
+        pub fn input_text_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputText<'_, 'v, S> {
             InputText {
+                _pd: PhantomData,
                 label: label.into(),
                 text,
                 flags: InputTextFlags::None,
@@ -1765,8 +1788,9 @@ decl_builder! { InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_os_string_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut OsString) -> InputOsString<'v, S> {
+        pub fn input_os_string_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut OsString) -> InputOsString<'_, 'v, S> {
             InputOsString {
+                _pd: PhantomData,
                 label: label.into(),
                 text,
                 flags: InputTextFlags::None,
@@ -1808,8 +1832,9 @@ decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn input_text_multiline_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputTextMultiline<'v, S> {
+        pub fn input_text_multiline_config<'v, S: IntoCStr>(&self, label: LblId<S>, text: &'v mut String) -> InputTextMultiline<'_, 'v, S> {
             InputTextMultiline {
+                _pd: PhantomData,
                 label:label.into(),
                 text,
                 flags: InputTextFlags::None,
@@ -1851,8 +1876,9 @@ decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCSt
         decl_builder_setter!{flags: InputTextFlags}
     }
     {
-        pub fn input_text_hint_config<'v, S1: IntoCStr, S2: IntoCStr>(&self, label: LblId<S1>, hint: S2, text: &'v mut String) -> InputTextHint<'v, S1, S2> {
+        pub fn input_text_hint_config<'v, S1: IntoCStr, S2: IntoCStr>(&self, label: LblId<S1>, hint: S2, text: &'v mut String) -> InputTextHint<'_, 'v, S1, S2> {
             InputTextHint {
+                _pd: PhantomData,
                 label:label.into(),
                 hint: hint.into(),
                 text,
@@ -1887,8 +1913,9 @@ decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: f32}
     }
     {
-        pub fn input_float_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut f32) -> InputFloat<'v, S> {
+        pub fn input_float_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut f32) -> InputFloat<'_, 'v, S> {
             InputFloat {
+                _pd: PhantomData,
                 label:label.into(),
                 value,
                 step: 0.0,
@@ -1914,8 +1941,9 @@ decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: i32}
     }
     {
-        pub fn input_int_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut i32) -> InputInt<'v, S> {
+        pub fn input_int_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut i32) -> InputInt<'_, 'v, S> {
             InputInt {
+                _pd: PhantomData,
                 label:label.into(),
                 value,
                 step: 1,
@@ -1939,8 +1967,9 @@ macro_rules! decl_builder_input_f {
             decl_builder_setter!{flags: InputTextFlags}
         }
         {
-            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [f32; $len]) -> $name<'v, S> {
+            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [f32; $len]) -> $name<'_, 'v, S> {
                 $name {
+                    _pd: PhantomData,
                     label: label.into(),
                     value,
                     format: Cow::Borrowed(c"%.3f"),
@@ -1974,8 +2003,9 @@ macro_rules! decl_builder_input_i {
             decl_builder_setter!{flags: InputTextFlags}
         }
         {
-            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [i32; $len]) -> $name<'v, S> {
+            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [i32; $len]) -> $name<'_, 'v, S> {
                 $name {
+                    _pd: PhantomData,
                     label: label.into(),
                     value,
                     flags: InputTextFlags::None,

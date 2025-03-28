@@ -1,10 +1,10 @@
-use std::mem::size_of;
+use std::{mem::size_of, num::Wrapping};
 
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
 use easy_imgui::{self as imgui, TextureId};
-use easy_imgui_opengl as glr;
+use easy_imgui_opengl::{self as glr};
 use easy_imgui_sys::*;
 use imgui::{Color, Vector2};
 
@@ -15,6 +15,7 @@ pub struct Renderer {
     bg_color: Option<imgui::Color>,
     matrix: Option<Matrix3<f32>>,
     objs: GlObjects,
+    pub generation: Wrapping<u32>,
 }
 
 struct GlObjects {
@@ -101,6 +102,7 @@ impl Renderer {
                 u_matrix_location,
                 u_tex_location,
             },
+            generation: Wrapping(0),
         })
     }
     /// Gets a reference to the OpenGL context.
@@ -163,7 +165,7 @@ impl Renderer {
                         self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
                         self.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
-                    Self::update_textures(&self.gl, &*pio);
+                    Self::update_textures(&self.gl, &*pio, &mut self.generation);
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
@@ -172,13 +174,21 @@ impl Renderer {
         }
     }
 
-    unsafe fn update_textures(gl: &glr::GlContext, pio: &ImGuiPlatformIO) {
+    unsafe fn update_textures(
+        gl: &glr::GlContext,
+        pio: &ImGuiPlatformIO,
+        generation: &mut Wrapping<u32>,
+    ) {
         for tex in &pio.Textures {
             let tex = &mut **tex;
-            Self::update_texture(gl, tex);
+            Self::update_texture(gl, tex, generation);
         }
     }
-    unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
+    unsafe fn update_texture(
+        gl: &glr::GlContext,
+        tex: &mut ImTextureData,
+        generation: &mut Wrapping<u32>,
+    ) {
         match tex.Status {
             ImTextureStatus::ImTextureStatus_WantCreate => {
                 let pixels = tex.Pixels;
@@ -225,6 +235,7 @@ impl Renderer {
                 // Warning: SetTexUserId() is inline;
                 tex.TexID = Self::map_tex(tex_id.id()).id();
                 std::mem::forget(tex_id);
+                *generation += 1;
             }
             ImTextureStatus::ImTextureStatus_WantUpdates => {
                 let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
@@ -435,8 +446,13 @@ impl Renderer {
                         cb(cmd_list, cmd);
                     }
                     None => {
-                        // Warning: inline function
-                        let tex_id = TextureId::from_tex_ref(&cmd.TexRef);
+                        // bindgen: inline function
+                        let tex_id = if cmd.TexRef._TexData.is_null() {
+                            cmd.TexRef._TexID
+                        } else {
+                            (*cmd.TexRef._TexData).TexID
+                        };
+                        let tex_id = TextureId::from_id(tex_id);
                         gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(tex_id));
 
                         if cfg!(target_arch = "wasm32") {
@@ -515,7 +531,7 @@ impl Drop for Renderer {
                 let tex = &mut **tex;
                 if tex.RefCount == 1 {
                     tex.Status = ImTextureStatus::ImTextureStatus_WantDestroy;
-                    Self::update_texture(&self.gl, tex);
+                    Self::update_texture(&self.gl, tex, &mut self.generation);
                 }
             }
         }

@@ -15,7 +15,9 @@ struct App;
 impl Application for App {
     type UserEvent = ();
     type Data = ();
-    fn new(_: Args<Self>) -> App {
+    fn new(args: Args<Self>) -> App {
+        // Dear ImGui by default uses "imgui.ini", but easy_imgui sets it to None.
+        args.window.imgui().set_ini_file_name(Some("imgui.ini"));
         App
     }
     fn window_event(&mut self, args: Args<Self>, _event: WindowEvent, res: EventResult) {

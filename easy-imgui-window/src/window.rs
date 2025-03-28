@@ -760,6 +760,12 @@ mod main_window {
         pub fn renderer(&mut self) -> &mut Renderer {
             &mut self.renderer
         }
+        /// Gets a reference to the ImGui context by the renderer.
+        ///
+        /// Just like `self.renderer().imgui()`
+        pub fn imgui(&mut self) -> &mut imgui::Context {
+            self.renderer.imgui()
+        }
         /// Gets a reference to the inner window.
         pub fn main_window(&mut self) -> &mut MainWindow {
             &mut self.main_window

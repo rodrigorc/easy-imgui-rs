@@ -172,7 +172,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::ptr::{null, null_mut};
 
 /// A type alias of the `cgmath::Vector2<f32>`.
@@ -303,6 +303,7 @@ impl From<Color> for ImVec4 {
 pub struct Context {
     imgui: *mut ImGuiContext,
     pending_atlas: bool,
+    ini_file_name: Option<CString>,
 }
 
 pub struct CurrentContext<'a> {
@@ -331,6 +332,7 @@ impl Context {
         Context {
             imgui,
             pending_atlas: true,
+            ini_file_name: None,
         }
     }
     /// Makes this context the current one.
@@ -345,6 +347,48 @@ impl Context {
     /// [`UiBuilder::build_custom_atlas`].
     pub fn invalidate_font_atlas(&mut self) {
         self.pending_atlas = true;
+    }
+
+    /// Sets the ini file where ImGui persists its data.
+    ///
+    /// By default is None, that means no file is saved.
+    pub fn set_ini_file_name(&mut self, ini_file_name: Option<&str>) {
+        let Some(ini_file_name) = ini_file_name else {
+            self.ini_file_name = None;
+            unsafe {
+                (*self.imgui).IO.IniFilename = null();
+            }
+            return;
+        };
+
+        let Ok(ini) = CString::new(ini_file_name) else {
+            // NUL in the file namem, ignored
+            return;
+        };
+
+        let ini = self.ini_file_name.insert(ini);
+        unsafe {
+            (*self.imgui).IO.IniFilename = ini.as_ptr();
+        }
+    }
+    /// Gets the ini file set previously by `set_ini_file_name`.
+    pub fn ini_file_name(&self) -> Option<&str> {
+        let ini = self.ini_file_name.as_deref()?.to_str().unwrap_or_default();
+        Some(ini)
+    }
+}
+
+impl Deref for CurrentContext<'_> {
+    type Target = Context;
+
+    fn deref(&self) -> &Self::Target {
+        self.ctx
+    }
+}
+
+impl DerefMut for CurrentContext<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ctx
     }
 }
 
@@ -385,6 +429,7 @@ impl CurrentContext<'_> {
     pub fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
         unsafe { &mut *ImGui_GetPlatformIO() }
     }
+
     // This is unsafe because you could break thing setting weird flags
     // If possible use the safe wrappers below
     pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
@@ -421,11 +466,6 @@ impl CurrentContext<'_> {
     pub unsafe fn scale(&self) -> f32 {
         let io = ImGui_GetIO();
         (*io).DisplayFramebufferScale.x
-    }
-    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
-    /// [`UiBuilder::build_custom_atlas`].
-    pub fn invalidate_font_atlas(&mut self) {
-        self.ctx.invalidate_font_atlas();
     }
     // I like to be explicit about this particular lifetime
     #[allow(clippy::needless_lifetimes)]

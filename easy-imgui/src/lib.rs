@@ -385,16 +385,16 @@ impl Context {
                 pending_atlas: true,
                 ini_file_name: None,
             };
-            ctx.io_mut().inner().IniFilename = null();
+            let io = ctx.io_mut().inner();
+            io.IniFilename = null();
+            io.font_atlas_mut().TexPixelsUseColors = true;
 
             // If you enabled the "docking" feature you will want to use it
             #[cfg(feature = "docking")]
             {
-                ctx.io_mut()
-                    .inner()
-                    .add_config_flags(ConfigFlags::DockingEnable);
+                io.add_config_flags(ConfigFlags::DockingEnable);
             }
-            ctx.io_mut().inner().ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
+            io.ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
             ctx
         }
     }
@@ -457,11 +457,10 @@ impl CurrentContext<'_> {
         if !std::mem::take(&mut self.ctx.pending_atlas) {
             return false;
         }
-        let scale = self.io().display_scale();
-        let fonts = self.io_mut().inner().font_atlas_mut();
-        fonts.Clear();
-        fonts.TexPixelsUseColors = true;
-
+        let io = self.io_mut().inner();
+        let scale = io.DisplayFramebufferScale.x;
+        let fonts = io.font_atlas_mut();
+        //ImFontAtlas_Clear((*io).Fonts);
         let mut atlas = FontAtlasMut {
             ptr: fonts,
             scale,
@@ -514,7 +513,7 @@ impl CurrentContext<'_> {
 
         let pio = ImGui_GetPlatformIO();
         pre_render(&*pio);
-        app.pre_render(&ui);
+        app.pre_render();
 
         std::mem::drop(end_frame_guard);
 
@@ -642,7 +641,7 @@ pub trait UiBuilder {
     /// This function is run after `do_ui` but before rendering.
     ///
     /// It can be used to clear the framebuffer.
-    fn pre_render(&mut self, _ui: &UiBase) {}
+    fn pre_render(&mut self) {}
     /// User the `ui` value to create a UI frame.
     ///
     /// This is equivalent to the Dear ImGui code between `NewFrame` and `EndFrame`.
@@ -1400,10 +1399,10 @@ decl_builder! { Image -> (), ImGui_Image ('t) ()
             }
         }
         pub fn image_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> Image<'_, '_> {
-            let rect = self.get_custom_rect(ridx);
+            let rect = self.get_custom_rect(ridx).unwrap();
             self.image_config(rect.tex_ref, vec2(scale * rect.rect.w as f32, scale * rect.rect.h as f32))
-                .uv0(rect.uv0)
-                .uv1(rect.uv1)
+                .uv0(im_to_v2(rect.rect.uv0))
+                .uv1(im_to_v2(rect.rect.uv1))
         }
     }
 }
@@ -1436,10 +1435,10 @@ decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
             }
         }
         pub fn image_with_bg_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> ImageWithBg<'_, '_> {
-            let rr = self.get_custom_rect(ridx);
+            let rr = self.get_custom_rect(ridx).unwrap();
             self.image_with_bg_config(self.get_atlas_texture_ref(), vec2(scale * rr.rect.w as f32, scale * rr.rect.h as f32))
-                .uv0(rr.uv0)
-                .uv1(rr.uv1)
+                .uv0(im_to_v2(rr.rect.uv0))
+                .uv1(im_to_v2(rr.rect.uv1))
         }
 
     }
@@ -1448,7 +1447,7 @@ decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
 decl_builder! { ImageButton -> bool, ImGui_ImageButton ('t) (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
-        texture_ref (TextureRef<'t>) (dbg!(texture_ref.tex_ref())),
+        texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
@@ -1475,10 +1474,10 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton ('t) (S: IntoCStr)
             }
         }
         pub fn image_button_with_custom_rect_config<S: IntoCStr>(&self, str_id: Id<S>, ridx: CustomRectIndex, scale: f32) -> ImageButton<'_, '_, S> {
-            let rr = self.get_custom_rect(ridx);
+            let rr = self.get_custom_rect(ridx).unwrap();
             self.image_button_config(str_id, rr.tex_ref, vec2(scale * rr.rect.w as f32, scale * rr.rect.h as f32))
-                .uv0(rr.uv0)
-                .uv1(rr.uv1)
+                .uv0(im_to_v2(rr.rect.uv0))
+                .uv1(im_to_v2(rr.rect.uv1))
         }
     }
 }
@@ -2433,14 +2432,6 @@ decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: I
     }
 }
 
-impl<A> Deref for Ui<A> {
-    type Target = UiBase;
-
-    fn deref(&self) -> &Self::Target {
-        &UiBase(())
-    }
-}
-
 impl<A> Ui<A> {
     // The callback will be callable until the next call to do_frame()
     unsafe fn push_callback<X>(&self, mut cb: impl FnMut(*mut A, X) + 'static) -> usize {
@@ -3241,52 +3232,29 @@ impl<A> Ui<A> {
         TextureRef::Ref(tex_data)
     }
 
-    pub fn get_custom_rect(&self, index: CustomRectIndex) -> TextureRect<'_> {
+    pub fn get_custom_rect(&self, index: CustomRectIndex) -> Option<TextureRect<'_>> {
         let atlas = self.io().font_atlas();
         let rect = unsafe {
-            let p = ImFontAtlas_GetCustomRect((&raw const atlas.0).cast_mut(), index.0);
-            *p
+            let mut rect = MaybeUninit::zeroed();
+            let ok = ImFontAtlas_GetCustomRect((&raw const atlas.0).cast_mut(), index.0, rect.as_mut_ptr());
+            if !ok {
+                return None;
+            }
+            rect.assume_init()
         };
-        let mut uv0 = ImVec2 { x: 0.0, y: 0.0 };
-        let mut uv1 = ImVec2 { x: 0.0, y: 0.0 };
-        unsafe {
-            atlas.0.GetCustomRectUV(&rect, &mut uv0, &mut uv1);
-        }
-        let (uv0, uv1) = (im_to_v2(uv0), im_to_v2(uv1));
-        let tex_ref = self.get_atlas_texture_ref();
 
-        TextureRect {
+        let tex_ref = self.get_atlas_texture_ref();
+        Some(TextureRect {
             rect,
-            uv0,
-            uv1,
             tex_ref,
-        }
+        })
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct TextureRect<'ui> {
-    pub rect: ImTextureRect,
-    pub uv0: Vector2,
-    pub uv1: Vector2,
+    pub rect: ImFontAtlasRect,
     pub tex_ref: TextureRef<'ui>,
-}
-
-/// Functions by `Ui` that can also be used in `Application::pre_render()`.
-///
-/// There are mostly information function, never UI builders.
-pub struct UiBase(());
-
-impl UiBase {
-    pub fn io(&self) -> &ImGuiIO {
-        unsafe { &*ImGui_GetIO() }
-    }
-    pub fn display_scale(&self) -> f32 {
-        unsafe {
-            let io = ImGui_GetIO();
-            (*io).DisplayFramebufferScale.x
-        }
-    }
 }
 
 pub struct ListClipper {
@@ -3494,20 +3462,24 @@ impl FontAtlasMut<'_> {
     /// Adds an arbitrary image to the font atlas.
     ///
     /// The returned `CustomRectIndex` can be used later to draw the image.
-    pub fn add_custom_rect_regular(
+    pub fn add_custom_rect(
         &mut self,
         size: impl Into<mint::Vector2<u32>>,
         draw: impl FnOnce(&mut SubPixelImage<'_, '_>),
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
-            let idx = self.ptr.AddCustomRectRegular(
+            let idx = self.ptr.0.AddCustomRect(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
             );
             let idx = CustomRectIndex(idx);
-            let tex_data = &(*self.ptr.TexData);
-            let rect = *ImFontAtlas_GetCustomRect((&raw const self.ptr.0).cast_mut(), idx.0);
+            let tex_data = &(*self.ptr.0.TexData);
+
+            let mut rect = MaybeUninit::zeroed();
+            ImFontAtlas_GetCustomRect((&raw const self.ptr.0).cast_mut(), idx.0, rect.as_mut_ptr());
+            let rect = rect.assume_init();
+
             let mut pixel_image = PixelImage::from_raw(
                 tex_data.Width as u32,
                 tex_data.Height as u32,
@@ -3533,11 +3505,36 @@ impl FontAtlas {
     pub unsafe fn texture_ref(&self) -> ImTextureRef {
         self.TexRef
     }
-    pub unsafe fn texture_unique_id(&self) -> u32 {
+
+    pub fn current_texture_unique_id(&self) -> TextureUniqueId {
         unsafe {
-            let io = &*ImGui_GetIO();
-            let atlas = &*io.Fonts;
-            (*atlas.TexRef._TexData).UniqueID as u32
+            let id = (*self.TexRef._TexData).UniqueID;
+            TextureUniqueId(id)
+        }
+    }
+
+    fn texture_unique_id(&self, uid: TextureUniqueId) -> Option<&ImTextureData> {
+        unsafe {
+            self.TexList.iter().find(|x| {
+                (***x).UniqueID == uid.0
+            })
+            .map(|p| &**p)
+        }
+    }
+
+    pub fn check_texture_unique_id(&self, uid: TextureUniqueId) -> bool {
+        self.texture_unique_id(uid).is_some_and(|x| !matches!(x.Status, ImTextureStatus::ImTextureStatus_WantDestroy | ImTextureStatus::ImTextureStatus_Destroyed))
+    }
+
+    pub fn get_texture_by_unique_id(&self, uid: TextureUniqueId) -> Option<TextureId> {
+        let p = self.texture_unique_id(uid)?;
+        // Allows for ImTextureStatus_WantDestroy, because the TexID may still be valid
+        if p.Status == ImTextureStatus::ImTextureStatus_Destroyed || p.TexID == 0 {
+            None
+        } else {
+            unsafe {
+                Some(TextureId::from_id(p.TexID))
+            }
         }
     }
 }
@@ -4268,7 +4265,10 @@ pub struct FontAndSize(pub FontId, pub f32);
 
 impl Pushable for FontAndSize {
     unsafe fn push(&self) {
-        ImGui_PushFont(font_ptr(self.0), self.1);
+        // maybe this should get ui and do ui.scale()
+        let io = ImGui_GetIO();
+        let scale = (*io).DisplayFramebufferScale.x;
+        ImGui_PushFont(font_ptr(self.0), self.1 * scale);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();
@@ -4319,6 +4319,9 @@ impl TextureId {
         Self(id)
     }
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct TextureUniqueId(i32);
 
 impl Pushable for StyleColor {
     unsafe fn push(&self) {

@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use easy_imgui::UiBase;
 use easy_imgui_window::{
     easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
 };
@@ -422,7 +423,7 @@ impl App {
 }
 
 impl imgui::UiBuilder for App {
-    fn pre_render(&mut self) {
+    fn pre_render(&mut self, _ui: &UiBase) {
         use glow::HasContext;
 
         unsafe {

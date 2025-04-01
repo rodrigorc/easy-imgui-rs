@@ -661,7 +661,7 @@ impl FileChooser {
                     if let Some(rr) = icon_rr {
                         let avail = ui.get_content_region_avail();
                         let scale = ui.get_font_size() / 16.0;
-                        let img_w = ui.get_custom_rect(rr).rect.w as f32;
+                        let img_w = ui.get_custom_rect(rr).unwrap().rect.w as f32;
                         ui.set_cursor_pos_x(
                             ui.get_cursor_pos_x() + (avail.x - scale * img_w) / 2.0,
                         );
@@ -1035,7 +1035,7 @@ pub fn build_custom_atlas(atlas: &mut easy_imgui::FontAtlasMut) -> CustomAtlas {
     use image::GenericImage;
 
     let mut do_rr = move |img: &'static DynamicImage| {
-        atlas.add_custom_rect_regular([img.width(), img.height()], {
+        atlas.add_custom_rect([img.width(), img.height()], {
             move |pixels| pixels.copy_from(img, 0, 0).unwrap()
         })
     };

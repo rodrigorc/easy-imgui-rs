@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use easy_imgui::UiBase;
+use easy_imgui::{FontAtlasMut, UiBase};
 use easy_imgui_window::{
     easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
 };
@@ -88,7 +88,7 @@ struct App {
     window_size: winit::dpi::PhysicalSize<u32>,
     ds: glr::DynamicVertexArray<Vertex>,
 
-    font_normal: imgui::FontId,
+    _font_normal: imgui::FontId,
     font_medium: imgui::FontId,
     font_big: imgui::FontId,
     last_tick: Instant,
@@ -181,12 +181,17 @@ fn ratio_ortho(width: f32, height: f32) -> (Matrix3, Vector2, f32) {
 }
 
 impl App {
-    fn new(gl: &GlContext) -> App {
+    fn new(gl: &GlContext, atlas: &mut FontAtlasMut) -> App {
         let vao = glr::VertexArray::generate(gl).unwrap();
         let prg = glr::Program::from_source(gl, VSH, FSH, None).unwrap();
         let u = Uniform {
             m: ortho2d_zero(1.0, 1.0),
         };
+
+        let _font_normal = atlas.add_font(imgui::FontInfo::default_font(13.0));
+        let font_medium = atlas.add_font(imgui::FontInfo::default_font(30.0));
+        let font_big = atlas.add_font(imgui::FontInfo::default_font(60.0));
+
         App {
             vao,
             gl: gl.clone(),
@@ -194,9 +199,9 @@ impl App {
             u,
             window_size: (800, 600).into(),
             ds: glr::DynamicVertexArray::new(gl).unwrap(),
-            font_normal: imgui::FontId::default(),
-            font_medium: imgui::FontId::default(),
-            font_big: imgui::FontId::default(),
+            _font_normal,
+            font_medium,
+            font_big,
             last_tick: Instant::now(),
             show_menu: Menu::Hello,
             show_demo: false,
@@ -437,11 +442,6 @@ impl imgui::UiBuilder for App {
         }
         self.prg.draw(&self.u, &self.ds, glow::TRIANGLES);
     }
-    fn build_custom_atlas(&mut self, atlas: &mut imgui::FontAtlasMut<'_>) {
-        self.font_normal = atlas.add_font(imgui::FontInfo::default_font(13.0));
-        self.font_medium = atlas.add_font(imgui::FontInfo::default_font(30.0));
-        self.font_big = atlas.add_font(imgui::FontInfo::default_font(60.0));
-    }
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
         if self.show_demo {
             ui.show_demo_window(Some(&mut self.show_demo));
@@ -561,7 +561,9 @@ impl Application for App {
             .main_window()
             .set_matrix(Some(Matrix3::identity()));
 
-        let mut app = App::new(args.window.renderer().gl_context());
+        let gl = args.window.renderer().gl_context().clone();
+        let mut imgui = unsafe { args.window.renderer().imgui().set_current() };
+        let mut app = App::new(&gl, &mut imgui.font_atlas());
         app.game_tick();
         app.ui_status.insert(UiRequest::VSync);
 

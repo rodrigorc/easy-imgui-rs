@@ -168,7 +168,7 @@
 pub use cgmath;
 use easy_imgui_sys::*;
 use std::borrow::Cow;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -367,7 +367,6 @@ impl From<Color> for ImVec4 {
 /// The main ImGui context.
 pub struct Context {
     imgui: *mut ImGuiContext,
-    pending_atlas: bool,
     ini_file_name: Option<CString>,
 }
 
@@ -382,7 +381,6 @@ impl Context {
             ImGui_SetCurrentContext(imgui);
             let mut ctx = Context {
                 imgui,
-                pending_atlas: true,
                 ini_file_name: None,
             };
             let io = ctx.io_mut().inner();
@@ -404,7 +402,6 @@ impl Context {
         if self.io().display_scale() != scale {
             self.io_mut().inner().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
             self.io_mut().inner().FontGlobalScale = scale.recip();
-            self.invalidate_font_atlas();
         }
     }
 
@@ -415,12 +412,6 @@ impl Context {
     pub unsafe fn set_current(&mut self) -> CurrentContext<'_> {
         ImGui_SetCurrentContext(self.imgui);
         CurrentContext { ctx: self }
-    }
-
-    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
-    /// [`UiBuilder::build_custom_atlas`].
-    pub fn invalidate_font_atlas(&mut self) {
-        self.pending_atlas = true;
     }
 
     /// Sets the ini file where ImGui persists its data.
@@ -453,26 +444,6 @@ impl Context {
 }
 
 impl CurrentContext<'_> {
-    pub unsafe fn update_atlas<A: UiBuilder>(&mut self, app: &mut A) -> bool {
-        if !std::mem::take(&mut self.ctx.pending_atlas) {
-            return false;
-        }
-        let io = self.io_mut().inner();
-        let scale = io.DisplayFramebufferScale.x;
-        let fonts = io.font_atlas_mut();
-        //ImFontAtlas_Clear((*io).Fonts);
-        let mut atlas = FontAtlasMut {
-            ptr: fonts,
-            scale,
-        };
-        app.build_custom_atlas(&mut atlas);
-        // If the app did not create any font, create a default one here.
-        // ImGui will do it by itself, but that would not be properly scaled if scale != 1.0
-        if atlas.ptr.0.Fonts.is_empty() {
-            atlas.add_font(FontInfo::default_font(13.0));
-        }
-        true
-    }
     /// Builds and renders a UI frame.
     ///
     /// * `app`: `UiBuilder` to be used to build the frame.
@@ -481,7 +452,7 @@ impl CurrentContext<'_> {
     pub unsafe fn do_frame<A: UiBuilder>(
         &mut self,
         app: &mut A,
-        pre_render: impl FnOnce(&ImGuiPlatformIO),
+        pre_render: impl FnOnce(),
         render: impl FnOnce(&ImDrawData),
     ) {
         let mut ui = Ui {
@@ -489,7 +460,6 @@ impl CurrentContext<'_> {
             data: std::ptr::null_mut(),
             generation: ImGui_GetFrameCount() as usize % 1000 + 1, // avoid the 0
             callbacks: RefCell::new(Vec::new()),
-            pending_atlas: Cell::new(false),
         };
 
         self.io_mut().inner().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
@@ -511,8 +481,7 @@ impl CurrentContext<'_> {
 
         app.do_ui(&ui);
 
-        let pio = ImGui_GetPlatformIO();
-        pre_render(&*pio);
+        pre_render();
         app.pre_render();
 
         std::mem::drop(end_frame_guard);
@@ -528,8 +497,6 @@ impl CurrentContext<'_> {
 
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
-
-        ctx_guard.0.pending_atlas |= ui.pending_atlas.get();
     }
 }
 
@@ -634,10 +601,6 @@ impl Drop for UiPtrToNullGuard<'_> {
 
 /// The main trait that the user must implement to create a UI.
 pub trait UiBuilder {
-    /// This function is run the first time an ImGui context is used to create the font atlas.
-    ///
-    /// You can force new call by invalidating the current atlas by calling [`Context::invalidate_font_atlas`].
-    fn build_custom_atlas(&mut self, _atlas: &mut FontAtlasMut<'_>) {}
     /// This function is run after `do_ui` but before rendering.
     ///
     /// It can be used to clear the framebuffer.
@@ -959,7 +922,6 @@ where
     data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
     callbacks: RefCell<Vec<UiCallback<A>>>,
-    pending_atlas: Cell<bool>,
 }
 
 /// Callbacks called during `A::do_ui()` will have the first argument as null, because the app value
@@ -2463,11 +2425,6 @@ impl<A> Ui<A> {
         let mut x = MaybeUninit::new(x);
         cb(ui.data, x.as_mut_ptr() as *mut c_void);
     }
-    /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
-    /// [`UiBuilder::build_custom_atlas`].
-    pub fn invalidate_font_atlas(&self) {
-        self.pending_atlas.set(true);
-    }
 
     pub fn get_clipboard_text(&self) -> String {
         unsafe {
@@ -3236,7 +3193,11 @@ impl<A> Ui<A> {
         let atlas = self.io().font_atlas();
         let rect = unsafe {
             let mut rect = MaybeUninit::zeroed();
-            let ok = ImFontAtlas_GetCustomRect((&raw const atlas.0).cast_mut(), index.0, rect.as_mut_ptr());
+            let ok = ImFontAtlas_GetCustomRect(
+                (&raw const atlas.0).cast_mut(),
+                index.0,
+                rect.as_mut_ptr(),
+            );
             if !ok {
                 return None;
             }
@@ -3469,16 +3430,15 @@ impl FontAtlasMut<'_> {
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
+            let mut rect = MaybeUninit::zeroed();
             let idx = self.ptr.0.AddCustomRect(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
+                rect.as_mut_ptr(),
             );
             let idx = CustomRectIndex(idx);
-            let tex_data = &(*self.ptr.0.TexData);
-
-            let mut rect = MaybeUninit::zeroed();
-            ImFontAtlas_GetCustomRect((&raw const self.ptr.0).cast_mut(), idx.0, rect.as_mut_ptr());
             let rect = rect.assume_init();
+            let tex_data = &(*self.ptr.TexData);
 
             let mut pixel_image = PixelImage::from_raw(
                 tex_data.Width as u32,
@@ -3515,15 +3475,22 @@ impl FontAtlas {
 
     fn texture_unique_id(&self, uid: TextureUniqueId) -> Option<&ImTextureData> {
         unsafe {
-            self.TexList.iter().find(|x| {
-                (***x).UniqueID == uid.0
-            })
-            .map(|p| &**p)
+            self
+                .TexList
+                .iter()
+                .find(|x| (***x).UniqueID == uid.0)
+                .map(|p| &**p)
         }
     }
 
     pub fn check_texture_unique_id(&self, uid: TextureUniqueId) -> bool {
-        self.texture_unique_id(uid).is_some_and(|x| !matches!(x.Status, ImTextureStatus::ImTextureStatus_WantDestroy | ImTextureStatus::ImTextureStatus_Destroyed))
+        self.texture_unique_id(uid).is_some_and(|x| {
+            !matches!(
+                x.Status,
+                ImTextureStatus::ImTextureStatus_WantDestroy
+                    | ImTextureStatus::ImTextureStatus_Destroyed
+            )
+        })
     }
 
     pub fn get_texture_by_unique_id(&self, uid: TextureUniqueId) -> Option<TextureId> {
@@ -3532,9 +3499,7 @@ impl FontAtlas {
         if p.Status == ImTextureStatus::ImTextureStatus_Destroyed || p.TexID == 0 {
             None
         } else {
-            unsafe {
-                Some(TextureId::from_id(p.TexID))
-            }
+            unsafe { Some(TextureId::from_id(p.TexID)) }
         }
     }
 }
@@ -4252,9 +4217,11 @@ impl<T: Pushable> Pushable for Option<T> {
     }
 }
 
+//TODO rework the font pushables
 impl Pushable for FontId {
     unsafe fn push(&self) {
-        ImGui_PushFont(font_ptr(*self), -1.0);
+        let font = font_ptr(*self);
+        ImGui_PushFont(font, (*font).DefaultSize);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();

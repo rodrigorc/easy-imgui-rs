@@ -1,4 +1,4 @@
-use std::{mem::size_of, num::Wrapping};
+use std::mem::size_of;
 
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
@@ -15,7 +15,6 @@ pub struct Renderer {
     bg_color: Option<imgui::Color>,
     matrix: Option<Matrix3<f32>>,
     objs: GlObjects,
-    pub generation: Wrapping<u32>,
 }
 
 struct GlObjects {
@@ -102,7 +101,6 @@ impl Renderer {
                 u_matrix_location,
                 u_tex_location,
             },
-            generation: Wrapping(0),
         })
     }
     /// Gets a reference to the OpenGL context.
@@ -146,12 +144,11 @@ impl Renderer {
         unsafe {
             let mut imgui = self.imgui.set_current();
 
-            imgui.update_atlas(app);
-
             imgui.do_frame(
                 app,
-                |pio| {
+                || {
                     let io = &*ImGui_GetIO();
+                    let pio = &*ImGui_GetPlatformIO();
                     if self.matrix.is_none() {
                         self.gl.viewport(
                             0,
@@ -164,7 +161,7 @@ impl Renderer {
                         self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
                         self.gl.clear(glow::COLOR_BUFFER_BIT);
                     }
-                    Self::update_textures(&self.gl, &*pio, &mut self.generation);
+                    Self::update_textures(&self.gl, pio);
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
@@ -173,21 +170,15 @@ impl Renderer {
         }
     }
 
-    unsafe fn update_textures(
-        gl: &glr::GlContext,
-        pio: &ImGuiPlatformIO,
-        generation: &mut Wrapping<u32>,
-    ) {
+    unsafe fn update_textures(gl: &glr::GlContext, pio: &ImGuiPlatformIO) {
+        println!("------------- {}", pio.Textures.len());
         for tex in &pio.Textures {
             let tex = &mut **tex;
-            Self::update_texture(gl, tex, generation);
+            Self::update_texture(gl, tex);
         }
     }
-    unsafe fn update_texture(
-        gl: &glr::GlContext,
-        tex: &mut ImTextureData,
-        generation: &mut Wrapping<u32>,
-    ) {
+    unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
+        dbg!(tex.UniqueID);
         match tex.Status {
             ImTextureStatus::ImTextureStatus_WantCreate => {
                 let pixels = tex.Pixels;
@@ -234,7 +225,6 @@ impl Renderer {
                 // Warning: SetTexUserId() is inline;
                 tex.TexID = Self::map_tex(tex_id.id()).id();
                 std::mem::forget(tex_id);
-                *generation += 1;
             }
             ImTextureStatus::ImTextureStatus_WantUpdates => {
                 let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
@@ -532,7 +522,7 @@ impl Drop for Renderer {
                 let tex = &mut **tex;
                 if tex.RefCount == 1 {
                     tex.Status = ImTextureStatus::ImTextureStatus_WantDestroy;
-                    Self::update_texture(&self.gl, tex, &mut self.generation);
+                    Self::update_texture(&self.gl, tex);
                 }
             }
         }

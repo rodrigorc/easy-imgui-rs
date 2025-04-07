@@ -24,13 +24,9 @@ impl Application for App {
     type Data = ();
 
     fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
-        unsafe {
-            args.window
-                .renderer()
-                .imgui()
-                .set_current()
-                .set_allow_user_scaling(true);
-        }
+        let mut imgui = unsafe { args.window.renderer().imgui().set_current() };
+        imgui.set_allow_user_scaling(true);
+
         let mut of = filechooser::FileChooser::new();
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
         of.add_filter(filechooser::Filter {
@@ -52,15 +48,12 @@ impl Application for App {
             globs: vec![],
         });
         App {
-            of_atlas: Default::default(),
+            of_atlas: filechooser::build_custom_atlas(&mut imgui.font_atlas()),
             of: Some(of),
         }
     }
 }
 impl imgui::UiBuilder for App {
-    fn build_custom_atlas(&mut self, atlas: &mut easy_imgui::FontAtlasMut<'_>) {
-        self.of_atlas = filechooser::build_custom_atlas(atlas);
-    }
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
         if ui.shortcut_ex(imgui::Key::F5, imgui::InputFlags::RouteGlobal) {
             if self.of.is_none() {

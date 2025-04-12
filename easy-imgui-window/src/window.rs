@@ -324,10 +324,11 @@ pub fn window_event(
             }
         },
         Resized(size) => {
+            // Do not skip this line or the gl surface may be wrong in Wayland
+            // GL surface in physical pixels, imgui in logical
+            let size = main_window.resize(*size);
             if !flags.contains(EventFlags::DoNotResize) {
                 main_window.ping_user_input();
-                // GL surface in physical pixels, imgui in logical
-                let size = main_window.resize(*size);
                 let mut imgui = unsafe { renderer.imgui().set_current() };
                 let io = imgui.io_mut();
                 let size = Vector2::from(mint::Vector2::from(size));

@@ -172,7 +172,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::ptr::{null, null_mut};
 
 /// A type alias of the `cgmath::Vector2<f32>`.
@@ -312,29 +312,35 @@ pub struct CurrentContext<'a> {
 
 impl Context {
     pub unsafe fn new() -> Context {
-        let imgui = unsafe {
+        unsafe {
             let imgui = ImGui_CreateContext(null_mut());
             ImGui_SetCurrentContext(imgui);
-
-            let io = ImGui_GetIO();
-            (*io).IniFilename = null();
+            let mut ctx = Context {
+                imgui,
+                pending_atlas: true,
+                ini_file_name: None,
+            };
+            ctx.io_mut().IniFilename = null();
 
             // If you eanbled the "docking" feature you will want to use it
             #[cfg(feature = "docking")]
             {
-                (*io).ConfigFlags |= ConfigFlags::DockingEnable.bits();
+                ctx.add_config_flags(ConfigFlags::DockingEnable);
             }
-            (*io).ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
-
-            //ImGui_StyleColorsDark(null_mut());
-            imgui
-        };
-        Context {
-            imgui,
-            pending_atlas: true,
-            ini_file_name: None,
+            ctx.io_mut().ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
+            ctx
         }
     }
+
+    pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
+        self.io_mut().DisplaySize = v2_to_im(size);
+        if self.display_scale() != scale {
+            self.io_mut().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+            self.io_mut().FontGlobalScale = scale.recip();
+            self.invalidate_font_atlas();
+        }
+    }
+
     /// Makes this context the current one.
     ///
     /// SAFETY: Do not make two different contexts current at the same time
@@ -343,6 +349,7 @@ impl Context {
         ImGui_SetCurrentContext(self.imgui);
         CurrentContext { ctx: self }
     }
+
     /// The next time [`CurrentContext::do_frame()`] is called, it will trigger a call to
     /// [`UiBuilder::build_custom_atlas`].
     pub fn invalidate_font_atlas(&mut self) {
@@ -378,115 +385,22 @@ impl Context {
     }
 }
 
-impl Deref for CurrentContext<'_> {
-    type Target = Context;
-
-    fn deref(&self) -> &Self::Target {
-        self.ctx
-    }
-}
-
-impl DerefMut for CurrentContext<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.ctx
-    }
-}
-
 impl CurrentContext<'_> {
-    pub fn set_allow_user_scaling(&mut self, val: bool) {
-        unsafe {
-            let io = ImGui_GetIO();
-            (*io).FontAllowUserScaling = val;
-        }
-    }
-    pub fn want_capture_mouse(&self) -> bool {
-        unsafe {
-            let io = &*ImGui_GetIO();
-            io.WantCaptureMouse
-        }
-    }
-    pub fn want_capture_keyboard(&self) -> bool {
-        unsafe {
-            let io = &*ImGui_GetIO();
-            io.WantCaptureKeyboard
-        }
-    }
-    pub fn want_text_input(&self) -> bool {
-        unsafe {
-            let io = &*ImGui_GetIO();
-            io.WantTextInput
-        }
-    }
-    pub fn io(&self) -> &ImGuiIO {
-        unsafe { &*ImGui_GetIO() }
-    }
-    pub fn io_mut(&mut self) -> &mut ImGuiIO {
-        unsafe { &mut *ImGui_GetIO() }
-    }
-    pub fn platform_io(&self) -> &ImGuiPlatformIO {
-        unsafe { &*ImGui_GetPlatformIO() }
-    }
-    pub fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
-        unsafe { &mut *ImGui_GetPlatformIO() }
-    }
-
-    // This is unsafe because you could break thing setting weird flags
-    // If possible use the safe wrappers below
-    pub unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
-        let io = ImGui_GetIO();
-        (*io).ConfigFlags |= flags.bits();
-    }
-    pub unsafe fn remove_config_flags(&mut self, flags: ConfigFlags) {
-        let io = ImGui_GetIO();
-        (*io).ConfigFlags &= !flags.bits();
-    }
-    pub fn nav_enable_keyboard(&mut self) {
-        unsafe {
-            self.add_config_flags(ConfigFlags::NavEnableKeyboard);
-        }
-    }
-    pub fn nav_enable_gamepad(&mut self) {
-        unsafe {
-            self.add_config_flags(ConfigFlags::NavEnableGamepad);
-        }
-    }
-    pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
-        let io = ImGui_GetIO();
-        (*io).DisplaySize = v2_to_im(size);
-        if self.scale() != scale {
-            (*io).DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
-            (*io).FontGlobalScale = scale.recip();
-            self.invalidate_font_atlas();
-        }
-    }
-    pub unsafe fn size(&self) -> Vector2 {
-        let io = ImGui_GetIO();
-        im_to_v2((*io).DisplaySize)
-    }
-    pub unsafe fn scale(&self) -> f32 {
-        let io = ImGui_GetIO();
-        (*io).DisplayFramebufferScale.x
-    }
-    // I like to be explicit about this particular lifetime
-    #[allow(clippy::needless_lifetimes)]
-    pub unsafe fn update_atlas<'ui, A: UiBuilder>(&'ui mut self, app: &mut A) -> bool {
+    pub unsafe fn update_atlas<A: UiBuilder>(&mut self, app: &mut A) -> bool {
         if !std::mem::take(&mut self.ctx.pending_atlas) {
             return false;
         }
-        let io = ImGui_GetIO();
-        ImFontAtlas_Clear((*io).Fonts);
-        (*(*io).Fonts).TexPixelsUseColors = true;
+        let fonts = &mut *self.io_mut().Fonts;
+        fonts.Clear();
+        fonts.TexPixelsUseColors = true;
 
-        let scale = (*io).DisplayFramebufferScale.x;
+        let scale = self.display_scale();
         let mut atlas = FontAtlasMut {
-            ptr: FontAtlasPtr {
-                ptr: &mut *(*io).Fonts,
-            },
+            ptr: FontAtlasPtr { ptr: fonts },
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
         };
-
         app.build_custom_atlas(&mut atlas);
         // If the app did not create any font, create a default one here.
         // ImGui will do it by itself, but that would not be properly scaled if scale != 1.0
@@ -508,15 +422,15 @@ impl CurrentContext<'_> {
         render: impl FnOnce(&ImDrawData),
     ) {
         let mut ui = Ui {
+            imgui: self.imgui(),
             data: std::ptr::null_mut(),
             generation: ImGui_GetFrameCount() as usize,
             callbacks: RefCell::new(Vec::new()),
             pending_atlas: Cell::new(false),
         };
 
-        let io = ImGui_GetIO();
-        (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
-        let _guard = UiPtrToNullGuard(self.ctx);
+        self.io_mut().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
+        let ctx_guard = UiPtrToNullGuard(self.ctx);
 
         // This guards for panics during the frame.
         struct FrameGuard;
@@ -530,26 +444,27 @@ impl CurrentContext<'_> {
 
         ImGui_NewFrame();
 
-        let _guard_2 = FrameGuard;
+        let end_frame_guard = FrameGuard;
 
         app.do_ui(&ui);
 
         pre_render();
         app.pre_render();
 
-        std::mem::forget(_guard_2);
+        std::mem::drop(end_frame_guard);
+
         ImGui_Render();
 
         ui.data = app;
 
         // This is the same pointer, but without it, there is something fishy about stacked borrows
         // and the mutable access to `ui` above.
-        (*io).BackendLanguageUserData = &ui as *const Ui<A> as *mut c_void;
+        ctx_guard.0.io_mut().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
 
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
 
-        _guard.0.pending_atlas |= ui.pending_atlas.get();
+        ctx_guard.0.pending_atlas |= ui.pending_atlas.get();
     }
 }
 
@@ -561,13 +476,125 @@ impl Drop for Context {
     }
 }
 
+pub trait HasImGuiContext {
+    fn imgui(&self) -> *mut ImGuiContext;
+
+    #[inline]
+    fn io(&self) -> &ImGuiIO {
+        unsafe { &(*self.imgui()).IO }
+    }
+    #[inline]
+    unsafe fn io_mut(&mut self) -> &mut ImGuiIO {
+        unsafe { &mut (*self.imgui()).IO }
+    }
+    #[inline]
+    fn platform_io(&self) -> &ImGuiPlatformIO {
+        unsafe { &(*self.imgui()).PlatformIO }
+    }
+    #[inline]
+    unsafe fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
+        unsafe { &mut (*self.imgui()).PlatformIO }
+    }
+
+    fn set_allow_user_scaling(&mut self, val: bool) {
+        unsafe {
+            self.io_mut().FontAllowUserScaling = val;
+        }
+    }
+    fn want_capture_mouse(&self) -> bool {
+        self.io().WantCaptureMouse
+    }
+    fn want_capture_keyboard(&self) -> bool {
+        self.io().WantCaptureKeyboard
+    }
+    fn want_text_input(&self) -> bool {
+        self.io().WantTextInput
+    }
+
+    // This is unsafe because you could break thing setting weird flags
+    // If possible use the safe wrappers below
+    unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
+        unsafe {
+            self.io_mut().ConfigFlags |= flags.bits();
+        }
+    }
+    unsafe fn remove_config_flags(&mut self, flags: ConfigFlags) {
+        unsafe {
+            self.io_mut().ConfigFlags &= !flags.bits();
+        }
+    }
+    fn nav_enable_keyboard(&mut self) {
+        unsafe {
+            self.add_config_flags(ConfigFlags::NavEnableKeyboard);
+        }
+    }
+    fn nav_enable_gamepad(&mut self) {
+        unsafe {
+            self.add_config_flags(ConfigFlags::NavEnableGamepad);
+        }
+    }
+
+    fn display_size(&self) -> Vector2 {
+        im_to_v2(self.io().DisplaySize)
+    }
+    fn display_scale(&self) -> f32 {
+        self.io().DisplayFramebufferScale.x
+    }
+}
+
+// Private newtype to implement HasImGuiContext for a raw pointer.
+// Implementing `HasImGuiContext for *mut ImGuiContext` directly would be terribly unsafe.
+
+mod imgui_ptr_impl {
+    use super::{ImGuiContext, ImGui_GetCurrentContext};
+
+    pub struct ImGuiPtr(*mut ImGuiContext);
+
+    impl ImGuiPtr {
+        pub unsafe fn current() -> ImGuiPtr {
+            ImGuiPtr(ImGui_GetCurrentContext())
+        }
+        pub unsafe fn from_raw(ptr: *mut ImGuiContext) -> ImGuiPtr {
+            ImGuiPtr(ptr)
+        }
+        pub fn as_raw(&self) -> *mut ImGuiContext {
+            self.0
+        }
+    }
+}
+
+pub use imgui_ptr_impl::ImGuiPtr;
+
+impl HasImGuiContext for ImGuiPtr {
+    fn imgui(&self) -> *mut ImGuiContext {
+        self.as_raw()
+    }
+}
+
+impl HasImGuiContext for Context {
+    fn imgui(&self) -> *mut ImGuiContext {
+        self.imgui
+    }
+}
+
+impl HasImGuiContext for CurrentContext<'_> {
+    fn imgui(&self) -> *mut ImGuiContext {
+        self.ctx.imgui()
+    }
+}
+
+impl<A> HasImGuiContext for Ui<A> {
+    fn imgui(&self) -> *mut ImGuiContext {
+        self.imgui
+    }
+}
+
 struct UiPtrToNullGuard<'a>(&'a mut Context);
 
 impl Drop for UiPtrToNullGuard<'_> {
     fn drop(&mut self) {
         unsafe {
-            let io = ImGui_GetIO();
-            (*io).BackendLanguageUserData = null_mut();
+            self.0.io_mut().BackendLanguageUserData = null_mut();
         }
     }
 }
@@ -893,10 +920,9 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 }
 
 unsafe fn font_ptr(font: FontId) -> *mut ImFont {
-    let io = &*ImGui_GetIO();
-    let fonts = &*io.Fonts;
+    let fonts = ImGuiPtr::current().io().Fonts;
     // fonts.Fonts is never empty, at least there is the default font
-    fonts.Fonts[font.0]
+    (*fonts).Fonts[font.0]
 }
 
 // this is unsafe because it replaces a C binding function that does nothing, and adding `unsafe`
@@ -911,6 +937,7 @@ pub struct Ui<A>
 where
     A: ?Sized,
 {
+    imgui: *mut ImGuiContext,
     data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
     callbacks: RefCell<Vec<UiCallback<A>>>,
@@ -2426,12 +2453,12 @@ impl<A> Ui<A> {
         merge_generation(id, self.generation)
     }
     unsafe fn run_callback<X>(id: usize, x: X) {
-        let io = &*ImGui_GetIO();
-        if io.BackendLanguageUserData.is_null() {
+        let user_data = ImGuiPtr::current().io().BackendLanguageUserData;
+        if user_data.is_null() {
             return;
         }
         // The lifetime of ui has been erased, but at least the types of A and X should be correct
-        let ui = &*(io.BackendLanguageUserData as *const Self);
+        let ui = &*(user_data as *const Self);
         let Some(id) = remove_generation(id, ui.generation) else {
             eprintln!("lost generation callback");
             return;
@@ -2449,18 +2476,6 @@ impl<A> Ui<A> {
         self.pending_atlas.set(true);
     }
 
-    pub fn display_size(&self) -> Vector2 {
-        unsafe {
-            let io = ImGui_GetIO();
-            im_to_v2((*io).DisplaySize)
-        }
-    }
-    pub fn display_scale(&self) -> f32 {
-        unsafe {
-            let io = ImGui_GetIO();
-            (*io).DisplayFramebufferScale.x
-        }
-    }
     pub fn get_clipboard_text(&self) -> String {
         unsafe {
             CStr::from_ptr(ImGui_GetClipboardText())
@@ -2945,7 +2960,7 @@ impl<A> Ui<A> {
         }
     }
     pub fn key_mods(&self) -> KeyMod {
-        let mods = unsafe { (*ImGui_GetIO()).KeyMods };
+        let mods = self.io().KeyMods;
         KeyMod::from_bits_truncate(mods & ImGuiKey::ImGuiMod_Mask_.0)
     }
     pub fn is_key_down(&self, key: Key) -> bool {
@@ -3073,7 +3088,7 @@ impl<A> Ui<A> {
     pub fn is_below_blocking_modal(&self) -> bool {
         // Beware: internal API
         unsafe {
-            let modal = ImGui_FindBlockingModal((*ImGui_GetCurrentContext()).CurrentWindow);
+            let modal = ImGui_FindBlockingModal((*self.imgui()).CurrentWindow);
             !modal.is_null()
         }
     }
@@ -3103,15 +3118,11 @@ impl<A> Ui<A> {
         unsafe { ImGui_IsWindowAppearing() }
     }
 
-    pub fn io(&self) -> &ImGuiIO {
-        unsafe { &*ImGui_GetIO() }
-    }
     pub fn font_atlas(&self) -> FontAtlas<'_> {
         unsafe {
-            let io = &*ImGui_GetIO();
             FontAtlas {
                 ptr: FontAtlasPtr {
-                    ptr: &mut *io.Fonts,
+                    ptr: &mut *self.io().Fonts,
                 },
             }
         }
@@ -3414,11 +3425,9 @@ impl<A> FontAtlasMut<'_, A> {
                 self.glyph_ranges.push(char_ranges);
                 ptr
             };
-            let io = ImGui_GetIO();
             match font.ttf {
                 TtfData::Bytes(bytes) => {
-                    ImFontAtlas_AddFontFromMemoryTTF(
-                        (*io).Fonts,
+                    self.ptr.ptr.AddFontFromMemoryTTF(
                         bytes.as_ptr() as *mut _,
                         bytes.len() as i32,
                         font.size * self.scale,
@@ -3428,10 +3437,10 @@ impl<A> FontAtlasMut<'_, A> {
                 }
                 TtfData::DefaultFont => {
                     fc.SizePixels = font.size * self.scale;
-                    ImFontAtlas_AddFontDefault((*io).Fonts, &fc);
+                    self.ptr.ptr.AddFontDefault(&fc);
                 }
             }
-            FontId((*(*io).Fonts).Fonts.len() - 1)
+            FontId(self.ptr.ptr.Fonts.len() - 1)
         }
     }
     /// Adds an image as a substitution for a character in a font.
@@ -3446,11 +3455,8 @@ impl<A> FontAtlasMut<'_, A> {
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
-            let io = ImGui_GetIO();
-
             let font = font_ptr(font);
-            let idx = ImFontAtlas_AddCustomRectFontGlyph(
-                (*io).Fonts,
+            let idx = self.ptr.ptr.AddCustomRectFontGlyph(
                 font,
                 id as ImWchar,
                 i32::try_from(size.x).unwrap(),
@@ -3472,10 +3478,7 @@ impl<A> FontAtlasMut<'_, A> {
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
-            let io = ImGui_GetIO();
-
-            let idx = ImFontAtlas_AddCustomRectRegular(
-                (*io).Fonts,
+            let idx = self.ptr.ptr.AddCustomRectRegular(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
             );
@@ -3494,11 +3497,8 @@ impl<A> FontAtlasMut<'_, A> {
         let mut tex_width = 0;
         let mut tex_height = 0;
         let mut pixel_size = 0;
-        let io;
         unsafe {
-            io = ImGui_GetIO();
-            ImFontAtlas_GetTexDataAsRGBA32(
-                (*io).Fonts,
+            self.ptr.ptr.GetTexDataAsRGBA32(
                 &mut tex_data,
                 &mut tex_width,
                 &mut tex_height,
@@ -3518,16 +3518,14 @@ impl<A> FontAtlasMut<'_, A> {
 
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
-                unsafe {
-                    let rect = &(*(*io).Fonts).CustomRects[idx];
-                    let mut sub_image = pixel_image.sub_image(
-                        rect.X as u32,
-                        rect.Y as u32,
-                        rect.Width as u32,
-                        rect.Height as u32,
-                    );
-                    f(app, &mut sub_image);
-                }
+                let rect = self.ptr.ptr.CustomRects[idx];
+                let mut sub_image = pixel_image.sub_image(
+                    rect.X as u32,
+                    rect.Y as u32,
+                    rect.Width as u32,
+                    rect.Height as u32,
+                );
+                f(app, &mut sub_image);
             }
         }
     }

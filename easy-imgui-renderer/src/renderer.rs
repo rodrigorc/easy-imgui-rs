@@ -3,7 +3,7 @@ use std::mem::size_of;
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
-use easy_imgui as imgui;
+use easy_imgui::{self as imgui, HasImGuiContext};
 use easy_imgui_opengl as glr;
 use easy_imgui_sys::*;
 use imgui::{Color, TextureId, Vector2};
@@ -45,12 +45,11 @@ impl Renderer {
         let u_matrix_location;
         let u_tex_location;
 
-        let imgui = unsafe { imgui::Context::new() };
+        let mut imgui = unsafe { imgui::Context::new() };
 
         unsafe {
             if !cfg!(target_arch = "wasm32") {
-                let io = &mut *ImGui_GetIO();
-                io.BackendFlags |= (imgui::BackendFlags::HasMouseCursors
+                imgui.io_mut().BackendFlags |= (imgui::BackendFlags::HasMouseCursors
                     | imgui::BackendFlags::HasSetMousePos
                     | imgui::BackendFlags::RendererHasVtxOffset)
                     .bits();
@@ -135,12 +134,12 @@ impl Renderer {
     /// Sets the UI size, in logical units, and the scale factor.
     pub fn set_size(&mut self, size: Vector2, scale: f32) {
         unsafe {
-            self.imgui.set_current().set_size(size, scale);
+            self.imgui.set_size(size, scale);
         }
     }
     /// Gets the UI size, in logical units.
     pub fn size(&mut self) -> Vector2 {
-        unsafe { self.imgui.set_current().size() }
+        self.imgui.display_size()
     }
     /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
@@ -148,19 +147,20 @@ impl Renderer {
             let mut imgui = self.imgui.set_current();
 
             if imgui.update_atlas(app) {
-                Self::update_atlas(&self.gl, &self.objs.atlas);
+                Self::update_atlas(&mut *imgui.io_mut().Fonts, &self.gl, &self.objs.atlas);
             }
+            let display_size = imgui.display_size();
+            let scale = imgui.display_scale();
 
             imgui.do_frame(
                 app,
                 || {
-                    let io = &*ImGui_GetIO();
                     if self.matrix.is_none() {
                         self.gl.viewport(
                             0,
                             0,
-                            (io.DisplaySize.x * io.DisplayFramebufferScale.x) as i32,
-                            (io.DisplaySize.y * io.DisplayFramebufferScale.y) as i32,
+                            (display_size.x * scale) as i32,
+                            (display_size.y * scale) as i32,
                         );
                     }
                     if let Some(bg) = self.bg_color {
@@ -174,19 +174,16 @@ impl Renderer {
             );
         }
     }
-    unsafe fn update_atlas(gl: &glr::GlContext, atlas_tex: &glr::Texture) {
-        let io = ImGui_GetIO();
+    unsafe fn update_atlas(
+        font_atlas: &mut ImFontAtlas,
+        gl: &glr::GlContext,
+        atlas_tex: &glr::Texture,
+    ) {
         let mut data = std::ptr::null_mut();
         let mut width = 0;
         let mut height = 0;
         let mut pixel_size = 0;
-        ImFontAtlas_GetTexDataAsRGBA32(
-            (*io).Fonts,
-            &mut data,
-            &mut width,
-            &mut height,
-            &mut pixel_size,
-        );
+        font_atlas.GetTexDataAsRGBA32(&mut data, &mut width, &mut height, &mut pixel_size);
 
         gl.bind_texture(glow::TEXTURE_2D, Some(atlas_tex.id()));
 
@@ -229,10 +226,10 @@ impl Renderer {
         gl.bind_texture(glow::TEXTURE_2D, None);
 
         // bindgen: ImFontAtlas_SetTexID is inline
-        (*(*io).Fonts).TexID = Self::map_tex(atlas_tex.id()).id();
+        font_atlas.TexID = Self::map_tex(atlas_tex.id()).id();
 
         // We keep this, no need for imgui to hold a copy
-        ImFontAtlas_ClearTexData((*io).Fonts);
+        font_atlas.ClearTexData();
     }
     unsafe fn render(
         gl: &glow::Context,
@@ -477,8 +474,7 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::ne
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            let io = ImGui_GetIO();
-            ImFontAtlas_Clear((*io).Fonts);
+            (*self.imgui().io_mut().Fonts).Clear();
         }
     }
 }

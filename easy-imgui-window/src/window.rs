@@ -1,6 +1,6 @@
 use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
 use cgmath::Matrix3;
-use easy_imgui::{self as imgui, cgmath, mint, Vector2};
+use easy_imgui::{self as imgui, cgmath, mint, HasImGuiContext, Vector2};
 use easy_imgui_renderer::Renderer;
 use easy_imgui_sys::*;
 use glutin::{
@@ -265,9 +265,9 @@ pub struct EventResult {
 /// Corresponds to winit's `ApplicationHandler::new_events`.
 pub fn new_events(renderer: &mut Renderer, status: &mut MainWindowStatus) {
     let now = Instant::now();
-    let mut imgui = unsafe { renderer.imgui().set_current() };
-    let io = imgui.io_mut();
-    io.DeltaTime = now.duration_since(status.last_frame).as_secs_f32();
+    unsafe {
+        renderer.imgui().io_mut().DeltaTime = now.duration_since(status.last_frame).as_secs_f32();
+    }
     status.last_frame = now;
 }
 
@@ -329,24 +329,26 @@ pub fn window_event(
             let size = main_window.resize(*size);
             if !flags.contains(EventFlags::DoNotResize) {
                 main_window.ping_user_input();
-                let mut imgui = unsafe { renderer.imgui().set_current() };
-                let io = imgui.io_mut();
+                // GL surface in physical pixels, imgui in logical
                 let size = Vector2::from(mint::Vector2::from(size));
-                io.DisplaySize = imgui::v2_to_im(size);
+                unsafe {
+                    renderer.imgui().io_mut().DisplaySize = imgui::v2_to_im(size);
+                }
             }
         }
         ScaleFactorChanged { scale_factor, .. } => {
             if !flags.contains(EventFlags::DoNotResize) {
                 main_window.ping_user_input();
                 let scale_factor = main_window.set_scale_factor(*scale_factor as f32);
-                let mut imgui = unsafe { renderer.imgui().set_current() };
-                let io = imgui.io_mut();
-                // Keep the mouse in the same relative position: maybe it is wrong, but it is
-                // the best guess we can do.
-                let old_scale_factor = io.DisplayFramebufferScale.x;
-                if io.MousePos.x.is_finite() && io.MousePos.y.is_finite() {
-                    io.MousePos.x *= scale_factor / old_scale_factor;
-                    io.MousePos.y *= scale_factor / old_scale_factor;
+                unsafe {
+                    let io = renderer.imgui().io_mut();
+                    // Keep the mouse in the same relative position: maybe it is wrong, but it is
+                    // the best guess we can do.
+                    let old_scale_factor = io.DisplayFramebufferScale.x;
+                    if io.MousePos.x.is_finite() && io.MousePos.y.is_finite() {
+                        io.MousePos.x *= scale_factor / old_scale_factor;
+                        io.MousePos.y *= scale_factor / old_scale_factor;
+                    }
                 }
                 let size = renderer.size();
                 renderer.set_size(size, scale_factor);
@@ -354,18 +356,12 @@ pub fn window_event(
         }
         ModifiersChanged(mods) => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
-                ImGuiIO_AddKeyEvent(io, imgui::Key::ModCtrl.bits(), mods.state().control_key());
-                ImGuiIO_AddKeyEvent(io, imgui::Key::ModShift.bits(), mods.state().shift_key());
-                #[rustfmt::skip]
-                ImGuiIO_AddKeyEvent(
-                    io,
-                    imgui::Key::ModAlt.bits(),
-                    mods.state().alt_key(),
-                );
-                ImGuiIO_AddKeyEvent(io, imgui::Key::ModSuper.bits(), mods.state().super_key());
+                let io = renderer.imgui().io_mut();
+                io.AddKeyEvent(imgui::Key::ModCtrl.bits(), mods.state().control_key());
+                io.AddKeyEvent(imgui::Key::ModShift.bits(), mods.state().shift_key());
+                io.AddKeyEvent(imgui::Key::ModAlt.bits(), mods.state().alt_key());
+                io.AddKeyEvent(imgui::Key::ModSuper.bits(), mods.state().super_key());
             }
         }
         KeyboardInput {
@@ -382,10 +378,9 @@ pub fn window_event(
             main_window.ping_user_input();
             let pressed = *state == winit::event::ElementState::Pressed;
             if let Some(key) = to_imgui_key(*physical_key) {
-                let mut imgui = unsafe { renderer.imgui().set_current() };
                 unsafe {
-                    let io = imgui.io_mut();
-                    ImGuiIO_AddKeyEvent(io, key.bits(), pressed);
+                    let io = renderer.imgui().io_mut();
+                    io.AddKeyEvent(key.bits(), pressed);
 
                     use winit::keyboard::KeyCode::*;
                     if let PhysicalKey::Code(keycode) = physical_key {
@@ -397,18 +392,17 @@ pub fn window_event(
                             _ => None,
                         };
                         if let Some(kmod) = kmod {
-                            ImGuiIO_AddKeyEvent(io, kmod.bits(), pressed);
+                            io.AddKeyEvent(kmod.bits(), pressed);
                         }
                     }
                 }
             }
             if pressed {
                 if let Some(text) = text {
-                    let mut imgui = unsafe { renderer.imgui().set_current() };
                     unsafe {
-                        let io = imgui.io_mut();
+                        let io = renderer.imgui().io_mut();
                         for c in text.chars() {
-                            ImGuiIO_AddInputCharacter(io, c as u32);
+                            io.AddInputCharacter(c as u32);
                         }
                     }
                 }
@@ -416,22 +410,20 @@ pub fn window_event(
         }
         Ime(Commit(text)) => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
+                let io = renderer.imgui().io_mut();
                 for c in text.chars() {
-                    ImGuiIO_AddInputCharacter(io, c as u32);
+                    io.AddInputCharacter(c as u32);
                 }
             }
         }
         CursorMoved { position, .. } => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
+                let io = renderer.imgui().io_mut();
                 let position = main_window
                     .transform_position(Vector2::new(position.x as f32, position.y as f32));
-                ImGuiIO_AddMousePosEvent(io, position.x, position.y);
+                io.AddMousePosEvent(position.x, position.y);
             }
         }
         MouseWheel {
@@ -441,50 +433,47 @@ pub fn window_event(
         } => {
             main_window.ping_user_input();
             let mut imgui = unsafe { renderer.imgui().set_current() };
-            let io = imgui.io_mut();
-            let (h, v) = match delta {
-                winit::event::MouseScrollDelta::LineDelta(h, v) => (*h, *v),
-                winit::event::MouseScrollDelta::PixelDelta(d) => {
-                    let scale = io.DisplayFramebufferScale.x;
-                    let f_scale = unsafe { ImGui_GetFontSize() };
-                    let scale = scale * f_scale;
-                    (d.x as f32 / scale, d.y as f32 / scale)
-                }
-            };
             unsafe {
-                ImGuiIO_AddMouseWheelEvent(io, h, v);
+                let io = imgui.io_mut();
+                let (h, v) = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(h, v) => (*h, *v),
+                    winit::event::MouseScrollDelta::PixelDelta(d) => {
+                        let scale = io.DisplayFramebufferScale.x;
+                        let f_scale = ImGui_GetFontSize();
+                        let scale = scale * f_scale;
+                        (d.x as f32 / scale, d.y as f32 / scale)
+                    }
+                };
+                io.AddMouseWheelEvent(h, v);
             }
         }
         MouseInput { state, button, .. } => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
+                let io = renderer.imgui().io_mut();
                 if let Some(btn) = to_imgui_button(*button) {
                     let pressed = *state == winit::event::ElementState::Pressed;
-                    ImGuiIO_AddMouseButtonEvent(io, btn.bits(), pressed);
+                    io.AddMouseButtonEvent(btn.bits(), pressed);
                 }
             }
         }
         CursorLeft { .. } => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
-                ImGuiIO_AddMousePosEvent(io, f32::MAX, f32::MAX);
+                let io = renderer.imgui().io_mut();
+                io.AddMousePosEvent(f32::MAX, f32::MAX);
             }
         }
         Focused(focused) => {
             main_window.ping_user_input();
-            let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
-                ImGuiIO_AddFocusEvent(io, *focused);
+                let io = renderer.imgui().io_mut();
+                io.AddFocusEvent(*focused);
             }
         }
         _ => {}
     }
-    let imgui = unsafe { renderer.imgui().set_current() };
+    let imgui = renderer.imgui();
     EventResult {
         window_closed,
         want_capture_mouse: imgui.want_capture_mouse(),
@@ -499,27 +488,29 @@ pub fn window_event(
 /// This module depends on the `clipboard` feature. Usually this is set up automatically just by
 /// enabling the faature.
 pub mod clipboard {
-    use easy_imgui as imgui;
+    use easy_imgui::{self as imgui, HasImGuiContext};
     use std::ffi::{c_char, c_void, CStr, CString};
 
     /// Sets up the ImGui clipboard using the `arboard` crate.
-    pub fn setup(imgui: &mut imgui::CurrentContext<'_>) {
+    pub fn setup(imgui: &mut imgui::Context) {
         if let Ok(ctx) = arboard::Clipboard::new() {
             let clip = MyClipboard {
                 ctx,
                 text: CString::default(),
             };
-            let pio = imgui.platform_io_mut();
-            pio.Platform_ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
-            pio.Platform_SetClipboardTextFn = Some(set_clipboard_text);
-            pio.Platform_GetClipboardTextFn = Some(get_clipboard_text);
+            unsafe {
+                let pio = imgui.platform_io_mut();
+                pio.Platform_ClipboardUserData = Box::into_raw(Box::new(clip)) as *mut c_void;
+                pio.Platform_SetClipboardTextFn = Some(set_clipboard_text);
+                pio.Platform_GetClipboardTextFn = Some(get_clipboard_text);
+            }
         }
     }
     unsafe extern "C" fn set_clipboard_text(
-        _: *mut easy_imgui_sys::ImGuiContext,
+        imgui: *mut easy_imgui_sys::ImGuiContext,
         text: *const c_char,
     ) {
-        let user = (*easy_imgui_sys::ImGui_GetPlatformIO()).Platform_ClipboardUserData;
+        let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
         let clip = &mut *(user as *mut MyClipboard);
         if text.is_null() {
             let _ = clip.ctx.clear();
@@ -531,8 +522,10 @@ pub mod clipboard {
     }
 
     // The returned pointer should be valid for a while...
-    unsafe extern "C" fn get_clipboard_text(_: *mut easy_imgui_sys::ImGuiContext) -> *const c_char {
-        let user = (*easy_imgui_sys::ImGui_GetPlatformIO()).Platform_ClipboardUserData;
+    unsafe extern "C" fn get_clipboard_text(
+        imgui: *mut easy_imgui_sys::ImGuiContext,
+    ) -> *const c_char {
+        let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
         let clip = &mut *(user as *mut MyClipboard);
         let Ok(text) = clip.ctx.get_text() else {
             return std::ptr::null();
@@ -779,10 +772,8 @@ mod main_window {
             let size = size.to_logical::<f32>(scale);
             renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
-            let mut imgui = unsafe { renderer.imgui().set_current() };
-
             #[cfg(feature = "clipboard")]
-            clipboard::setup(&mut imgui);
+            clipboard::setup(&mut renderer.imgui());
 
             MainWindowWithRenderer {
                 main_window,

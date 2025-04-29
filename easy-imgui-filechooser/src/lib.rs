@@ -555,7 +555,7 @@ impl FileChooser {
 
         ui.text(&tr!("Search"));
         ui.same_line();
-        ui.set_next_item_width(-ui.get_frame_height() - style.ItemSpacing.x);
+        ui.set_next_item_width(-ui.get_frame_height_with_spacing() - style.ItemSpacing.x);
         if ui
             .input_text_config(lbl_id(c"", c"Search"), &mut self.search_term)
             .build()

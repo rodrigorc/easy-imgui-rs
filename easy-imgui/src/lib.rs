@@ -840,7 +840,6 @@ pub fn id<C: IntoCStr>(c: C) -> Id<CString> {
     // Converts one CString into another CString with the ### prefix.
     unsafe {
         IntoCStr::push_to_non_null_vec(c, &mut bs);
-        bs.push(0);
         Id(CString::from_vec_unchecked(bs))
     }
 }
@@ -884,7 +883,6 @@ pub fn lbl_id<C1: IntoCStr, C2: IntoCStr>(lbl: C1, id: C2) -> LblId<CString> {
         // We add one NUL at the end, so all is good.
         unsafe {
             IntoCStr::push_to_non_null_vec(id, &mut bs);
-            bs.push(0);
             CString::from_vec_unchecked(bs)
         }
     };

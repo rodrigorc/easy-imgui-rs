@@ -5,7 +5,7 @@
  * proper place.
  */
 use bytesize::ByteSize;
-use easy_imgui::{self as imgui, id, lbl, lbl_id, CustomRectIndex};
+use easy_imgui::{self as imgui, id, lbl, lbl_id, CustomRectIndex, HasImGuiContext};
 pub use glob::{self, Pattern};
 use image::DynamicImage;
 use std::io::Result;

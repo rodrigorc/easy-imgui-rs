@@ -1,20 +1,14 @@
 use super::*;
 
-impl CurrentContext<'_> {
-    pub fn style(&mut self) -> &mut Style {
-        unsafe {
-            let ptr = ImGui_GetStyle();
-            &mut *(ptr as *mut Style)
-        }
+impl Context {
+    pub fn style_mut(&mut self) -> &mut Style {
+        unsafe { &mut *(&raw mut (*self.imgui()).Style).cast() }
     }
 }
 
-impl<A> Ui<A> {
-    pub fn style(&self) -> &Style {
-        unsafe {
-            let ptr = ImGui_GetStyle();
-            &*(ptr as *const Style)
-        }
+impl CurrentContext<'_> {
+    pub fn style_mut(&mut self) -> &mut Style {
+        unsafe { &mut *(&raw mut (*self.imgui()).Style).cast() }
     }
 }
 

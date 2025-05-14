@@ -231,7 +231,8 @@ pub const fn im_vec2(x: f32, y: f32) -> ImVec2 {
     ImVec2 { x, y }
 }
 /// Helper function to create a `ImVec2`.
-pub const fn v2_to_im(v: Vector2) -> ImVec2 {
+pub fn v2_to_im(v: impl Into<Vector2>) -> ImVec2 {
+    let v = v.into();
     ImVec2 { x: v.x, y: v.y }
 }
 /// Helper function to create a `Vector2`.
@@ -396,15 +397,19 @@ impl CurrentContext<'_> {
 
         let scale = self.display_scale();
         let mut atlas = FontAtlasMut {
-            ptr: FontAtlasPtr { ptr: fonts },
+            ptr: FontAtlasPtr {
+                ptr: fonts,
+                _pd: PhantomData,
+            },
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
+            _pd: PhantomData,
         };
         app.build_custom_atlas(&mut atlas);
         // If the app did not create any font, create a default one here.
         // ImGui will do it by itself, but that would not be properly scaled if scale != 1.0
-        if atlas.ptr.ptr.Fonts.is_empty() {
+        if (*atlas.ptr.ptr).Fonts.is_empty() {
             atlas.add_font(FontInfo::default_font(13.0));
         }
         atlas.build_custom_rects(app);
@@ -494,6 +499,19 @@ pub trait HasImGuiContext {
     #[inline]
     unsafe fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
         unsafe { &mut (*self.imgui()).PlatformIO }
+    }
+
+    fn font_atlas(&self) -> FontAtlas<'_> {
+        FontAtlas {
+            ptr: FontAtlasPtr {
+                ptr: self.io().Fonts,
+                _pd: PhantomData,
+            },
+        }
+    }
+
+    fn style(&self) -> &style::Style {
+        unsafe { &*(&raw const (*self.imgui()).Style).cast() }
     }
 
     fn set_allow_user_scaling(&mut self, val: bool) {
@@ -3116,16 +3134,6 @@ impl<A> Ui<A> {
         unsafe { ImGui_IsWindowAppearing() }
     }
 
-    pub fn font_atlas(&self) -> FontAtlas<'_> {
-        unsafe {
-            FontAtlas {
-                ptr: FontAtlasPtr {
-                    ptr: &mut *self.io().Fonts,
-                },
-            }
-        }
-    }
-
     pub fn with_always_drag_drop_source<R>(
         &self,
         flags: DragDropSourceFlags,
@@ -3362,7 +3370,8 @@ impl Default for CustomRectIndex {
 
 #[derive(Debug)]
 pub struct FontAtlasPtr<'ui> {
-    ptr: &'ui mut ImFontAtlas,
+    ptr: *mut ImFontAtlas,
+    _pd: PhantomData<&'ui ImFontAtlas>,
 }
 
 type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
@@ -3376,6 +3385,7 @@ pub struct FontAtlasMut<'ui, A: ?Sized> {
     // glyph_ranges pointers have to live until the atlas texture is built
     glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
     custom_rects: Vec<Option<FuncCustomRect<A>>>,
+    _pd: PhantomData<&'ui mut ImFontAtlas>,
 }
 
 /// A reference to the font altas that is to be built.
@@ -3425,7 +3435,7 @@ impl<A> FontAtlasMut<'_, A> {
             };
             match font.ttf {
                 TtfData::Bytes(bytes) => {
-                    self.ptr.ptr.AddFontFromMemoryTTF(
+                    (*self.ptr.ptr).AddFontFromMemoryTTF(
                         bytes.as_ptr() as *mut _,
                         bytes.len() as i32,
                         font.size * self.scale,
@@ -3435,10 +3445,10 @@ impl<A> FontAtlasMut<'_, A> {
                 }
                 TtfData::DefaultFont => {
                     fc.SizePixels = font.size * self.scale;
-                    self.ptr.ptr.AddFontDefault(&fc);
+                    (*self.ptr.ptr).AddFontDefault(&fc);
                 }
             }
-            FontId(self.ptr.ptr.Fonts.len() - 1)
+            FontId((*self.ptr.ptr).Fonts.len() - 1)
         }
     }
     /// Adds an image as a substitution for a character in a font.
@@ -3454,7 +3464,7 @@ impl<A> FontAtlasMut<'_, A> {
         let size = size.into();
         unsafe {
             let font = font_ptr(font);
-            let idx = self.ptr.ptr.AddCustomRectFontGlyph(
+            let idx = (*self.ptr.ptr).AddCustomRectFontGlyph(
                 font,
                 id as ImWchar,
                 i32::try_from(size.x).unwrap(),
@@ -3476,7 +3486,7 @@ impl<A> FontAtlasMut<'_, A> {
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
-            let idx = self.ptr.ptr.AddCustomRectRegular(
+            let idx = (*self.ptr.ptr).AddCustomRectRegular(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
             );
@@ -3496,7 +3506,7 @@ impl<A> FontAtlasMut<'_, A> {
         let mut tex_height = 0;
         let mut pixel_size = 0;
         unsafe {
-            self.ptr.ptr.GetTexDataAsRGBA32(
+            (*self.ptr.ptr).GetTexDataAsRGBA32(
                 &mut tex_data,
                 &mut tex_width,
                 &mut tex_height,
@@ -3516,7 +3526,7 @@ impl<A> FontAtlasMut<'_, A> {
 
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
-                let rect = self.ptr.ptr.CustomRects[idx];
+                let rect = (*self.ptr.ptr).CustomRects[idx];
                 let mut sub_image = pixel_image.sub_image(
                     rect.X as u32,
                     rect.Y as u32,
@@ -3549,13 +3559,13 @@ impl<'ui> Deref for FontAtlas<'ui> {
 
 impl FontAtlasPtr<'_> {
     pub fn texture_id(&self) -> TextureId {
-        unsafe { TextureId::from_id(self.ptr.TexID) }
+        unsafe { TextureId::from_id((*self.ptr).TexID) }
     }
     pub fn texture_size(&self) -> [i32; 2] {
-        [self.ptr.TexWidth, self.ptr.TexHeight]
+        unsafe { [(*self.ptr).TexWidth, (*self.ptr).TexHeight] }
     }
     pub fn get_custom_rect(&self, index: CustomRectIndex) -> ImFontAtlasCustomRect {
-        self.ptr.CustomRects[index.0 as usize]
+        unsafe { (*self.ptr).CustomRects[index.0 as usize] }
     }
 }
 

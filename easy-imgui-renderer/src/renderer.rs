@@ -49,10 +49,11 @@ impl Renderer {
 
         unsafe {
             if !cfg!(target_arch = "wasm32") {
-                imgui.io_mut().BackendFlags |= (imgui::BackendFlags::HasMouseCursors
-                    | imgui::BackendFlags::HasSetMousePos
-                    | imgui::BackendFlags::RendererHasVtxOffset)
-                    .bits();
+                imgui.io_mut().inner().add_backend_flags(
+                    imgui::BackendFlags::HasMouseCursors
+                        | imgui::BackendFlags::HasSetMousePos
+                        | imgui::BackendFlags::RendererHasVtxOffset,
+                );
             }
 
             atlas = glr::Texture::generate(&gl)?;
@@ -139,7 +140,7 @@ impl Renderer {
     }
     /// Gets the UI size, in logical units.
     pub fn size(&mut self) -> Vector2 {
-        self.imgui.display_size()
+        self.imgui.io().display_size()
     }
     /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
@@ -147,10 +148,14 @@ impl Renderer {
             let mut imgui = self.imgui.set_current();
 
             if imgui.update_atlas(app) {
-                Self::update_atlas(&mut *imgui.io_mut().Fonts, &self.gl, &self.objs.atlas);
+                Self::update_atlas(
+                    imgui.io_mut().inner().font_atlas_mut(),
+                    &self.gl,
+                    &self.objs.atlas,
+                );
             }
-            let display_size = imgui.display_size();
-            let scale = imgui.display_scale();
+            let display_size = imgui.io().display_size();
+            let scale = imgui.io().display_scale();
 
             imgui.do_frame(
                 app,
@@ -474,7 +479,7 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::ne
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            (*self.imgui().io_mut().Fonts).Clear();
+            self.imgui().io_mut().inner().font_atlas_mut().Clear();
         }
     }
 }

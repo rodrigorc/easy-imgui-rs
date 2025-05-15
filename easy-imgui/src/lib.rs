@@ -172,8 +172,72 @@ use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::ptr::{null, null_mut};
+use std::time::Duration;
+
+// Adds `repr(transparent)` and basic conversions
+macro_rules! transparent_options {
+    ( $($options:ident)* ; $(#[$attr:meta])* $vis:vis struct $outer:ident ( $inner:ident); ) => {
+        $(#[$attr])*
+        #[repr(transparent)]
+        $vis struct $outer($inner);
+
+        $( transparent_options! { @OPTS $options $outer $inner } )*
+
+        impl $outer {
+            pub fn cast(r: &$inner) -> &$outer {
+                unsafe { &*<*const $inner>::cast(r) }
+            }
+            pub fn cast_mut(r: &mut $inner) -> &mut $outer {
+                unsafe { &mut *<*mut $inner>::cast(r) }
+            }
+        }
+    };
+
+    ( @OPTS Deref $outer:ident $inner:ident) => {
+        impl Deref for $outer {
+            type Target = $inner;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl $outer {
+            pub fn get(&self) -> &$inner {
+                &self.0
+            }
+        }
+    };
+
+    ( @OPTS DerefMut $outer:ident $inner:ident) => {
+        impl DerefMut for $outer {
+            fn deref_mut(&mut self) -> &mut $inner {
+                &mut self.0
+            }
+        }
+        impl $outer {
+            pub fn get_mut(&mut self) -> &mut $inner {
+                &mut self.0
+            }
+        }
+
+    };
+}
+
+// This adds a Defer<Target $inner>.
+macro_rules! transparent {
+    ( $($tt:tt)* ) => {
+         transparent_options! { Deref ; $($tt)* }
+    };
+}
+
+// This adds a DerefMut in addition to the Defer<Target $inner>.
+macro_rules! transparent_mut {
+    ( $($tt:tt)* ) => {
+         transparent_options! { Deref DerefMut ; $($tt)* }
+    };
+}
 
 /// A type alias of the `cgmath::Vector2<f32>`.
 ///
@@ -321,23 +385,23 @@ impl Context {
                 pending_atlas: true,
                 ini_file_name: None,
             };
-            ctx.io_mut().IniFilename = null();
+            ctx.io_mut().inner().IniFilename = null();
 
             // If you eanbled the "docking" feature you will want to use it
             #[cfg(feature = "docking")]
             {
                 ctx.add_config_flags(ConfigFlags::DockingEnable);
             }
-            ctx.io_mut().ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
+            ctx.io_mut().inner().ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
             ctx
         }
     }
 
     pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
-        self.io_mut().DisplaySize = v2_to_im(size);
-        if self.display_scale() != scale {
-            self.io_mut().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
-            self.io_mut().FontGlobalScale = scale.recip();
+        self.io_mut().inner().DisplaySize = v2_to_im(size);
+        if self.io().display_scale() != scale {
+            self.io_mut().inner().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+            self.io_mut().inner().FontGlobalScale = scale.recip();
             self.invalidate_font_atlas();
         }
     }
@@ -391,25 +455,21 @@ impl CurrentContext<'_> {
         if !std::mem::take(&mut self.ctx.pending_atlas) {
             return false;
         }
-        let fonts = &mut *self.io_mut().Fonts;
+        let scale = self.io().display_scale();
+        let fonts = self.io_mut().inner().font_atlas_mut();
         fonts.Clear();
         fonts.TexPixelsUseColors = true;
 
-        let scale = self.display_scale();
         let mut atlas = FontAtlasMut {
-            ptr: FontAtlasPtr {
-                ptr: fonts,
-                _pd: PhantomData,
-            },
+            ptr: fonts,
             scale,
             glyph_ranges: Vec::new(),
             custom_rects: Vec::new(),
-            _pd: PhantomData,
         };
         app.build_custom_atlas(&mut atlas);
         // If the app did not create any font, create a default one here.
         // ImGui will do it by itself, but that would not be properly scaled if scale != 1.0
-        if (*atlas.ptr.ptr).Fonts.is_empty() {
+        if atlas.ptr.0.Fonts.is_empty() {
             atlas.add_font(FontInfo::default_font(13.0));
         }
         atlas.build_custom_rects(app);
@@ -434,7 +494,7 @@ impl CurrentContext<'_> {
             pending_atlas: Cell::new(false),
         };
 
-        self.io_mut().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
+        self.io_mut().inner().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
         let ctx_guard = UiPtrToNullGuard(self.ctx);
 
         // This guards for panics during the frame.
@@ -464,7 +524,8 @@ impl CurrentContext<'_> {
 
         // This is the same pointer, but without it, there is something fishy about stacked borrows
         // and the mutable access to `ui` above.
-        ctx_guard.0.io_mut().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
+        ctx_guard.0.io_mut().inner().BackendLanguageUserData =
+            (&raw const ui).cast::<c_void>().cast_mut();
 
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
@@ -485,78 +546,27 @@ pub trait HasImGuiContext {
     fn imgui(&self) -> *mut ImGuiContext;
 
     #[inline]
-    fn io(&self) -> &ImGuiIO {
-        unsafe { &(*self.imgui()).IO }
+    fn io(&self) -> &Io {
+        unsafe { Io::cast(&(*self.imgui()).IO) }
+    }
+    /// This returns a safe mutable wrapper for the IO.
+    ///
+    /// Use `io_mut().inner()` to get the unsafe wrapper
+    #[inline]
+    fn io_mut(&mut self) -> &mut IoMut {
+        unsafe { IoMut::cast_mut(&mut (*self.imgui()).IO) }
     }
     #[inline]
-    unsafe fn io_mut(&mut self) -> &mut ImGuiIO {
-        unsafe { &mut (*self.imgui()).IO }
+    fn platform_io(&self) -> &PlatformIo {
+        unsafe { PlatformIo::cast(&(*self.imgui()).PlatformIO) }
     }
     #[inline]
-    fn platform_io(&self) -> &ImGuiPlatformIO {
-        unsafe { &(*self.imgui()).PlatformIO }
-    }
-    #[inline]
-    unsafe fn platform_io_mut(&mut self) -> &mut ImGuiPlatformIO {
-        unsafe { &mut (*self.imgui()).PlatformIO }
-    }
-
-    fn font_atlas(&self) -> FontAtlas<'_> {
-        FontAtlas {
-            ptr: FontAtlasPtr {
-                ptr: self.io().Fonts,
-                _pd: PhantomData,
-            },
-        }
+    unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
+        unsafe { PlatformIo::cast_mut(&mut (*self.imgui()).PlatformIO) }
     }
 
     fn style(&self) -> &style::Style {
-        unsafe { &*(&raw const (*self.imgui()).Style).cast() }
-    }
-
-    fn set_allow_user_scaling(&mut self, val: bool) {
-        unsafe {
-            self.io_mut().FontAllowUserScaling = val;
-        }
-    }
-    fn want_capture_mouse(&self) -> bool {
-        self.io().WantCaptureMouse
-    }
-    fn want_capture_keyboard(&self) -> bool {
-        self.io().WantCaptureKeyboard
-    }
-    fn want_text_input(&self) -> bool {
-        self.io().WantTextInput
-    }
-
-    // This is unsafe because you could break thing setting weird flags
-    // If possible use the safe wrappers below
-    unsafe fn add_config_flags(&mut self, flags: ConfigFlags) {
-        unsafe {
-            self.io_mut().ConfigFlags |= flags.bits();
-        }
-    }
-    unsafe fn remove_config_flags(&mut self, flags: ConfigFlags) {
-        unsafe {
-            self.io_mut().ConfigFlags &= !flags.bits();
-        }
-    }
-    fn nav_enable_keyboard(&mut self) {
-        unsafe {
-            self.add_config_flags(ConfigFlags::NavEnableKeyboard);
-        }
-    }
-    fn nav_enable_gamepad(&mut self) {
-        unsafe {
-            self.add_config_flags(ConfigFlags::NavEnableGamepad);
-        }
-    }
-
-    fn display_size(&self) -> Vector2 {
-        im_to_v2(self.io().DisplaySize)
-    }
-    fn display_scale(&self) -> f32 {
-        self.io().DisplayFramebufferScale.x
+        unsafe { style::Style::cast(&(*self.imgui()).Style) }
     }
 }
 
@@ -612,7 +622,7 @@ struct UiPtrToNullGuard<'a>(&'a mut Context);
 impl Drop for UiPtrToNullGuard<'_> {
     fn drop(&mut self) {
         unsafe {
-            self.0.io_mut().BackendLanguageUserData = null_mut();
+            self.0.io_mut().inner().BackendLanguageUserData = null_mut();
         }
     }
 }
@@ -1397,7 +1407,7 @@ decl_builder! { Image -> (), ImGui_Image () ()
             }
         }
         pub fn image_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> Image {
-            let atlas = self.font_atlas();
+            let atlas = self.io().font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
             let tex_size = atlas.texture_size();
@@ -1442,7 +1452,7 @@ decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg () ()
             }
         }
         pub fn image_wth_bg_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> ImageWithBg {
-            let atlas = self.font_atlas();
+            let atlas = self.io().font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
             let tex_size = atlas.texture_size();
@@ -1489,7 +1499,7 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton () (S: IntoCStr)
             }
         }
         pub fn image_button_with_custom_rect_config<S: IntoCStr>(&self, str_id: Id<S>, ridx: CustomRectIndex, scale: f32) -> ImageButton<S> {
-            let atlas = self.font_atlas();
+            let atlas = self.io().font_atlas();
             let rect = atlas.get_custom_rect(ridx);
             let tex_id = atlas.texture_id();
             let tex_size = atlas.texture_size();
@@ -3368,10 +3378,9 @@ impl Default for CustomRectIndex {
     }
 }
 
-#[derive(Debug)]
-pub struct FontAtlasPtr<'ui> {
-    ptr: *mut ImFontAtlas,
-    _pd: PhantomData<&'ui ImFontAtlas>,
+transparent_mut! {
+    #[derive(Debug)]
+    pub struct FontAtlas(ImFontAtlas);
 }
 
 type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
@@ -3379,13 +3388,15 @@ type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
 
 type FuncCustomRect<A> = Box<dyn FnOnce(&mut A, &mut SubPixelImage<'_, '_>)>;
 
+/// This is just like `&mut FontAtlas` but with additional info.
+///
+/// To build glyph_ranges and custom_rects.
 pub struct FontAtlasMut<'ui, A: ?Sized> {
-    ptr: FontAtlasPtr<'ui>,
+    ptr: &'ui mut FontAtlas,
     scale: f32,
     // glyph_ranges pointers have to live until the atlas texture is built
     glyph_ranges: Vec<Vec<[ImWchar; 2]>>,
     custom_rects: Vec<Option<FuncCustomRect<A>>>,
-    _pd: PhantomData<&'ui mut ImFontAtlas>,
 }
 
 /// A reference to the font altas that is to be built.
@@ -3435,7 +3446,7 @@ impl<A> FontAtlasMut<'_, A> {
             };
             match font.ttf {
                 TtfData::Bytes(bytes) => {
-                    (*self.ptr.ptr).AddFontFromMemoryTTF(
+                    self.ptr.AddFontFromMemoryTTF(
                         bytes.as_ptr() as *mut _,
                         bytes.len() as i32,
                         font.size * self.scale,
@@ -3445,10 +3456,10 @@ impl<A> FontAtlasMut<'_, A> {
                 }
                 TtfData::DefaultFont => {
                     fc.SizePixels = font.size * self.scale;
-                    (*self.ptr.ptr).AddFontDefault(&fc);
+                    self.ptr.AddFontDefault(&fc);
                 }
             }
-            FontId((*self.ptr.ptr).Fonts.len() - 1)
+            FontId(self.ptr.Fonts.len() - 1)
         }
     }
     /// Adds an image as a substitution for a character in a font.
@@ -3464,7 +3475,7 @@ impl<A> FontAtlasMut<'_, A> {
         let size = size.into();
         unsafe {
             let font = font_ptr(font);
-            let idx = (*self.ptr.ptr).AddCustomRectFontGlyph(
+            let idx = self.ptr.AddCustomRectFontGlyph(
                 font,
                 id as ImWchar,
                 i32::try_from(size.x).unwrap(),
@@ -3486,7 +3497,7 @@ impl<A> FontAtlasMut<'_, A> {
     ) -> CustomRectIndex {
         let size = size.into();
         unsafe {
-            let idx = (*self.ptr.ptr).AddCustomRectRegular(
+            let idx = self.ptr.AddCustomRectRegular(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
             );
@@ -3506,7 +3517,7 @@ impl<A> FontAtlasMut<'_, A> {
         let mut tex_height = 0;
         let mut pixel_size = 0;
         unsafe {
-            (*self.ptr.ptr).GetTexDataAsRGBA32(
+            self.ptr.GetTexDataAsRGBA32(
                 &mut tex_data,
                 &mut tex_width,
                 &mut tex_height,
@@ -3526,7 +3537,7 @@ impl<A> FontAtlasMut<'_, A> {
 
         for (idx, f) in self.custom_rects.into_iter().enumerate() {
             if let Some(f) = f {
-                let rect = (*self.ptr.ptr).CustomRects[idx];
+                let rect = self.ptr.CustomRects[idx];
                 let mut sub_image = pixel_image.sub_image(
                     rect.X as u32,
                     rect.Y as u32,
@@ -3539,34 +3550,99 @@ impl<A> FontAtlasMut<'_, A> {
     }
 }
 
-impl<'ui, A> Deref for FontAtlasMut<'ui, A> {
-    type Target = FontAtlasPtr<'ui>;
-    fn deref(&self) -> &FontAtlasPtr<'ui> {
-        &self.ptr
-    }
-}
-
-pub struct FontAtlas<'ui> {
-    ptr: FontAtlasPtr<'ui>,
-}
-
-impl<'ui> Deref for FontAtlas<'ui> {
-    type Target = FontAtlasPtr<'ui>;
-    fn deref(&self) -> &FontAtlasPtr<'ui> {
-        &self.ptr
-    }
-}
-
-impl FontAtlasPtr<'_> {
+impl FontAtlas {
     pub fn texture_id(&self) -> TextureId {
-        unsafe { TextureId::from_id((*self.ptr).TexID) }
+        unsafe { TextureId::from_id(self.TexID) }
     }
     pub fn texture_size(&self) -> [i32; 2] {
-        unsafe { [(*self.ptr).TexWidth, (*self.ptr).TexHeight] }
+        [self.TexWidth, self.TexHeight]
     }
     pub fn get_custom_rect(&self, index: CustomRectIndex) -> ImFontAtlasCustomRect {
-        unsafe { (*self.ptr).CustomRects[index.0 as usize] }
+        self.CustomRects[index.0 as usize]
     }
+}
+
+transparent_mut! {
+    #[derive(Debug)]
+    pub struct Io(ImGuiIO);
+}
+
+transparent! {
+    /// Safe wrapper for `&mut Io`.
+    ///
+    /// Notably it doesn't implement DerefMut
+    #[derive(Debug)]
+    pub struct IoMut(ImGuiIO);
+}
+
+impl Io {
+    pub fn font_atlas(&self) -> &FontAtlas {
+        unsafe { FontAtlas::cast(&*self.Fonts) }
+    }
+
+    pub fn want_capture_mouse(&self) -> bool {
+        self.WantCaptureMouse
+    }
+    pub fn want_capture_keyboard(&self) -> bool {
+        self.WantCaptureKeyboard
+    }
+    pub fn want_text_input(&self) -> bool {
+        self.WantTextInput
+    }
+    pub fn display_size(&self) -> Vector2 {
+        im_to_v2(self.DisplaySize)
+    }
+    pub fn display_scale(&self) -> f32 {
+        self.DisplayFramebufferScale.x
+    }
+
+    // The following are not unsafe because if you have a `&mut Io` you alreay can do anything.
+    pub fn font_atlas_mut(&mut self) -> &mut FontAtlas {
+        unsafe { FontAtlas::cast_mut(&mut *self.Fonts) }
+    }
+    pub fn add_config_flags(&mut self, flags: ConfigFlags) {
+        self.ConfigFlags |= flags.bits();
+    }
+    pub fn remove_config_flags(&mut self, flags: ConfigFlags) {
+        self.ConfigFlags &= !flags.bits();
+    }
+    pub fn add_backend_flags(&mut self, flags: BackendFlags) {
+        self.BackendFlags |= flags.bits();
+    }
+    pub fn remove_backend_flags(&mut self, flags: BackendFlags) {
+        self.BackendFlags &= !flags.bits();
+    }
+    pub fn delta_time(&mut self) -> Duration {
+        Duration::from_secs_f32(self.DeltaTime)
+    }
+    pub fn set_delta_time(&mut self, d: Duration) {
+        self.DeltaTime = d.as_secs_f32()
+    }
+}
+
+impl IoMut {
+    pub unsafe fn inner(&mut self) -> &mut Io {
+        Io::cast_mut(&mut self.0)
+    }
+    pub fn set_allow_user_scaling(&mut self, val: bool) {
+        self.0.FontAllowUserScaling = val;
+    }
+    pub fn nav_enable_keyboard(&mut self) {
+        unsafe {
+            self.inner()
+                .add_config_flags(ConfigFlags::NavEnableKeyboard);
+        }
+    }
+    pub fn nav_enable_gamepad(&mut self) {
+        unsafe {
+            self.inner().add_config_flags(ConfigFlags::NavEnableGamepad);
+        }
+    }
+}
+
+transparent_mut! {
+    #[derive(Debug)]
+    pub struct PlatformIo(ImGuiPlatformIO);
 }
 
 #[derive(Debug)]

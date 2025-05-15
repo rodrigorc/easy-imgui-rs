@@ -26,7 +26,11 @@ impl Application for App {
     type Data = ();
 
     fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
-        args.window.renderer().imgui().set_allow_user_scaling(true);
+        args.window
+            .renderer()
+            .imgui()
+            .io_mut()
+            .set_allow_user_scaling(true);
         let mut of = filechooser::FileChooser::new();
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
         of.add_filter(filechooser::Filter {

@@ -661,7 +661,7 @@ impl FileChooser {
                     if let Some(rr) = icon_rr {
                         let avail = ui.get_content_region_avail();
                         let scale = ui.get_font_size() / 16.0;
-                        let img_w = ui.font_atlas().get_custom_rect(rr).Width as f32;
+                        let img_w = ui.io().font_atlas().get_custom_rect(rr).Width as f32;
                         ui.set_cursor_pos_x(
                             ui.get_cursor_pos_x() + (avail.x - scale * img_w) / 2.0,
                         );

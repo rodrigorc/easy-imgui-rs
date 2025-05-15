@@ -36,6 +36,7 @@ struct IdleTask {
     //Actually the inner future is not Send, but IdleTask is private to this module, so if
     //we are careful we can move it between threads, as long as we only use the future in the
     //main thread.
+    #[allow(clippy::type_complexity)]
     future: Cell<Option<SendWrapper<Pin<Box<dyn Future<Output = ()> + 'static>>>>>,
 }
 

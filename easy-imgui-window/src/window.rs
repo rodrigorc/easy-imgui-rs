@@ -266,7 +266,11 @@ pub struct EventResult {
 pub fn new_events(renderer: &mut Renderer, status: &mut MainWindowStatus) {
     let now = Instant::now();
     unsafe {
-        renderer.imgui().io_mut().DeltaTime = now.duration_since(status.last_frame).as_secs_f32();
+        renderer
+            .imgui()
+            .io_mut()
+            .inner()
+            .set_delta_time(now.duration_since(status.last_frame));
     }
     status.last_frame = now;
 }
@@ -332,7 +336,7 @@ pub fn window_event(
                 // GL surface in physical pixels, imgui in logical
                 let size = Vector2::from(mint::Vector2::from(size));
                 unsafe {
-                    renderer.imgui().io_mut().DisplaySize = imgui::v2_to_im(size);
+                    renderer.imgui().io_mut().inner().DisplaySize = imgui::v2_to_im(size);
                 }
             }
         }
@@ -341,7 +345,7 @@ pub fn window_event(
                 main_window.ping_user_input();
                 let scale_factor = main_window.set_scale_factor(*scale_factor as f32);
                 unsafe {
-                    let io = renderer.imgui().io_mut();
+                    let io = renderer.imgui().io_mut().inner();
                     // Keep the mouse in the same relative position: maybe it is wrong, but it is
                     // the best guess we can do.
                     let old_scale_factor = io.DisplayFramebufferScale.x;
@@ -357,7 +361,7 @@ pub fn window_event(
         ModifiersChanged(mods) => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 io.AddKeyEvent(imgui::Key::ModCtrl.bits(), mods.state().control_key());
                 io.AddKeyEvent(imgui::Key::ModShift.bits(), mods.state().shift_key());
                 io.AddKeyEvent(imgui::Key::ModAlt.bits(), mods.state().alt_key());
@@ -379,7 +383,7 @@ pub fn window_event(
             let pressed = *state == winit::event::ElementState::Pressed;
             if let Some(key) = to_imgui_key(*physical_key) {
                 unsafe {
-                    let io = renderer.imgui().io_mut();
+                    let io = renderer.imgui().io_mut().inner();
                     io.AddKeyEvent(key.bits(), pressed);
 
                     use winit::keyboard::KeyCode::*;
@@ -400,7 +404,7 @@ pub fn window_event(
             if pressed {
                 if let Some(text) = text {
                     unsafe {
-                        let io = renderer.imgui().io_mut();
+                        let io = renderer.imgui().io_mut().inner();
                         for c in text.chars() {
                             io.AddInputCharacter(c as u32);
                         }
@@ -411,7 +415,7 @@ pub fn window_event(
         Ime(Commit(text)) => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 for c in text.chars() {
                     io.AddInputCharacter(c as u32);
                 }
@@ -420,7 +424,7 @@ pub fn window_event(
         CursorMoved { position, .. } => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 let position = main_window
                     .transform_position(Vector2::new(position.x as f32, position.y as f32));
                 io.AddMousePosEvent(position.x, position.y);
@@ -434,7 +438,7 @@ pub fn window_event(
             main_window.ping_user_input();
             let mut imgui = unsafe { renderer.imgui().set_current() };
             unsafe {
-                let io = imgui.io_mut();
+                let io = imgui.io_mut().inner();
                 let (h, v) = match delta {
                     winit::event::MouseScrollDelta::LineDelta(h, v) => (*h, *v),
                     winit::event::MouseScrollDelta::PixelDelta(d) => {
@@ -450,7 +454,7 @@ pub fn window_event(
         MouseInput { state, button, .. } => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 if let Some(btn) = to_imgui_button(*button) {
                     let pressed = *state == winit::event::ElementState::Pressed;
                     io.AddMouseButtonEvent(btn.bits(), pressed);
@@ -460,14 +464,14 @@ pub fn window_event(
         CursorLeft { .. } => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 io.AddMousePosEvent(f32::MAX, f32::MAX);
             }
         }
         Focused(focused) => {
             main_window.ping_user_input();
             unsafe {
-                let io = renderer.imgui().io_mut();
+                let io = renderer.imgui().io_mut().inner();
                 io.AddFocusEvent(*focused);
             }
         }
@@ -476,9 +480,9 @@ pub fn window_event(
     let imgui = renderer.imgui();
     EventResult {
         window_closed,
-        want_capture_mouse: imgui.want_capture_mouse(),
-        want_capture_keyboard: imgui.want_capture_keyboard(),
-        want_text_input: imgui.want_text_input(),
+        want_capture_mouse: imgui.io().want_capture_mouse(),
+        want_capture_keyboard: imgui.io().want_capture_keyboard(),
+        want_text_input: imgui.io().want_text_input(),
     }
 }
 
@@ -773,7 +777,7 @@ mod main_window {
             renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
             #[cfg(feature = "clipboard")]
-            clipboard::setup(&mut renderer.imgui());
+            clipboard::setup(renderer.imgui());
 
             MainWindowWithRenderer {
                 main_window,

@@ -542,36 +542,38 @@ impl Drop for Context {
     }
 }
 
-pub trait HasImGuiContext {
-    fn imgui(&self) -> *mut ImGuiContext;
-
-    #[inline]
-    fn io(&self) -> &Io {
-        unsafe { Io::cast(&(*self.imgui()).IO) }
-    }
-    /// This returns a safe mutable wrapper for the IO.
-    ///
-    /// Use `io_mut().inner()` to get the unsafe wrapper
-    #[inline]
-    fn io_mut(&mut self) -> &mut IoMut {
-        unsafe { IoMut::cast_mut(&mut (*self.imgui()).IO) }
-    }
-    #[inline]
-    fn platform_io(&self) -> &PlatformIo {
-        unsafe { PlatformIo::cast(&(*self.imgui()).PlatformIO) }
-    }
-    #[inline]
-    unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
-        unsafe { PlatformIo::cast_mut(&mut (*self.imgui()).PlatformIO) }
-    }
-
-    fn style(&self) -> &style::Style {
-        unsafe { style::Style::cast(&(*self.imgui()).Style) }
-    }
+// This macro adds common functions to any type that contains a `*mut ImGuiContext`.
+// It assumes an existing: fn imgui(&self) -> *mut ImGuiContext;
+macro_rules! implement_imgui_context {
+    () => {
+        #[inline]
+        pub fn io(&self) -> &Io {
+            unsafe { Io::cast(&(*self.imgui()).IO) }
+        }
+        /// This returns a safe mutable wrapper for the IO.
+        ///
+        /// Use `io_mut().inner()` to get the unsafe wrapper
+        #[inline]
+        pub fn io_mut(&mut self) -> &mut IoMut {
+            unsafe { IoMut::cast_mut(&mut (*self.imgui()).IO) }
+        }
+        #[inline]
+        pub fn platform_io(&self) -> &PlatformIo {
+            unsafe { PlatformIo::cast(&(*self.imgui()).PlatformIO) }
+        }
+        #[inline]
+        pub unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
+            unsafe { PlatformIo::cast_mut(&mut (*self.imgui()).PlatformIO) }
+        }
+        #[inline]
+        pub fn style(&self) -> &style::Style {
+            unsafe { style::Style::cast(&(*self.imgui()).Style) }
+        }
+    };
 }
 
-// Private newtype to implement HasImGuiContext for a raw pointer.
-// Implementing `HasImGuiContext for *mut ImGuiContext` directly would be terribly unsafe.
+// Private newtype to do `implement_imgui_context!`` for a raw pointer.
+// Implementing it for *mut ImGuiContext` directly would be terribly unsafe.
 
 mod imgui_ptr_impl {
     use super::{ImGuiContext, ImGui_GetCurrentContext};
@@ -593,28 +595,32 @@ mod imgui_ptr_impl {
 
 pub use imgui_ptr_impl::ImGuiPtr;
 
-impl HasImGuiContext for ImGuiPtr {
+impl ImGuiPtr {
     fn imgui(&self) -> *mut ImGuiContext {
         self.as_raw()
     }
+    implement_imgui_context! {}
 }
 
-impl HasImGuiContext for Context {
+impl Context {
     fn imgui(&self) -> *mut ImGuiContext {
         self.imgui
     }
+    implement_imgui_context! {}
 }
 
-impl HasImGuiContext for CurrentContext<'_> {
+impl CurrentContext<'_> {
     fn imgui(&self) -> *mut ImGuiContext {
         self.ctx.imgui()
     }
+    implement_imgui_context! {}
 }
 
-impl<A> HasImGuiContext for Ui<A> {
+impl<A> Ui<A> {
     fn imgui(&self) -> *mut ImGuiContext {
         self.imgui
     }
+    implement_imgui_context! {}
 }
 
 struct UiPtrToNullGuard<'a>(&'a mut Context);

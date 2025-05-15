@@ -1,6 +1,6 @@
 use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
 use cgmath::Matrix3;
-use easy_imgui::{self as imgui, cgmath, mint, HasImGuiContext, Vector2};
+use easy_imgui::{self as imgui, cgmath, mint, Vector2};
 use easy_imgui_renderer::Renderer;
 use easy_imgui_sys::*;
 use glutin::{
@@ -492,7 +492,7 @@ pub fn window_event(
 /// This module depends on the `clipboard` feature. Usually this is set up automatically just by
 /// enabling the faature.
 pub mod clipboard {
-    use easy_imgui::{self as imgui, HasImGuiContext};
+    use easy_imgui::{self as imgui};
     use std::ffi::{c_char, c_void, CStr, CString};
 
     /// Sets up the ImGui clipboard using the `arboard` crate.

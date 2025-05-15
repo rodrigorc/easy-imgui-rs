@@ -3,7 +3,7 @@ use std::mem::size_of;
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
-use easy_imgui::{self as imgui, HasImGuiContext};
+use easy_imgui::{self as imgui};
 use easy_imgui_opengl as glr;
 use easy_imgui_sys::*;
 use imgui::{Color, TextureId, Vector2};

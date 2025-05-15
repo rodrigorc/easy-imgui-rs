@@ -1,4 +1,4 @@
-use easy_imgui::{id, lbl_id, HasImGuiContext};
+use easy_imgui::{id, lbl_id};
 use easy_imgui_window::{easy_imgui as imgui, winit, AppHandler, Application};
 use winit::event_loop::EventLoop;
 

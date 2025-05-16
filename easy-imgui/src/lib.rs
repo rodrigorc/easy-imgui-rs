@@ -387,10 +387,12 @@ impl Context {
             };
             ctx.io_mut().inner().IniFilename = null();
 
-            // If you eanbled the "docking" feature you will want to use it
+            // If you enabled the "docking" feature you will want to use it
             #[cfg(feature = "docking")]
             {
-                ctx.add_config_flags(ConfigFlags::DockingEnable);
+                ctx.io_mut()
+                    .inner()
+                    .add_config_flags(ConfigFlags::DockingEnable);
             }
             ctx.io_mut().inner().ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
             ctx

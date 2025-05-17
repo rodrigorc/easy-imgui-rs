@@ -520,9 +520,9 @@ pub fn gl_program_from_source(
             geom.map(Cow::Borrowed),
         ),
         Some(prefix) => (
-            Cow::Owned(format!("{0}{1}", prefix, vertex)),
-            Cow::Owned(format!("{0}{1}", prefix, frag)),
-            geom.map(|s| Cow::Owned(format!("{0}{1}", prefix, s))),
+            Cow::Owned(format!("{prefix}{vertex}")),
+            Cow::Owned(format!("{prefix}{frag}")),
+            geom.map(|s| Cow::Owned(format!("{prefix}{s}"))),
         ),
     };
     let prg = glr::Program::from_source(gl, &vertex, &frag, geom.as_deref())?;

@@ -956,7 +956,7 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 unsafe fn font_ptr(font: FontId) -> *mut ImFont {
     let fonts = ImGuiPtr::current().io().Fonts;
     // fonts.Fonts is never empty, at least there is the default font
-    (*fonts).Fonts[font.0]
+    (&(*fonts).Fonts)[font.0]
 }
 
 // this is unsafe because it replaces a C binding function that does nothing, and adding `unsafe`

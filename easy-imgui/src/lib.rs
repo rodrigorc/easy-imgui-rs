@@ -401,6 +401,7 @@ pub struct CurrentContext<'a> {
 #[derive(Debug)]
 pub struct ContextBuilder {
     docking: bool,
+    viewports: bool,
     debug_highlight_id_conflicts: bool,
     ini_file_name: Option<String>,
 }
@@ -421,6 +422,7 @@ impl ContextBuilder {
     pub fn new() -> ContextBuilder {
         ContextBuilder {
             docking: false,
+            viewports: true, // TODO: for testing, should be false by default
             debug_highlight_id_conflicts: cfg!(debug_assertions),
             ini_file_name: None,
         }
@@ -468,6 +470,9 @@ impl ContextBuilder {
 
         if self.docking {
             io.add_config_flags(ConfigFlags::DockingEnable);
+        }
+        if self.viewports {
+            io.add_config_flags(ConfigFlags::ViewportsEnable);
         }
         io.ConfigDpiScaleFonts = true;
         io.ConfigDebugHighlightIdConflicts = self.debug_highlight_id_conflicts;
@@ -531,6 +536,10 @@ impl Context {
     pub fn ini_file_name(&self) -> Option<&str> {
         let ini = self.ini_file_name.as_deref()?.to_str().unwrap_or_default();
         Some(ini)
+    }
+    pub unsafe fn get_main_viewport_mut(&mut self) -> &mut Viewport {
+        let ptr = (self.Viewports)[0];
+        unsafe { Viewport::cast_mut(&mut (*ptr)._base) }
     }
 }
 
@@ -4821,7 +4830,7 @@ impl<H: Hashable> Pushable for ItemId<H> {
     }
 }
 
-transparent! {
+transparent_mut! {
     #[derive(Debug)]
     pub struct Viewport(ImGuiViewport);
 }

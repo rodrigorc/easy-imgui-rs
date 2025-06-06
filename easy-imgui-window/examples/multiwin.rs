@@ -60,6 +60,7 @@ impl winit::application::ApplicationHandler for AppHandler {
             }
             let res = window.window_event(
                 &mut self.app,
+                window_id,
                 &event,
                 easy_imgui_window::EventFlags::empty(),
             );

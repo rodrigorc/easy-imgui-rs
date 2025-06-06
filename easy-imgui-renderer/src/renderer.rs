@@ -17,7 +17,7 @@ pub struct Renderer {
     objs: GlObjects,
 }
 
-struct GlObjects {
+pub struct GlObjects {
     program: glr::Program,
     vao: glr::VertexArray,
     vbuf: glr::Buffer,
@@ -27,6 +27,12 @@ struct GlObjects {
     a_color_location: u32,
     u_matrix_location: glow::UniformLocation,
     u_tex_location: glow::UniformLocation,
+}
+
+impl GlObjects {
+    /*pub fn context(&self) -> &glr::GlContext {
+        self.atlas.gl()
+    }*/
 }
 
 impl Renderer {
@@ -57,7 +63,8 @@ impl Renderer {
                 imgui.io_mut().inner().add_backend_flags(
                     imgui::BackendFlags::HasMouseCursors
                         | imgui::BackendFlags::HasSetMousePos
-                        | imgui::BackendFlags::RendererHasVtxOffset,
+                        | imgui::BackendFlags::RendererHasVtxOffset
+                        | imgui::BackendFlags::RendererHasViewports,
                 );
             }
             imgui
@@ -188,6 +195,15 @@ impl Renderer {
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
+
+                    ImGui_UpdatePlatformWindows();
+
+                    // Doc says that ImGui_RenderPlatformWindowsDefault() isn't mandatory...
+                    let platform = &*ImGui_GetPlatformIO(); //TODO: take as parameter
+                    // First viewport is already rendered
+                    for vp in &platform.Viewports[1..] {
+                        ((*platform).Platform_RenderWindow.unwrap())(*vp, std::ptr::null_mut());
+                    }
                 },
             );
         }
@@ -294,7 +310,10 @@ impl Renderer {
         }
     }
 
-    unsafe fn render(
+    pub fn gl_objs(&self) -> &GlObjects {
+        &self.objs
+    }
+    pub unsafe fn render(
         gl: &glow::Context,
         objs: &GlObjects,
         draw_data: &ImDrawData,

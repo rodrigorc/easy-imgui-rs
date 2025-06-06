@@ -67,7 +67,7 @@ impl ApplicationHandler for Init {
         if game_loop.window.0.id() != window_id {
             return;
         }
-        game_handle(game_loop, &event);
+        game_handle(game_loop, window_id, &event);
         match event {
             winit::event::WindowEvent::RedrawRequested => {
                 if !game_loop.next_frame(game_update, game_render) {
@@ -108,7 +108,11 @@ fn game_render(g: &mut GameLoop) {
     }
 }
 
-fn game_handle(g: &mut GameLoop, event: &winit::event::WindowEvent) {
+fn game_handle(
+    g: &mut GameLoop,
+    window_id: winit::window::WindowId,
+    event: &winit::event::WindowEvent,
+) {
     use winit::{
         event::{ElementState, KeyEvent, WindowEvent},
         keyboard::{KeyCode, PhysicalKey},
@@ -121,6 +125,7 @@ fn game_handle(g: &mut GameLoop, event: &winit::event::WindowEvent) {
         &mut g.game.renderer,
         &mut g.window.1,
         &mut g.game.app,
+        window_id,
         event,
         EventFlags::DoNotRender,
     );

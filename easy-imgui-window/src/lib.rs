@@ -8,11 +8,13 @@
 */
 
 pub mod conv;
+mod viewports;
 mod window;
 
 pub use easy_imgui;
 pub use easy_imgui_renderer;
 pub use easy_imgui_sys;
 pub use glutin;
+pub use viewports::ViewportWindow;
 pub use window::*;
 pub use winit;

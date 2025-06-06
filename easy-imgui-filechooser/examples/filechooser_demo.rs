@@ -51,7 +51,7 @@ impl Application for App {
             globs: vec![],
         });
         App {
-            of_atlas: filechooser::build_custom_atlas(imgui.io_mut().inner().font_atlas_mut()),
+            of_atlas: filechooser::build_custom_atlas(imgui.io_mut().font_atlas_mut()),
             of_wnd: Some(of),
             of_popup: None,
         }

@@ -1029,9 +1029,9 @@ pub struct CustomAtlas {
 
 /// Rebuild the custom atlas.
 ///
-/// Call this on your `build_custom_atlas` impl and keep the output. You will need it to call
+/// Call this on your initialization code and keep the output. You will need it to call
 /// `do_ui`.
-pub fn build_custom_atlas(atlas: &mut easy_imgui::FontAtlasMut) -> CustomAtlas {
+pub fn build_custom_atlas(atlas: &mut easy_imgui::FontAtlas) -> CustomAtlas {
     use image::GenericImage;
 
     let mut do_rr = move |img: &'static DynamicImage| {

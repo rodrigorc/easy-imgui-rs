@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use easy_imgui::{FontAtlasMut, UiBase};
+use easy_imgui::FontSize;
 use easy_imgui_window::{
     easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
 };
@@ -88,9 +88,6 @@ struct App {
     window_size: winit::dpi::PhysicalSize<u32>,
     ds: glr::DynamicVertexArray<Vertex>,
 
-    _font_normal: imgui::FontId,
-    font_medium: imgui::FontId,
-    font_big: imgui::FontId,
     last_tick: Instant,
 
     show_menu: Menu,
@@ -181,16 +178,12 @@ fn ratio_ortho(width: f32, height: f32) -> (Matrix3, Vector2, f32) {
 }
 
 impl App {
-    fn new(gl: &GlContext, atlas: &mut FontAtlasMut) -> App {
+    fn new(gl: &GlContext) -> App {
         let vao = glr::VertexArray::generate(gl).unwrap();
         let prg = glr::Program::from_source(gl, VSH, FSH, None).unwrap();
         let u = Uniform {
             m: ortho2d_zero(1.0, 1.0),
         };
-
-        let _font_normal = atlas.add_font(imgui::FontInfo::default_font(13.0));
-        let font_medium = atlas.add_font(imgui::FontInfo::default_font(30.0));
-        let font_big = atlas.add_font(imgui::FontInfo::default_font(60.0));
 
         App {
             vao,
@@ -199,9 +192,6 @@ impl App {
             u,
             window_size: (800, 600).into(),
             ds: glr::DynamicVertexArray::new(gl).unwrap(),
-            _font_normal,
-            font_medium,
-            font_big,
             last_tick: Instant::now(),
             show_menu: Menu::Hello,
             show_demo: false,
@@ -428,7 +418,7 @@ impl App {
 }
 
 impl imgui::UiBuilder for App {
-    fn pre_render(&mut self, _ui: &UiBase) {
+    fn pre_render(&mut self) {
         use glow::HasContext;
 
         unsafe {
@@ -456,7 +446,7 @@ impl imgui::UiBuilder for App {
             Vector2::new(0.0, 0.0),
         );
         ui.set_next_window_bg_alpha(0.75);
-        ui.with_push(self.font_big, || {
+        ui.with_push(FontSize(60.0), || {
             ui.window_config(lbl("menu"))
                 .flags(
                     imgui::WindowFlags::NoTitleBar
@@ -479,7 +469,7 @@ impl imgui::UiBuilder for App {
                     Menu::Hello => {
                         ui.set_cursor_pos_x(285.0);
                         ui.text("Pong");
-                        ui.with_push(self.font_medium, || {
+                        ui.with_push(FontSize(30.0), || {
                             ui.text("This is a clone of the classic game");
                             ui.text("to demonstrate how to use easy-imgui");
                             ui.text("to build the in-game UI.");
@@ -562,8 +552,7 @@ impl Application for App {
             .set_matrix(Some(Matrix3::identity()));
 
         let gl = args.window.renderer().gl_context().clone();
-        let mut imgui = unsafe { args.window.renderer().imgui().set_current() };
-        let mut app = App::new(&gl, &mut imgui.font_atlas());
+        let mut app = App::new(&gl);
         app.game_tick();
         app.ui_status.insert(UiRequest::VSync);
 

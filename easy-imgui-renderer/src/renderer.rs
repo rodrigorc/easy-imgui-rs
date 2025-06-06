@@ -55,6 +55,14 @@ impl Renderer {
                 );
             }
 
+            let pio = &mut *ImGui_GetPlatformIO();
+            let max_tex_size = gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE);
+            log::info!("Max texture size {max_tex_size}");
+            if pio.Renderer_TextureMaxWidth == 0 || pio.Renderer_TextureMaxWidth > max_tex_size {
+                pio.Renderer_TextureMaxWidth = max_tex_size;
+                pio.Renderer_TextureMaxHeight = max_tex_size;
+            }
+
             let glsl_version = if cfg!(not(target_arch = "wasm32")) {
                 "#version 150\n"
             } else {
@@ -173,14 +181,12 @@ impl Renderer {
     }
 
     unsafe fn update_textures(gl: &glr::GlContext, pio: &ImGuiPlatformIO) {
-        println!("------------- {}", pio.Textures.len());
         for tex in &pio.Textures {
             let tex = &mut **tex;
             Self::update_texture(gl, tex);
         }
     }
     unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
-        dbg!(tex.UniqueID);
         match tex.Status {
             ImTextureStatus::ImTextureStatus_WantCreate => {
                 let pixels = tex.Pixels;
@@ -515,7 +521,7 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::ne
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.imgui().io_mut().inner().font_atlas_mut().Clear();
+            self.imgui().io_mut().font_atlas_mut().Clear();
             // Destroy all textures
             let pio = ImGui_GetPlatformIO();
             for tex in &(*pio).Textures {

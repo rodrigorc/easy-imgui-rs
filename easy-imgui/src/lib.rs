@@ -383,9 +383,11 @@ impl Context {
                 imgui,
                 ini_file_name: None,
             };
-            let io = ctx.io_mut().inner();
-            io.IniFilename = null();
+            let io = ctx.io_mut();
             io.font_atlas_mut().TexPixelsUseColors = true;
+
+            let io = io.inner();
+            io.IniFilename = null();
 
             // If you enabled the "docking" feature you will want to use it
             #[cfg(feature = "docking")]
@@ -393,6 +395,7 @@ impl Context {
                 io.add_config_flags(ConfigFlags::DockingEnable);
             }
             io.ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
+            io.ConfigDpiScaleFonts = true;
             ctx
         }
     }
@@ -401,7 +404,6 @@ impl Context {
         self.io_mut().inner().DisplaySize = v2_to_im(size);
         if self.io().display_scale() != scale {
             self.io_mut().inner().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
-            self.io_mut().inner().FontGlobalScale = scale.recip();
         }
     }
 
@@ -455,6 +457,13 @@ impl CurrentContext<'_> {
         pre_render: impl FnOnce(),
         render: impl FnOnce(&ImDrawData),
     ) {
+
+        // Ensure there is a font
+        let font_atlas = self.io_mut().font_atlas_mut();
+        if font_atlas.Fonts.len() == 0 {
+            font_atlas.add_font(FontInfo::default_font());
+        }
+
         let mut ui = Ui {
             imgui: self.imgui(),
             data: std::ptr::null_mut(),
@@ -478,13 +487,12 @@ impl CurrentContext<'_> {
         ImGui_NewFrame();
 
         let end_frame_guard = FrameGuard;
-
         app.do_ui(&ui);
+        std::mem::drop(end_frame_guard);
 
         pre_render();
         app.pre_render();
 
-        std::mem::drop(end_frame_guard);
 
         ImGui_Render();
 
@@ -619,24 +627,19 @@ enum TtfData {
 /// A font to be fed to the ImGui atlas.
 pub struct FontInfo {
     ttf: TtfData,
-    size: f32,
 }
 
 impl FontInfo {
     /// Creates a new `FontInfo` from a TTF content and a font size.
-    pub fn new(ttf: impl Into<Cow<'static, [u8]>>, size: f32) -> FontInfo {
+    pub fn new(ttf: impl Into<Cow<'static, [u8]>>) -> FontInfo {
         FontInfo {
             ttf: TtfData::Bytes(ttf.into()),
-            size,
         }
     }
     /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
-    ///
-    /// The default size of the default font is 13.0.
-    pub fn default_font(size: f32) -> FontInfo {
+    pub fn default_font() -> FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
-            size,
         }
     }
 }
@@ -2612,7 +2615,7 @@ impl<A> Ui<A> {
         let label = label.into();
         unsafe { ImGui_TextLink(label.as_ptr()) }
     }
-    pub fn text_link_open_url(&self, label: LblId<impl IntoCStr>, url: impl IntoCStr) {
+    pub fn text_link_open_url(&self, label: LblId<impl IntoCStr>, url: impl IntoCStr) -> bool {
         let label = label.into();
         let url = url.into();
         unsafe { ImGui_TextLinkOpenURL(label.as_ptr(), url.as_ptr()) }
@@ -3142,12 +3145,17 @@ impl<A> Ui<A> {
     /// Gets information about a glyph for a font.
     ///
     /// This is a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
-    /// built, and in `build_custom_atlas` it is not yet. The only way to ensure a fully built
-    /// atlas is by requiring a `&Ui`.
-    pub fn find_glyph(&self, font_id: FontId, font_size: f32, c: char) -> FontGlyph<'_> {
+    /// built and that is only ensured during the frame, that is when there is a `&Ui`.
+    pub fn find_glyph(
+        &self,
+        font_id: FontId,
+        font_size: f32,
+        font_density: Option<f32>,
+        c: char,
+    ) -> FontGlyph<'_> {
         unsafe {
             let font = font_ptr(font_id);
-            let baked = ImFont_GetFontBaked(font, font_size);
+            let baked = ImFont_GetFontBaked(font, font_size, font_density.unwrap_or(-1.0));
             FontGlyph(&*ImFontBaked_FindGlyph(baked, ImWchar::from(c)))
         }
     }
@@ -3157,11 +3165,12 @@ impl<A> Ui<A> {
         &self,
         font_id: FontId,
         font_size: f32,
+        font_density: Option<f32>,
         c: char,
     ) -> Option<FontGlyph<'_>> {
         unsafe {
             let font = font_ptr(font_id);
-            let baked = ImFont_GetFontBaked(font, font_size);
+            let baked = ImFont_GetFontBaked(font, font_size, font_density.unwrap_or(-1.0));
             let p = ImFontBaked_FindGlyphNoFallback(baked, ImWchar::from(c));
             p.as_ref().map(FontGlyph)
         }
@@ -3176,10 +3185,15 @@ impl<A> Ui<A> {
             &*font
         }
     }
-    pub fn get_font_baked(&self, font_id: FontId, font_size: f32) -> &ImFontBaked {
+    pub fn get_font_baked(
+        &self,
+        font_id: FontId,
+        font_size: f32,
+        font_density: Option<f32>,
+    ) -> &ImFontBaked {
         unsafe {
             let font = font_ptr(font_id);
-            &*(*font).GetFontBaked(font_size)
+            &*(*font).GetFontBaked(font_size, font_density.unwrap_or(-1.0))
         }
     }
 
@@ -3329,14 +3343,17 @@ impl<A> Ui<A> {
     }
 }
 
-/// Identifier of a registered font. Only the values obtained from the latest call to [`UiBuilder::build_custom_atlas`] are actually valid.
+/// Identifier of a registered font.
 ///
-/// `FontId::default()` wil be the default font.
+/// Currently there is no way to remove a font.
+///
+/// `FontId::default()` will be the default font.
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
 
-/// Identifier for a registered custom rectangle. Only the values obtained from the latest call to
-/// [`UiBuilder::build_custom_atlas`] are actually valid.
+/// Identifier for a registered custom rectangle.
+///
+/// Currently there is no way to remove a rectangle.
 ///
 /// The `CustomRectIndex::default()` is provided as a convenience, but it is always invalid, and
 /// will panic if used.
@@ -3357,109 +3374,6 @@ transparent_mut! {
 
 type PixelImage<'a> = image::ImageBuffer<image::Rgba<u8>, &'a mut [u8]>;
 type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
-
-/// This is just like `&mut FontAtlas` but with additional info.
-///
-/// To build glyph_ranges and custom_rects.
-pub struct FontAtlasMut<'ui> {
-    ptr: &'ui mut FontAtlas,
-    scale: f32,
-}
-
-/// A reference to the font altas that is to be built.
-///
-/// You get a value of this type when implementing [`UiBuilder::build_custom_atlas`]. If you want
-/// that function to be called again, call [`Context::invalidate_font_atlas`].
-impl FontAtlasMut<'_> {
-    /// Adds the given font to the atlas.
-    ///
-    /// It returns the id to use this font. `FontId` implements `Pushable` so you can use it with
-    /// [`Ui::with_push`].
-    pub fn add_font(&mut self, font: FontInfo) -> FontId {
-        self.add_font_priv(font, false)
-    }
-    /// Adds several fonts with as a single ImGui font.
-    ///
-    /// This is useful mainly if different TTF files have different charset coverage but you want
-    /// to use them all as a unit.
-    pub fn add_font_collection(&mut self, fonts: impl IntoIterator<Item = FontInfo>) -> FontId {
-        let mut fonts = fonts.into_iter();
-        let first = fonts.next().expect("empty font collection");
-        let id = self.add_font_priv(first, false);
-        for font in fonts {
-            self.add_font_priv(font, true);
-        }
-        id
-    }
-    fn add_font_priv(&mut self, font: FontInfo, merge: bool) -> FontId {
-        unsafe {
-            let mut fc = ImFontConfig::new();
-            // This is ours, do not free()
-            fc.FontDataOwnedByAtlas = false;
-
-            fc.MergeMode = merge;
-
-            match font.ttf {
-                TtfData::Bytes(bytes) => {
-                    self.ptr.AddFontFromMemoryTTF(
-                        bytes.as_ptr() as *mut _,
-                        bytes.len() as i32,
-                        font.size * self.scale,
-                        &fc,
-                        std::ptr::null(),
-                    );
-                }
-                TtfData::DefaultFont => {
-                    fc.SizePixels = font.size * self.scale;
-                    self.ptr.AddFontDefault(&fc);
-                }
-            }
-            FontId(self.ptr.Fonts.len() - 1)
-        }
-    }
-
-    /// TODO  add_font_glyph(
-
-    /// Adds an arbitrary image to the font atlas.
-    ///
-    /// The returned `CustomRectIndex` can be used later to draw the image.
-    pub fn add_custom_rect(
-        &mut self,
-        size: impl Into<mint::Vector2<u32>>,
-        draw: impl FnOnce(&mut SubPixelImage<'_, '_>),
-    ) -> CustomRectIndex {
-        let size = size.into();
-        unsafe {
-            let mut rect = MaybeUninit::zeroed();
-            let idx = self.ptr.0.AddCustomRect(
-                i32::try_from(size.x).unwrap(),
-                i32::try_from(size.y).unwrap(),
-                rect.as_mut_ptr(),
-            );
-            let idx = CustomRectIndex(idx);
-            let rect = rect.assume_init();
-            let tex_data = &(*self.ptr.TexData);
-
-            let mut pixel_image = PixelImage::from_raw(
-                tex_data.Width as u32,
-                tex_data.Height as u32,
-                std::slice::from_raw_parts_mut(
-                    tex_data.Pixels,
-                    tex_data.Width as usize
-                        * tex_data.Height as usize
-                        * tex_data.BytesPerPixel as usize,
-                ),
-            )
-            .unwrap();
-
-            let mut sub_image =
-                pixel_image.sub_image(rect.x as u32, rect.y as u32, rect.w as u32, rect.h as u32);
-            draw(&mut sub_image);
-
-            idx
-        }
-    }
-}
 
 impl FontAtlas {
     pub unsafe fn texture_ref(&self) -> ImTextureRef {
@@ -3502,6 +3416,93 @@ impl FontAtlas {
             unsafe { Some(TextureId::from_id(p.TexID)) }
         }
     }
+
+    /// Adds the given font to the atlas.
+    ///
+    /// It returns the id to use this font. `FontId` implements `Pushable` so you can use it with
+    /// [`Ui::with_push`].
+    pub fn add_font(&mut self, font: FontInfo) -> FontId {
+        self.add_font_priv(font, false)
+    }
+    /// Adds several fonts with as a single ImGui font.
+    ///
+    /// This is useful mainly if different TTF files have different charset coverage but you want
+    /// to use them all as a unit.
+    pub fn add_font_collection(&mut self, fonts: impl IntoIterator<Item = FontInfo>) -> FontId {
+        let mut fonts = fonts.into_iter();
+        let first = fonts.next().expect("empty font collection");
+        let id = self.add_font_priv(first, false);
+        for font in fonts {
+            self.add_font_priv(font, true);
+        }
+        id
+    }
+    fn add_font_priv(&mut self, font: FontInfo, merge: bool) -> FontId {
+        unsafe {
+            let mut fc = ImFontConfig::new();
+            // This is ours, do not free()
+            fc.FontDataOwnedByAtlas = false;
+            fc.MergeMode = merge;
+
+            match font.ttf {
+                TtfData::Bytes(bytes) => {
+                    self.AddFontFromMemoryTTF(
+                        bytes.as_ptr() as *mut _,
+                        bytes.len() as i32,
+                        /* size_pixels */ 0.0,
+                        &fc,
+                        std::ptr::null(),
+                    );
+                }
+                TtfData::DefaultFont => {
+                    self.AddFontDefault(&fc);
+                }
+            }
+            FontId(self.Fonts.len() - 1)
+        }
+    }
+
+    /// TODO  add_font_glyph(
+
+    /// Adds an arbitrary image to the font atlas.
+    ///
+    /// The returned `CustomRectIndex` can be used later to draw the image.
+    pub fn add_custom_rect(
+        &mut self,
+        size: impl Into<mint::Vector2<u32>>,
+        draw: impl FnOnce(&mut SubPixelImage<'_, '_>),
+    ) -> CustomRectIndex {
+        let size = size.into();
+        unsafe {
+            let mut rect = MaybeUninit::zeroed();
+            let idx = self.AddCustomRect(
+                i32::try_from(size.x).unwrap(),
+                i32::try_from(size.y).unwrap(),
+                rect.as_mut_ptr(),
+            );
+            let idx = CustomRectIndex(idx);
+            let rect = rect.assume_init();
+            let tex_data = &(*self.TexData);
+
+            let mut pixel_image = PixelImage::from_raw(
+                tex_data.Width as u32,
+                tex_data.Height as u32,
+                std::slice::from_raw_parts_mut(
+                    tex_data.Pixels,
+                    tex_data.Width as usize
+                        * tex_data.Height as usize
+                        * tex_data.BytesPerPixel as usize,
+                ),
+            )
+            .unwrap();
+
+            let mut sub_image =
+                pixel_image.sub_image(rect.x as u32, rect.y as u32, rect.w as u32, rect.h as u32);
+            draw(&mut sub_image);
+
+            idx
+        }
+    }
 }
 
 transparent_mut! {
@@ -3539,9 +3540,6 @@ impl Io {
     }
 
     // The following are not unsafe because if you have a `&mut Io` you alreay can do anything.
-    pub fn font_atlas_mut(&mut self) -> &mut FontAtlas {
-        unsafe { FontAtlas::cast_mut(&mut *self.Fonts) }
-    }
     pub fn add_config_flags(&mut self, flags: ConfigFlags) {
         self.ConfigFlags |= flags.bits();
     }
@@ -3579,6 +3577,9 @@ impl IoMut {
         unsafe {
             self.inner().add_config_flags(ConfigFlags::NavEnableGamepad);
         }
+    }
+    pub fn font_atlas_mut(&mut self) -> &mut FontAtlas {
+        unsafe { FontAtlas::cast_mut(&mut *self.Fonts) }
     }
 }
 
@@ -4221,10 +4222,22 @@ impl<T: Pushable> Pushable for Option<T> {
 impl Pushable for FontId {
     unsafe fn push(&self) {
         let font = font_ptr(*self);
-        ImGui_PushFont(font, (*font).DefaultSize);
+        ImGui_PushFont(font, -1.0);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();
+    }
+}
+
+pub struct FontSize(pub f32);
+
+impl Pushable for FontSize {
+    unsafe fn push(&self) {
+        // maybe this should get ui and do ui.scale()
+        ImGui_PushFontSize(self.0);
+    }
+    unsafe fn pop(&self) {
+        ImGui_PopFontSize();
     }
 }
 
@@ -4232,10 +4245,7 @@ pub struct FontAndSize(pub FontId, pub f32);
 
 impl Pushable for FontAndSize {
     unsafe fn push(&self) {
-        // maybe this should get ui and do ui.scale()
-        let io = ImGui_GetIO();
-        let scale = (*io).DisplayFramebufferScale.x;
-        ImGui_PushFont(font_ptr(self.0), self.1 * scale);
+        ImGui_PushFont(font_ptr(self.0), self.1);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();

@@ -719,10 +719,13 @@ imgui_flags! {
         SpanFullWidth,
         SpanLabelWidth,
         SpanAllColumns,
-        NavLeftJumpsBackHere,
+        LabelSpanAllColumns,
+        NavLeftJumpsToParent,
         //NoScrollOnOpen,
         CollapsingHeader,
-        LabelSpanAllColumns,
+        DrawLinesNone,
+        DrawLinesFull,
+        DrawLinesToNodes,
     }
 }
 
@@ -1012,5 +1015,14 @@ imgui_scoped_enum! {
         None,
         SetAll,
         SetRange,
+    }
+}
+
+imgui_flags! {
+    pub FontAtlasFlags: ImFontAtlasFlags_ {
+        None,
+        NoPowerOfTwoHeight,
+        NoMouseCursors,
+        NoBakedLines,
     }
 }

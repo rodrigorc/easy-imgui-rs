@@ -808,6 +808,7 @@ imgui_flags! {
         HasMouseCursors,
         HasSetMousePos,
         RendererHasVtxOffset,
+        RendererHasTextures,
     }
 }
 

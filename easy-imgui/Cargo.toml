@@ -18,7 +18,7 @@ cgmath = { version = "0.18", features = ["mint"] }
 image = { version = "0.25", default-features = false }
 
 [features]
-default = []
+default = ["docking"]
 freetype = ["easy-imgui-sys/freetype"]
 docking = ["easy-imgui-sys/docking"]
 

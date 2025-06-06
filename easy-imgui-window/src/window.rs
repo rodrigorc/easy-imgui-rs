@@ -14,7 +14,7 @@ use winit::{
     dpi::{LogicalSize, PhysicalSize},
     event::Ime::Commit,
     keyboard::PhysicalKey,
-    window::{CursorIcon, Window},
+    window::{CursorIcon, Window, WindowId},
 };
 
 // Only used with the main-window feature
@@ -140,6 +140,14 @@ pub trait MainWindowRef {
             }
         }
     }
+
+    fn get_viewport(&mut self, window_id: WindowId) -> ViewportRef {
+        if self.window().id() == window_id {
+            ViewportRef::MainWindow
+        } else {
+            ViewportRef::Unknown
+        }
+    }
 }
 
 fn transform_position_with_optional_matrix(
@@ -210,6 +218,10 @@ impl MainWindowRef for MainWindowPieces<'_> {
     }
     fn post_render(&mut self) {
         self.window.pre_present_notify();
+        let _ = self
+            .gl_context
+            .make_current(self.surface)
+            .inspect_err(|e| log::error!("{e}"));
         let _ = self
             .surface
             .swap_buffers(self.gl_context)
@@ -295,18 +307,26 @@ pub fn window_event(
     renderer: &mut Renderer,
     status: &mut MainWindowStatus,
     app: &mut impl imgui::UiBuilder,
+    window_id: WindowId,
     event: &winit::event::WindowEvent,
     flags: EventFlags,
 ) -> EventResult {
     use winit::event::WindowEvent::*;
+
     let mut window_closed = false;
     match event {
         CloseRequested => {
-            window_closed = true;
+            let vp = main_window.get_viewport(window_id);
+            match vp {
+                ViewportRef::Unknown => {}
+                ViewportRef::Viewport(_, _) => {}
+                ViewportRef::MainWindow => {
+                    window_closed = true;
+                }
+            }
         }
         RedrawRequested => unsafe {
-            let imgui = renderer.imgui().set_current();
-            let io = imgui.io();
+            let io = renderer.imgui().io();
             let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
             if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
                 let cursor = if io.MouseDrawCursor {
@@ -330,15 +350,33 @@ pub fn window_event(
         Resized(size) => {
             // Do not skip this line or the gl surface may be wrong in Wayland
             // GL surface in physical pixels, imgui in logical
-            let size = main_window.resize(*size);
-            if !flags.contains(EventFlags::DoNotResize) {
-                main_window.ping_user_input();
-                // GL surface in physical pixels, imgui in logical
-                let size = Vector2::from(mint::Vector2::from(size));
-                unsafe {
-                    renderer.imgui().io_mut().inner().DisplaySize = imgui::v2_to_im(size);
+            let vp = main_window.get_viewport(window_id);
+            let vp = match vp {
+                ViewportRef::Unknown => unreachable!(),
+                ViewportRef::MainWindow => {
+                    let size = main_window.resize(*size);
+                    if !flags.contains(EventFlags::DoNotResize) {
+                        main_window.ping_user_input();
+                        // GL surface in physical pixels, imgui in logical
+                        let size = Vector2::from(mint::Vector2::from(size));
+                        unsafe {
+                            renderer.imgui().io_mut().inner().DisplaySize = imgui::v2_to_im(size);
+                        }
+                    }
+                    unsafe { renderer.imgui().get_main_viewport_mut() }
                 }
-            }
+                ViewportRef::Viewport(_, vp) => unsafe { &mut *vp },
+            };
+            vp.PlatformRequestResize = true;
+        }
+        Moved(_) => {
+            let vp = main_window.get_viewport(window_id);
+            let vp = match vp {
+                ViewportRef::Unknown => unreachable!(),
+                ViewportRef::MainWindow => unsafe { renderer.imgui().get_main_viewport_mut() },
+                ViewportRef::Viewport(_, vp) => unsafe { &mut *vp },
+            };
+            vp.PlatformRequestMove = true;
         }
         ScaleFactorChanged { scale_factor, .. } => {
             if !flags.contains(EventFlags::DoNotResize) {
@@ -423,9 +461,28 @@ pub fn window_event(
             main_window.ping_user_input();
             unsafe {
                 let io = renderer.imgui().io_mut().inner();
-                let position = main_window
-                    .transform_position(Vector2::new(position.x as f32, position.y as f32));
-                io.AddMousePosEvent(position.x, position.y);
+                let vp = main_window.get_viewport(window_id);
+                let mut position = Vector2::new(position.x as f32, position.y as f32);
+                // MainWindow must not be scaled, but Viewport must be, not sure why
+                match vp {
+                    ViewportRef::Unknown => {}
+                    ViewportRef::MainWindow => {
+                        if let Ok(wpos) = main_window.window().inner_position() {
+                            position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                        }
+                        let position = main_window.transform_position(position);
+                        io.AddMousePosEvent(position.x, position.y);
+                    }
+                    ViewportRef::Viewport(vp, _ivp) => {
+                        let vp = &*vp;
+                        let scale = vp.window().scale_factor() as f32;
+                        let mut position = Vector2::new(position.x as f32, position.y as f32);
+                        if let Ok(wpos) = vp.window().inner_position() {
+                            position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                        }
+                        io.AddMousePosEvent(position.x / scale, position.y / scale);
+                    }
+                }
             }
         }
         MouseWheel {
@@ -551,6 +608,8 @@ pub mod clipboard {
 
 #[cfg(feature = "main-window")]
 mod main_window {
+    use crate::{ViewportWindow, viewports};
+
     use super::*;
     use std::future::Future;
     mod fut;
@@ -565,8 +624,11 @@ mod main_window {
     };
     use glutin_winit::DisplayBuilder;
     use raw_window_handle::HasWindowHandle;
-    use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
     use winit::window::WindowAttributes;
+    use winit::{
+        event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
+        window::WindowId,
+    };
 
     /// This type represents a `winit` window and an OpenGL context.
     pub struct MainWindow {
@@ -784,6 +846,12 @@ mod main_window {
             let size = size.to_logical::<f32>(scale);
             renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
+            if w.inner_position().is_ok() || true {
+                unsafe {
+                    viewports::setup_viewports(renderer.imgui());
+                }
+            }
+
             #[cfg(feature = "clipboard")]
             clipboard::setup(renderer.imgui());
 
@@ -800,14 +868,61 @@ mod main_window {
         pub fn window_event(
             &mut self,
             app: &mut impl imgui::UiBuilder,
+            window_id: WindowId,
             event: &winit::event::WindowEvent,
             flags: EventFlags,
         ) -> EventResult {
+            unsafe {
+                let vp = self.imgui().get_main_viewport_mut();
+                if vp.PlatformHandle.is_null() {
+                    // first time only
+                    dbg!(vp.ID);
+                    let ph = self.main_window() as *mut MainWindow as _;
+                    let scale = self.imgui().io().DisplayFramebufferScale;
+                    let vp = self.imgui().get_main_viewport_mut();
+                    vp.PlatformHandle = ph;
+                    vp.PlatformUserData = 0 as _;
+                    vp.PlatformRequestResize = false;
+                    vp.PlatformRequestMove = false;
+                    vp.FramebufferScale = scale;
+
+                    let mons: Vec<_> = self.main_window().window().available_monitors().collect();
+                    let pio = self.imgui().platform_io_mut();
+                    for m in mons {
+                        let size: LogicalSize<u32> = m.size().to_logical(scale.x as f64);
+                        let pos: LogicalPosition<u32> = m.position().to_logical(scale.x as f64);
+
+                        let mon = ImGuiPlatformMonitor {
+                            MainPos: ImVec2 {
+                                x: pos.x as f32,
+                                y: pos.y as f32,
+                            },
+                            MainSize: ImVec2 {
+                                x: size.width as f32,
+                                y: size.height as f32,
+                            },
+                            WorkPos: ImVec2 {
+                                x: pos.x as f32,
+                                y: pos.y as f32,
+                            },
+                            WorkSize: ImVec2 {
+                                x: size.width as f32,
+                                y: size.height as f32,
+                            },
+                            DpiScale: 1.0,
+                            PlatformHandle: 1 as _,
+                        };
+                        easy_imgui_sys::easy_imgui_vector_push_back_monitor(&mut pio.Monitors, mon);
+                    }
+                }
+            }
+
             window_event(
                 &mut self.main_window,
                 &mut self.renderer,
                 &mut self.status,
                 app,
+                window_id,
                 event,
                 flags,
             )
@@ -823,6 +938,13 @@ mod main_window {
         }
     }
 
+    #[derive(Debug)]
+    pub enum ViewportRef {
+        MainWindow,
+        Viewport(*mut ViewportWindow, *mut ImGuiViewport),
+        Unknown,
+    }
+
     /// Main implementation of the `MainWindowRef` trait for an owned `MainWindow`.
     impl MainWindowRef for MainWindow {
         fn window(&self) -> &Window {
@@ -833,10 +955,14 @@ mod main_window {
             let _ = self
                 .gl_context
                 .make_current(&self.surface)
-                .inspect_err(|e| log::error!("{e}"));
+                .inspect_err(|e| log::error!("A {e}"));
         }
         fn post_render(&mut self) {
             self.window.pre_present_notify();
+            let _ = self
+                .gl_context
+                .make_current(&self.surface)
+                .inspect_err(|e| log::error!("{e}"));
             let _ = self
                 .surface
                 .swap_buffers(&self.gl_context)
@@ -860,6 +986,25 @@ mod main_window {
         }
         fn transform_position(&self, pos: Vector2) -> Vector2 {
             transform_position_with_optional_matrix(self, pos, &self.matrix)
+        }
+        fn get_viewport(&mut self, window_id: WindowId) -> ViewportRef {
+            if self.window.id() == window_id {
+                return ViewportRef::MainWindow;
+            }
+
+            let io = unsafe { &*ImGui_GetPlatformIO() };
+            for vpp in &io.Viewports {
+                let vp = unsafe { &**vpp };
+                if vp.PlatformHandle.is_null() {
+                    continue;
+                }
+                let vw = (*vp).PlatformHandle as *mut viewports::ViewportWindow;
+                let vw = unsafe { &mut *vw };
+                if window_id == vw.window().id() {
+                    return ViewportRef::Viewport(vw, *vpp);
+                }
+            }
+            ViewportRef::Unknown
         }
     }
 
@@ -976,6 +1121,7 @@ mod main_window {
         fn window_event(
             &mut self,
             args: Args<'_, Self>,
+            _window_id: WindowId,
             _event: winit::event::WindowEvent,
             res: EventResult,
         ) {
@@ -987,9 +1133,18 @@ mod main_window {
         /// Advanced handling for window events.
         ///
         /// The default impl will pass the event to ImGui and then call `window_event`.
-        fn window_event_full(&mut self, args: Args<'_, Self>, event: winit::event::WindowEvent) {
-            let res = args.window.window_event(self, &event, Self::EVENT_FLAGS);
-            self.window_event(args, event, res);
+        fn window_event_full(
+            &mut self,
+            args: Args<'_, Self>,
+            window_id: WindowId,
+            event: winit::event::WindowEvent,
+        ) {
+            viewports::LOOPER.set(Some((args.event_loop.into(), args.window.into())));
+            let res = args
+                .window
+                .window_event(self, window_id, &event, Self::EVENT_FLAGS);
+            self.window_event(args, window_id, event, res);
+            viewports::LOOPER.set(None); //TODO RTTI
         }
 
         /// A device event has been received.
@@ -1197,18 +1352,13 @@ mod main_window {
             let (Some(window), Some(app)) = (self.window.as_mut(), self.app.as_mut()) else {
                 return;
             };
-            let w = window.main_window();
-            if w.window().id() != window_id {
-                return;
-            }
-
             let args = Args {
                 window,
                 event_loop,
                 event_proxy: &self.event_proxy,
                 data: &mut self.app_data,
             };
-            app.window_event_full(args, event);
+            app.window_event_full(args, window_id, event);
         }
         fn device_event(
             &mut self,

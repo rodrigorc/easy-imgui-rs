@@ -6,17 +6,16 @@
 #![allow(clippy::all)]
 
 use std::ops::{Deref, DerefMut, Index};
+use std::slice::SliceIndex;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-impl<T> Index<usize> for ImVector<T> {
-    type Output = T;
+impl<T, I: SliceIndex<[T]>> Index<I> for ImVector<T> {
+    type Output = I::Output;
 
-    fn index(&self, index: usize) -> &Self::Output {
-        if index >= self.Size as usize {
-            panic!("ImVector out of bounds");
-        }
-        unsafe { &*self.Data.add(index) }
+    fn index(&self, index: I) -> &Self::Output {
+        let slice: &[T] = *&self;
+        &slice[index]
     }
 }
 

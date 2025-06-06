@@ -6,6 +6,7 @@ thread_local ImGuiContext* MyImGuiTLS;
 #include "imgui_draw.cpp"
 #include "imgui_tables.cpp"
 #include "imgui_demo.cpp"
+#include "vecs.cpp"
 #ifdef IMGUI_ENABLE_FREETYPE
     #include "misc/freetype/imgui_freetype.cpp"
 #endif

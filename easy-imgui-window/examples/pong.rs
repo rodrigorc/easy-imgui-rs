@@ -7,7 +7,11 @@ use easy_imgui::FontSize;
 use easy_imgui_window::{
     AppHandler, Application, Args, EventFlags, EventResult, easy_imgui as imgui, winit,
 };
-use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
+use winit::{
+    event::WindowEvent,
+    event_loop::EventLoop,
+    window::{Window, WindowId},
+};
 
 use easy_imgui_renderer::{
     easy_imgui_opengl::{self as glr, GlContext, UniformField},
@@ -559,7 +563,13 @@ impl Application for App {
         app
     }
 
-    fn window_event(&mut self, args: Args<Self>, event: WindowEvent, ui_res: EventResult) {
+    fn window_event(
+        &mut self,
+        args: Args<Self>,
+        _window_id: WindowId,
+        event: WindowEvent,
+        ui_res: EventResult,
+    ) {
         if ui_res.window_closed || self.ui_request.contains(UiRequest::Quit) {
             args.event_loop.exit();
         }

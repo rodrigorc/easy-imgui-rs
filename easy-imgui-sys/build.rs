@@ -70,6 +70,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     println!("cargo:THIRD_PARTY={}", imgui_src.display());
 
     println!("cargo:rerun-if-changed=wrapper.cpp");
+    println!("cargo:rerun-if-changed=vecs.cpp");
 
     println!(
         "cargo:rerun-if-changed={}/imgui.cpp",
@@ -105,7 +106,9 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .allowlist_file(".*[/\\\\]imgui_internal.h")
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
-        .newtype_enum(".*");
+        .newtype_enum(".*")
+        .header("vecs.cpp")
+        .allowlist_file("vecs.cpp");
 
     if target_env == "msvc" {
         /* MSVC compilers have a weird ABI for C++. The only difference that affects us is a

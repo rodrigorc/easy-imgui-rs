@@ -11,7 +11,7 @@ use easy_imgui_window::{
 use winit::{
     event::WindowEvent,
     event_loop::{EventLoop, EventLoopProxy},
-    window::Window,
+    window::{Window, WindowId},
 };
 
 use anyhow::Result;
@@ -144,7 +144,13 @@ impl Application for MyApp {
     fn new(_: Args<Self>) -> MyApp {
         MyApp::new()
     }
-    fn window_event(&mut self, args: Args<Self>, _event: WindowEvent, res: EventResult) {
+    fn window_event(
+        &mut self,
+        args: Args<Self>,
+        _window_id: WindowId,
+        _event: WindowEvent,
+        res: EventResult,
+    ) {
         if res.window_closed {
             args.event_loop.exit();
         }

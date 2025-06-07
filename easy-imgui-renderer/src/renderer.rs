@@ -3,7 +3,7 @@ use std::mem::size_of;
 use crate::glow::{self, HasContext};
 use anyhow::{anyhow, Result};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
-use easy_imgui::{self as imgui, TextureId};
+use easy_imgui::{self as imgui, TextureId, PlatformIo};
 use easy_imgui_opengl::{self as glr};
 use easy_imgui_sys::*;
 use imgui::{Color, Vector2};
@@ -55,7 +55,7 @@ impl Renderer {
                 );
             }
 
-            let pio = &mut *ImGui_GetPlatformIO();
+            let pio = imgui.platform_io_mut();
             let max_tex_size = gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE);
             log::info!("Max texture size {max_tex_size}");
             if pio.Renderer_TextureMaxWidth == 0 || pio.Renderer_TextureMaxWidth > max_tex_size {
@@ -157,8 +157,7 @@ impl Renderer {
 
             imgui.do_frame(
                 app,
-                || {
-                    let pio = &*ImGui_GetPlatformIO();
+                |pio| {
                     if self.matrix.is_none() {
                         self.gl.viewport(
                             0,
@@ -180,9 +179,8 @@ impl Renderer {
         }
     }
 
-    unsafe fn update_textures(gl: &glr::GlContext, pio: &ImGuiPlatformIO) {
-        for tex in &pio.Textures {
-            let tex = &mut **tex;
+    unsafe fn update_textures(gl: &glr::GlContext, pio: &mut PlatformIo) {
+        for tex in pio.textures_mut() {
             Self::update_texture(gl, tex);
         }
     }
@@ -521,14 +519,15 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::ne
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.imgui().io_mut().font_atlas_mut().Clear();
+            let gl = self.gl.clone();
+            let imgui = self.imgui();
+            imgui.io_mut().font_atlas_mut().Clear();
+
             // Destroy all textures
-            let pio = ImGui_GetPlatformIO();
-            for tex in &(*pio).Textures {
-                let tex = &mut **tex;
+            for tex in imgui.platform_io_mut().textures_mut() {
                 if tex.RefCount == 1 {
                     tex.Status = ImTextureStatus::ImTextureStatus_WantDestroy;
-                    Self::update_texture(&self.gl, tex);
+                    Self::update_texture(&gl, tex);
                 }
             }
         }

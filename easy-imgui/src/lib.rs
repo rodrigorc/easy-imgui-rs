@@ -454,7 +454,7 @@ impl CurrentContext<'_> {
     pub unsafe fn do_frame<A: UiBuilder>(
         &mut self,
         app: &mut A,
-        pre_render: impl FnOnce(),
+        pre_render: impl FnOnce(&mut PlatformIo),
         render: impl FnOnce(&ImDrawData),
     ) {
 
@@ -490,7 +490,7 @@ impl CurrentContext<'_> {
         app.do_ui(&ui);
         std::mem::drop(end_frame_guard);
 
-        pre_render();
+        pre_render(ctx_guard.0.platform_io_mut());
         app.pre_render();
 
 
@@ -627,6 +627,7 @@ enum TtfData {
 /// A font to be fed to the ImGui atlas.
 pub struct FontInfo {
     ttf: TtfData,
+    name: String,
 }
 
 impl FontInfo {
@@ -634,12 +635,18 @@ impl FontInfo {
     pub fn new(ttf: impl Into<Cow<'static, [u8]>>) -> FontInfo {
         FontInfo {
             ttf: TtfData::Bytes(ttf.into()),
+            name: String::new(),
         }
+    }
+    pub fn set_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
     }
     /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
     pub fn default_font() -> FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
+            name: String::new(),
         }
     }
 }
@@ -1364,10 +1371,10 @@ decl_builder! { Image -> (), ImGui_Image ('t) ()
             }
         }
         pub fn image_with_custom_rect_config(&self, ridx: CustomRectIndex, scale: f32) -> Image<'_, '_> {
-            let rect = self.get_custom_rect(ridx).unwrap();
-            self.image_config(rect.tex_ref, vec2(scale * rect.rect.w as f32, scale * rect.rect.h as f32))
-                .uv0(im_to_v2(rect.rect.uv0))
-                .uv1(im_to_v2(rect.rect.uv1))
+            let rr = self.get_custom_rect(ridx).unwrap();
+            self.image_config(rr.tex_ref, vec2(scale * rr.rect.w as f32, scale * rr.rect.h as f32))
+                .uv0(im_to_v2(rr.rect.uv0))
+                .uv1(im_to_v2(rr.rect.uv1))
         }
     }
 }
@@ -3207,11 +3214,7 @@ impl<A> Ui<A> {
         let atlas = self.io().font_atlas();
         let rect = unsafe {
             let mut rect = MaybeUninit::zeroed();
-            let ok = ImFontAtlas_GetCustomRect(
-                (&raw const atlas.0).cast_mut(),
-                index.0,
-                rect.as_mut_ptr(),
-            );
+            let ok = atlas.GetCustomRect(index.0, rect.as_mut_ptr());
             if !ok {
                 return None;
             }
@@ -3443,6 +3446,12 @@ impl FontAtlas {
             // This is ours, do not free()
             fc.FontDataOwnedByAtlas = false;
             fc.MergeMode = merge;
+            if !font.name.is_empty() {
+                let cname = font.name.as_bytes();
+                let name_len = cname.len().min(fc.Name.len() - 1);
+                fc.Name[.. name_len].copy_from_slice(std::mem::transmute::<&[u8], &[i8]>(&cname[.. name_len]));
+                fc.Name[name_len] = 0;
+            }
 
             match font.ttf {
                 TtfData::Bytes(bytes) => {
@@ -3586,6 +3595,13 @@ impl IoMut {
 transparent_mut! {
     #[derive(Debug)]
     pub struct PlatformIo(ImGuiPlatformIO);
+}
+
+impl PlatformIo {
+    pub unsafe fn textures_mut(&mut self) -> impl Iterator<Item = &mut ImTextureData> {
+        self.Textures.iter_mut().map(|t| unsafe { &mut **t })
+
+    }
 }
 
 #[derive(Debug)]

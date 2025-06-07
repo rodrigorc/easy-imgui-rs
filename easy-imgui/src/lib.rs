@@ -457,7 +457,6 @@ impl CurrentContext<'_> {
         pre_render: impl FnOnce(&mut PlatformIo),
         render: impl FnOnce(&ImDrawData),
     ) {
-
         // Ensure there is a font
         let font_atlas = self.io_mut().font_atlas_mut();
         if font_atlas.Fonts.len() == 0 {
@@ -492,7 +491,6 @@ impl CurrentContext<'_> {
 
         pre_render(ctx_guard.0.platform_io_mut());
         app.pre_render();
-
 
         ImGui_Render();
 
@@ -3222,10 +3220,7 @@ impl<A> Ui<A> {
         };
 
         let tex_ref = self.get_atlas_texture_ref();
-        Some(TextureRect {
-            rect,
-            tex_ref,
-        })
+        Some(TextureRect { rect, tex_ref })
     }
 }
 
@@ -3392,8 +3387,7 @@ impl FontAtlas {
 
     fn texture_unique_id(&self, uid: TextureUniqueId) -> Option<&ImTextureData> {
         unsafe {
-            self
-                .TexList
+            self.TexList
                 .iter()
                 .find(|x| (***x).UniqueID == uid.0)
                 .map(|p| &**p)
@@ -3449,7 +3443,8 @@ impl FontAtlas {
             if !font.name.is_empty() {
                 let cname = font.name.as_bytes();
                 let name_len = cname.len().min(fc.Name.len() - 1);
-                fc.Name[.. name_len].copy_from_slice(std::mem::transmute::<&[u8], &[i8]>(&cname[.. name_len]));
+                fc.Name[..name_len]
+                    .copy_from_slice(std::mem::transmute::<&[u8], &[i8]>(&cname[..name_len]));
                 fc.Name[name_len] = 0;
             }
 
@@ -3600,7 +3595,6 @@ transparent_mut! {
 impl PlatformIo {
     pub unsafe fn textures_mut(&mut self) -> impl Iterator<Item = &mut ImTextureData> {
         self.Textures.iter_mut().map(|t| unsafe { &mut **t })
-
     }
 }
 

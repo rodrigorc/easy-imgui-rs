@@ -27,9 +27,7 @@ impl Application for App {
 
     fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
         let imgui = args.window.renderer().imgui();
-        imgui
-            .io_mut()
-            .set_allow_user_scaling(true);
+        imgui.io_mut().set_allow_user_scaling(true);
         let mut of = filechooser::FileChooser::new();
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
         of.add_filter(filechooser::Filter {

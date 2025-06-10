@@ -719,10 +719,13 @@ imgui_flags! {
         SpanFullWidth,
         SpanLabelWidth,
         SpanAllColumns,
-        NavLeftJumpsBackHere,
+        LabelSpanAllColumns,
+        NavLeftJumpsToParent,
         //NoScrollOnOpen,
         CollapsingHeader,
-        LabelSpanAllColumns,
+        DrawLinesNone,
+        DrawLinesFull,
+        DrawLinesToNodes,
     }
 }
 
@@ -808,6 +811,7 @@ imgui_flags! {
         HasMouseCursors,
         HasSetMousePos,
         RendererHasVtxOffset,
+        RendererHasTextures,
     }
 }
 
@@ -1011,5 +1015,26 @@ imgui_scoped_enum! {
         None,
         SetAll,
         SetRange,
+    }
+}
+
+imgui_flags! {
+    pub FontAtlasFlags: ImFontAtlasFlags_ {
+        None,
+        NoPowerOfTwoHeight,
+        NoMouseCursors,
+        NoBakedLines,
+    }
+}
+
+imgui_flags! {
+    pub FontFlags: ImFontFlags_ {
+        None,
+        DefaultToLegacySize,
+        NoLoadError,
+
+        // internal but bound anyways
+        NoLoadGlyphs,
+        LockBakedSizes,
     }
 }

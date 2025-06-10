@@ -5,7 +5,7 @@
 #![allow(unnecessary_transmutes)]
 #![allow(clippy::all)]
 
-use std::ops::{Deref, Index};
+use std::ops::{Deref, DerefMut, Index};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
@@ -34,11 +34,32 @@ impl<T> Deref for ImVector<T> {
     }
 }
 
+impl<T> DerefMut for ImVector<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        unsafe {
+            if self.Size == 0 {
+                // self.Data may be null, and that will not do for `from_raw_parts`
+                &mut []
+            } else {
+                std::slice::from_raw_parts_mut(self.Data, self.Size as usize)
+            }
+        }
+    }
+}
+
 impl<'a, T> IntoIterator for &'a ImVector<T> {
     type Item = &'a T;
     type IntoIter = std::slice::Iter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         self.deref().into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut ImVector<T> {
+    type Item = &'a mut T;
+    type IntoIter = std::slice::IterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.deref_mut().into_iter()
     }
 }
 

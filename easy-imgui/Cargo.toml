@@ -16,9 +16,10 @@ bitflags = "2"
 mint = "0.5"
 cgmath = { version = "0.18", features = ["mint"] }
 image = { version = "0.25", default-features = false }
+log = "0.4"
 
 [features]
-default = []
+default = ["docking"]
 freetype = ["easy-imgui-sys/freetype"]
 docking = ["easy-imgui-sys/docking"]
 

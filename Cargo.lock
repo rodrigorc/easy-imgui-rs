@@ -783,6 +783,7 @@ dependencies = [
  "cgmath",
  "easy-imgui-sys",
  "image",
+ "log",
  "mint",
  "paste",
 ]

@@ -4,7 +4,7 @@
  */
 use std::time::Duration;
 
-use easy_imgui::{lbl, vec2, Color, Cond, DrawFlags, UiBuilder, Vector2, WindowFlags};
+use easy_imgui::{lbl_id, vec2, Color, DrawFlags, UiBuilder, Vector2, WindowFlags};
 use easy_imgui_window::{
     winit, AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult,
 };
@@ -161,19 +161,22 @@ impl UiBuilder for MyApp {
             ui.show_demo_window(Some(&mut self.demo));
         }
 
-        ui.set_next_window_size(vec2(360.0, 300.0), Cond::Always);
-        ui.window_config(lbl(format!(
-            "Gamepad: {}###gamepad",
-            self.connected
-                .as_ref()
-                .map(|info| info.name.as_str())
-                .unwrap_or("disconnected")
-        )))
+        ui.window_config(lbl_id(
+            format!(
+                "Gamepad: {}",
+                self.connected
+                    .as_ref()
+                    .map(|info| info.name.as_str())
+                    .unwrap_or("disconnected")
+            ),
+            "gamepad",
+        ))
         .flags(WindowFlags::AlwaysAutoResize)
         .with(|| {
             let p0 = ui.get_cursor_screen_pos();
             let sz = ui.get_content_region_avail();
             let p1 = vec2(p0.x + sz.x, p0.y + sz.y);
+            ui.dummy(vec2(340.0, 260.0));
 
             let dr = ui.window_draw_list();
             dr.add_rect_filled(p0, p1, Color::new(1.0, 1.0, 1.0, 1.0), 0.0, DrawFlags::None);

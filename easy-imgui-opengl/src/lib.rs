@@ -664,6 +664,9 @@ impl<A: Copy> DynamicVertexArray<A> {
     pub fn new(gl: &GlContext) -> Result<Self> {
         Self::from_data(gl, Vec::new())
     }
+    pub fn gl(&self) -> &GlContext {
+        &self.buf.gl
+    }
     pub fn from_data(gl: &GlContext, data: Vec<A>) -> Result<Self> {
         Ok(DynamicVertexArray {
             data,

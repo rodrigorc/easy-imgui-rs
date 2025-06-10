@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use easy_imgui::FontSize;
 use easy_imgui_window::{
     easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
 };
@@ -87,9 +88,6 @@ struct App {
     window_size: winit::dpi::PhysicalSize<u32>,
     ds: glr::DynamicVertexArray<Vertex>,
 
-    font_normal: imgui::FontId,
-    font_medium: imgui::FontId,
-    font_big: imgui::FontId,
     last_tick: Instant,
 
     show_menu: Menu,
@@ -186,6 +184,7 @@ impl App {
         let u = Uniform {
             m: ortho2d_zero(1.0, 1.0),
         };
+
         App {
             vao,
             gl: gl.clone(),
@@ -193,9 +192,6 @@ impl App {
             u,
             window_size: (800, 600).into(),
             ds: glr::DynamicVertexArray::new(gl).unwrap(),
-            font_normal: imgui::FontId::default(),
-            font_medium: imgui::FontId::default(),
-            font_big: imgui::FontId::default(),
             last_tick: Instant::now(),
             show_menu: Menu::Hello,
             show_demo: false,
@@ -436,11 +432,6 @@ impl imgui::UiBuilder for App {
         }
         self.prg.draw(&self.u, &self.ds, glow::TRIANGLES);
     }
-    fn build_custom_atlas(&mut self, atlas: &mut imgui::FontAtlasMut<'_, Self>) {
-        self.font_normal = atlas.add_font(imgui::FontInfo::default_font(13.0));
-        self.font_medium = atlas.add_font(imgui::FontInfo::default_font(30.0));
-        self.font_big = atlas.add_font(imgui::FontInfo::default_font(60.0));
-    }
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
         if self.show_demo {
             ui.show_demo_window(Some(&mut self.show_demo));
@@ -455,7 +446,7 @@ impl imgui::UiBuilder for App {
             Vector2::new(0.0, 0.0),
         );
         ui.set_next_window_bg_alpha(0.75);
-        ui.with_push(self.font_big, || {
+        ui.with_push(FontSize(60.0), || {
             ui.window_config(lbl("menu"))
                 .flags(
                     imgui::WindowFlags::NoTitleBar
@@ -478,7 +469,7 @@ impl imgui::UiBuilder for App {
                     Menu::Hello => {
                         ui.set_cursor_pos_x(285.0);
                         ui.text("Pong");
-                        ui.with_push(self.font_medium, || {
+                        ui.with_push(FontSize(30.0), || {
                             ui.text("This is a clone of the classic game");
                             ui.text("to demonstrate how to use easy-imgui");
                             ui.text("to build the in-game UI.");
@@ -560,7 +551,8 @@ impl Application for App {
             .main_window()
             .set_matrix(Some(Matrix3::identity()));
 
-        let mut app = App::new(args.window.renderer().gl_context());
+        let gl = args.window.renderer().gl_context().clone();
+        let mut app = App::new(&gl);
         app.game_tick();
         app.ui_status.insert(UiRequest::VSync);
 

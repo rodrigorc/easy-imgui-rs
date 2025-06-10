@@ -422,7 +422,7 @@ impl App {
 }
 
 impl imgui::UiBuilder for App {
-    fn pre_render(&mut self) {
+    fn pre_render(&mut self, _ctx: &mut imgui::CurrentContext<'_>) {
         use glow::HasContext;
 
         unsafe {

@@ -173,7 +173,7 @@ use std::ffi::{c_char, c_void, CStr, CString, OsString};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
-use std::ptr::{null, null_mut};
+use std::ptr::{null, null_mut, NonNull};
 use std::time::Duration;
 
 // Adds `repr(transparent)` and basic conversions
@@ -196,7 +196,7 @@ macro_rules! transparent_options {
     };
 
     ( @OPTS Deref $outer:ident $inner:ident) => {
-        impl Deref for $outer {
+        impl std::ops::Deref for $outer {
             type Target = $inner;
             fn deref(&self) -> &Self::Target {
                 &self.0
@@ -211,7 +211,7 @@ macro_rules! transparent_options {
     };
 
     ( @OPTS DerefMut $outer:ident $inner:ident) => {
-        impl DerefMut for $outer {
+        impl std::ops::DerefMut for $outer {
             fn deref_mut(&mut self) -> &mut $inner {
                 &mut self.0
             }
@@ -366,7 +366,7 @@ impl From<Color> for ImVec4 {
 
 /// The main ImGui context.
 pub struct Context {
-    imgui: *mut ImGuiContext,
+    imgui: NonNull<RawContext>,
     pending_atlas: bool,
     ini_file_name: Option<CString>,
 }
@@ -379,9 +379,11 @@ impl Context {
     pub unsafe fn new() -> Context {
         unsafe {
             let imgui = ImGui_CreateContext(null_mut());
+            // Probably not needed but just in case
             ImGui_SetCurrentContext(imgui);
+            let imgui = NonNull::new(imgui).unwrap();
             let mut ctx = Context {
-                imgui,
+                imgui: imgui.cast(),
                 pending_atlas: true,
                 ini_file_name: None,
             };
@@ -413,7 +415,7 @@ impl Context {
     /// SAFETY: Do not make two different contexts current at the same time
     /// in the same thread.
     pub unsafe fn set_current(&mut self) -> CurrentContext<'_> {
-        ImGui_SetCurrentContext(self.imgui);
+        ImGui_SetCurrentContext(self.imgui.as_mut().inner());
         CurrentContext { ctx: self }
     }
 
@@ -430,7 +432,7 @@ impl Context {
         let Some(ini_file_name) = ini_file_name else {
             self.ini_file_name = None;
             unsafe {
-                (*self.imgui).IO.IniFilename = null();
+                self.io_mut().inner().IniFilename = null();
             }
             return;
         };
@@ -442,7 +444,7 @@ impl Context {
 
         let ini = self.ini_file_name.insert(ini);
         unsafe {
-            (*self.imgui).IO.IniFilename = ini.as_ptr();
+            self.io_mut().inner().IniFilename = ini.as_ptr();
         }
     }
     /// Gets the ini file set previously by `set_ini_file_name`.
@@ -485,11 +487,11 @@ impl CurrentContext<'_> {
     pub unsafe fn do_frame<A: UiBuilder>(
         &mut self,
         app: &mut A,
-        pre_render: impl FnOnce(),
+        pre_render: impl FnOnce(&mut Self),
         render: impl FnOnce(&ImDrawData),
     ) {
         let mut ui = Ui {
-            imgui: self.imgui(),
+            imgui: self.ctx.imgui,
             data: std::ptr::null_mut(),
             generation: ImGui_GetFrameCount() as usize,
             callbacks: RefCell::new(Vec::new()),
@@ -497,7 +499,15 @@ impl CurrentContext<'_> {
         };
 
         self.io_mut().inner().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
-        let ctx_guard = UiPtrToNullGuard(self.ctx);
+        struct UiPtrToNullGuard<'a, 'b>(&'a mut CurrentContext<'b>);
+        impl Drop for UiPtrToNullGuard<'_, '_> {
+            fn drop(&mut self) {
+                unsafe {
+                    self.0.io_mut().inner().BackendLanguageUserData = null_mut();
+                }
+            }
+        }
+        let mut ctx_guard = UiPtrToNullGuard(self);
 
         // This guards for panics during the frame.
         struct FrameGuard;
@@ -515,8 +525,8 @@ impl CurrentContext<'_> {
 
         app.do_ui(&ui);
 
-        pre_render();
-        app.pre_render();
+        pre_render(&mut ctx_guard.0);
+        app.pre_render(&mut ctx_guard.0);
 
         std::mem::drop(end_frame_guard);
 
@@ -532,108 +542,107 @@ impl CurrentContext<'_> {
         let draw_data = ImGui_GetDrawData();
         render(&*draw_data);
 
-        ctx_guard.0.pending_atlas |= ui.pending_atlas.get();
+        ctx_guard.0.ctx.pending_atlas |= ui.pending_atlas.get();
     }
 }
 
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            ImGui_DestroyContext(self.imgui);
+            ImGui_DestroyContext(self.imgui.as_mut().inner());
         }
     }
 }
 
-// This macro adds common functions to any type that contains a `*mut ImGuiContext`.
-// It assumes an existing: fn imgui(&self) -> *mut ImGuiContext;
-macro_rules! implement_imgui_context {
-    () => {
-        #[inline]
-        pub fn io(&self) -> &Io {
-            unsafe { Io::cast(&(*self.imgui()).IO) }
-        }
-        /// This returns a safe mutable wrapper for the IO.
-        ///
-        /// Use `io_mut().inner()` to get the unsafe wrapper
-        #[inline]
-        pub fn io_mut(&mut self) -> &mut IoMut {
-            unsafe { IoMut::cast_mut(&mut (*self.imgui()).IO) }
-        }
-        #[inline]
-        pub fn platform_io(&self) -> &PlatformIo {
-            unsafe { PlatformIo::cast(&(*self.imgui()).PlatformIO) }
-        }
-        #[inline]
-        pub unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
-            unsafe { PlatformIo::cast_mut(&mut (*self.imgui()).PlatformIO) }
-        }
-        #[inline]
-        pub fn style(&self) -> &style::Style {
-            unsafe { style::Style::cast(&(*self.imgui()).Style) }
-        }
-    };
+transparent! {
+    /// Safe thin wrapper for ImGuiContext.
+    ///
+    /// This has common read-only functions.
+    pub struct RawContext(ImGuiContext);
 }
 
-// Private newtype to do `implement_imgui_context!`` for a raw pointer.
-// Implementing it for *mut ImGuiContext` directly would be terribly unsafe.
+impl RawContext {
+    #[inline]
+    pub unsafe fn current<'a>() -> &'a RawContext {
+        RawContext::cast(&*ImGui_GetCurrentContext())
+    }
+    #[inline]
+    pub unsafe fn from_ptr<'a>(ptr: *mut ImGuiContext) -> &'a RawContext {
+        RawContext::cast(&*ptr)
+    }
+    #[inline]
+    pub unsafe fn from_ptr_mut<'a>(ptr: *mut ImGuiContext) -> &'a mut RawContext {
+        RawContext::cast_mut(&mut *ptr)
+    }
+    #[inline]
+    pub unsafe fn inner(&mut self) -> &mut ImGuiContext {
+        &mut self.0
+    }
+    #[inline]
+    pub fn platform_io(&self) -> &PlatformIo {
+        PlatformIo::cast(&self.PlatformIO)
+    }
+    #[inline]
+    pub unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
+        PlatformIo::cast_mut(&mut self.inner().PlatformIO)
+    }
 
-mod imgui_ptr_impl {
-    use super::{ImGuiContext, ImGui_GetCurrentContext};
-
-    pub struct ImGuiPtr(*mut ImGuiContext);
-
-    impl ImGuiPtr {
-        pub unsafe fn current() -> ImGuiPtr {
-            ImGuiPtr(ImGui_GetCurrentContext())
-        }
-        pub unsafe fn from_raw(ptr: *mut ImGuiContext) -> ImGuiPtr {
-            ImGuiPtr(ptr)
-        }
-        pub fn as_raw(&self) -> *mut ImGuiContext {
-            self.0
-        }
+    #[inline]
+    pub fn io(&self) -> &Io {
+        Io::cast(&self.IO)
+    }
+    /// This returns a safe mutable wrapper for the IO.
+    ///
+    /// Use `io_mut().inner()` to get the unsafe wrapper
+    #[inline]
+    pub fn io_mut(&mut self) -> &mut IoMut {
+        unsafe { IoMut::cast_mut(&mut self.inner().IO) }
+    }
+    #[inline]
+    pub fn style(&self) -> &style::Style {
+        style::Style::cast(&self.Style)
+    }
+    /// Gets a mutable reference to the style definition.
+    #[inline]
+    pub fn style_mut(&mut self) -> &mut style::Style {
+        // SAFETY: Changing the style is only unsafe during the frame (use pushables there),
+        // but during a frame the context is borrowed inside the `&Ui`, that is immutable.
+        unsafe { style::Style::cast_mut(&mut self.inner().Style) }
     }
 }
 
-pub use imgui_ptr_impl::ImGuiPtr;
-
-impl ImGuiPtr {
-    fn imgui(&self) -> *mut ImGuiContext {
-        self.as_raw()
-    }
-    implement_imgui_context! {}
-}
-
-impl Context {
-    fn imgui(&self) -> *mut ImGuiContext {
-        self.imgui
-    }
-    implement_imgui_context! {}
-}
-
-impl CurrentContext<'_> {
-    fn imgui(&self) -> *mut ImGuiContext {
-        self.ctx.imgui()
-    }
-    implement_imgui_context! {}
-}
-
-impl<A> Ui<A> {
-    fn imgui(&self) -> *mut ImGuiContext {
-        self.imgui
-    }
-    implement_imgui_context! {}
-}
-
-struct UiPtrToNullGuard<'a>(&'a mut Context);
-
-impl Drop for UiPtrToNullGuard<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            self.0.io_mut().inner().BackendLanguageUserData = null_mut();
-        }
+impl Deref for Context {
+    type Target = RawContext;
+    fn deref(&self) -> &RawContext {
+        unsafe { self.imgui.as_ref() }
     }
 }
+impl DerefMut for Context {
+    fn deref_mut(&mut self) -> &mut RawContext {
+        unsafe { self.imgui.as_mut() }
+    }
+}
+
+impl Deref for CurrentContext<'_> {
+    type Target = RawContext;
+    fn deref(&self) -> &RawContext {
+        &self.ctx
+    }
+}
+impl DerefMut for CurrentContext<'_> {
+    fn deref_mut(&mut self) -> &mut RawContext {
+        &mut self.ctx
+    }
+}
+
+impl<A> Deref for Ui<A> {
+    type Target = RawContext;
+    fn deref(&self) -> &RawContext {
+        unsafe { self.imgui.as_ref() }
+    }
+}
+
+// No DerefMut for Ui, sorry.
 
 /// The main trait that the user must implement to create a UI.
 pub trait UiBuilder {
@@ -643,8 +652,8 @@ pub trait UiBuilder {
     fn build_custom_atlas(&mut self, _atlas: &mut FontAtlasMut<'_, Self>) {}
     /// This function is run after `do_ui` but before rendering.
     ///
-    /// It can be used to clear the framebuffer.
-    fn pre_render(&mut self) {}
+    /// It can be used to clear the framebuffer, or prerender something.
+    fn pre_render(&mut self, _ctx: &mut CurrentContext<'_>) {}
     /// User the `ui` value to create a UI frame.
     ///
     /// This is equivalent to the Dear ImGui code between `NewFrame` and `EndFrame`.
@@ -954,7 +963,7 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 }
 
 unsafe fn font_ptr(font: FontId) -> *mut ImFont {
-    let fonts = ImGuiPtr::current().io().Fonts;
+    let fonts = RawContext::current().io().Fonts;
     // fonts.Fonts is never empty, at least there is the default font
     (&(*fonts).Fonts)[font.0]
 }
@@ -971,7 +980,7 @@ pub struct Ui<A>
 where
     A: ?Sized,
 {
-    imgui: *mut ImGuiContext,
+    imgui: NonNull<RawContext>,
     data: *mut A, // only for callbacks, after `do_ui` has finished, do not use directly
     generation: usize,
     callbacks: RefCell<Vec<UiCallback<A>>>,
@@ -2487,7 +2496,7 @@ impl<A> Ui<A> {
         merge_generation(id, self.generation)
     }
     unsafe fn run_callback<X>(id: usize, x: X) {
-        let user_data = ImGuiPtr::current().io().BackendLanguageUserData;
+        let user_data = RawContext::current().io().BackendLanguageUserData;
         if user_data.is_null() {
             return;
         }
@@ -3122,7 +3131,7 @@ impl<A> Ui<A> {
     pub fn is_below_blocking_modal(&self) -> bool {
         // Beware: internal API
         unsafe {
-            let modal = ImGui_FindBlockingModal((*self.imgui()).CurrentWindow);
+            let modal = ImGui_FindBlockingModal(self.CurrentWindow);
             !modal.is_null()
         }
     }

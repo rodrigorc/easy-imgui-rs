@@ -154,12 +154,11 @@ impl Renderer {
                     &self.objs.atlas,
                 );
             }
-            let display_size = imgui.io().display_size();
-            let scale = imgui.io().display_scale();
-
             imgui.do_frame(
                 app,
-                || {
+                |ctx| {
+                    let display_size = ctx.io().display_size();
+                    let scale = ctx.io().display_scale();
                     if self.matrix.is_none() {
                         self.gl.viewport(
                             0,

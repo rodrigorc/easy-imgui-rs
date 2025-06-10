@@ -1,20 +1,5 @@
 use super::*;
 
-impl Context {
-    pub fn style_mut(&mut self) -> &mut Style {
-        // SAFETY: mutating the style is only unsafe during the frame, and there the context
-        // is already borrowed as `&Ui`.
-        unsafe { Style::cast_mut(&mut (*self.imgui()).Style) }
-    }
-}
-
-impl CurrentContext<'_> {
-    pub fn style_mut(&mut self) -> &mut Style {
-        // SAFETY: same as `Context::style_mut`.
-        unsafe { Style::cast_mut(&mut (*self.imgui()).Style) }
-    }
-}
-
 transparent_mut! {
     /// A wrapper for the `ImGuiStyle` type.
     ///

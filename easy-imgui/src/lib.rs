@@ -461,12 +461,6 @@ impl CurrentContext<'_> {
         pre_render: impl FnOnce(&mut Self),
         render: impl FnOnce(&ImDrawData),
     ) {
-        // Ensure there is a font
-        let font_atlas = self.io_mut().font_atlas_mut();
-        if font_atlas.Fonts.len() == 0 {
-            font_atlas.add_font(FontInfo::default_font());
-        }
-
         let mut ui = Ui {
             imgui: self.ctx.imgui,
             data: std::ptr::null_mut(),
@@ -598,12 +592,12 @@ impl DerefMut for Context {
 impl Deref for CurrentContext<'_> {
     type Target = RawContext;
     fn deref(&self) -> &RawContext {
-        &self.ctx
+        self.ctx
     }
 }
 impl DerefMut for CurrentContext<'_> {
     fn deref_mut(&mut self) -> &mut RawContext {
-        &mut self.ctx
+        self.ctx
     }
 }
 
@@ -939,10 +933,9 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
     (start, end)
 }
 
-unsafe fn font_ptr(font: FontId) -> *mut ImFont {
-    let fonts = RawContext::current().io().Fonts;
-    // fonts.Fonts is never empty, at least there is the default font
-    (&(*fonts).Fonts)[font.0]
+unsafe fn current_font_ptr(font: FontId) -> *mut ImFont {
+    let fonts = RawContext::current().io().font_atlas();
+    fonts.font_ptr(font)
 }
 
 // this is unsafe because it replaces a C binding function that does nothing, and adding `unsafe`
@@ -3178,58 +3171,28 @@ impl<A> Ui<A> {
         unsafe { ImGui_IsKeyChordPressed(key_chord.into().bits()) }
     }
 
-    /// Gets information about a glyph for a font.
+    /// Gets the font details for a `FontId`.
+    pub fn get_font(&self, font_id: FontId) -> &Font {
+        unsafe {
+            let font = self.io().font_atlas().font_ptr(font_id);
+            Font::cast(&*font)
+        }
+    }
+
+    /// Gets more information about a font.
     ///
     /// This is a member of `Ui` instead of `FontAtlas` because it requires the atlas to be fully
     /// built and that is only ensured during the frame, that is when there is a `&Ui`.
-    pub fn find_glyph(
-        &self,
-        font_id: FontId,
-        font_size: f32,
-        font_density: Option<f32>,
-        c: char,
-    ) -> FontGlyph<'_> {
-        unsafe {
-            let font = font_ptr(font_id);
-            let baked = ImFont_GetFontBaked(font, font_size, font_density.unwrap_or(-1.0));
-            FontGlyph(&*ImFontBaked_FindGlyph(baked, ImWchar::from(c)))
-        }
-    }
-
-    /// Just like `find_glyph` but doesn't use the fallback character for unavailable glyphs.
-    pub fn find_glyph_no_fallback(
-        &self,
-        font_id: FontId,
-        font_size: f32,
-        font_density: Option<f32>,
-        c: char,
-    ) -> Option<FontGlyph<'_>> {
-        unsafe {
-            let font = font_ptr(font_id);
-            let baked = ImFont_GetFontBaked(font, font_size, font_density.unwrap_or(-1.0));
-            let p = ImFontBaked_FindGlyphNoFallback(baked, ImWchar::from(c));
-            p.as_ref().map(FontGlyph)
-        }
-    }
-
-    /// Gets the font details for a `FontId`.
-    ///
-    /// TODO: do a proper ImFont wrapper?
-    pub fn get_font(&self, font_id: FontId) -> &ImFont {
-        unsafe {
-            let font = font_ptr(font_id);
-            &*font
-        }
-    }
     pub fn get_font_baked(
         &self,
         font_id: FontId,
         font_size: f32,
         font_density: Option<f32>,
-    ) -> &ImFontBaked {
+    ) -> &FontBaked {
         unsafe {
-            let font = font_ptr(font_id);
-            &*(*font).GetFontBaked(font_size, font_density.unwrap_or(-1.0))
+            let font = self.io().font_atlas().font_ptr(font_id);
+            let baked = (*font).GetFontBaked(font_size, font_density.unwrap_or(-1.0));
+            FontBaked::cast(&*baked)
         }
     }
 
@@ -3290,9 +3253,16 @@ impl ListClipper {
     }
 }
 
-pub struct FontGlyph<'a>(&'a ImFontGlyph);
+transparent_mut! {
+    // TODO: do a proper impl Font?
+    pub struct Font(ImFont);
+}
 
-impl FontGlyph<'_> {
+transparent! {
+    pub struct FontGlyph(ImFontGlyph);
+}
+
+impl FontGlyph {
     pub fn p0(&self) -> Vector2 {
         Vector2::new(self.0.X0, self.0.Y0)
     }
@@ -3319,7 +3289,7 @@ impl FontGlyph<'_> {
     }
 }
 
-impl std::fmt::Debug for FontGlyph<'_> {
+impl std::fmt::Debug for FontGlyph {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         fmt.debug_struct("FontGlyph")
             .field("p0", &self.p0())
@@ -3331,6 +3301,32 @@ impl std::fmt::Debug for FontGlyph<'_> {
             .field("colored", &self.colored())
             .field("codepoint", &self.codepoint())
             .finish()
+    }
+}
+
+transparent! {
+    #[derive(Debug)]
+    pub struct FontBaked(ImFontBaked);
+}
+
+impl FontBaked {
+    /// Gets information about a glyph for a font.
+    pub fn find_glyph(&self, c: char) -> &FontGlyph {
+        unsafe {
+            FontGlyph::cast(&*ImFontBaked_FindGlyph(
+                (&raw const self.0).cast_mut(),
+                ImWchar::from(c),
+            ))
+        }
+    }
+
+    /// Just like `find_glyph` but doesn't use the fallback character for unavailable glyphs.
+    pub fn find_glyph_no_fallback(&self, c: char) -> Option<&FontGlyph> {
+        unsafe {
+            let p =
+                ImFontBaked_FindGlyphNoFallback((&raw const self.0).cast_mut(), ImWchar::from(c));
+            p.as_ref().map(FontGlyph::cast)
+        }
     }
 }
 
@@ -3374,15 +3370,11 @@ impl<A> Ui<A> {
 
 /// Identifier of a registered font.
 ///
-/// Currently there is no way to remove a font.
-///
 /// `FontId::default()` will be the default font.
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FontId(usize);
 
 /// Identifier for a registered custom rectangle.
-///
-/// Currently there is no way to remove a rectangle.
 ///
 /// The `CustomRectIndex::default()` is provided as a convenience, but it is always invalid, and
 /// will panic if used.
@@ -3425,6 +3417,11 @@ impl FontAtlas {
         }
     }
 
+    unsafe fn font_ptr(&self, font: FontId) -> *mut ImFont {
+        // fonts.Fonts is never empty, at least there is the default font
+        *self.Fonts.get(font.0).unwrap_or(&self.Fonts[0])
+    }
+
     pub fn check_texture_unique_id(&self, uid: TextureUniqueId) -> bool {
         self.texture_unique_id(uid).is_some_and(|x| {
             !matches!(
@@ -3452,6 +3449,18 @@ impl FontAtlas {
     pub fn add_font(&mut self, font: FontInfo) -> FontId {
         self.add_font_priv(font, false)
     }
+
+    pub fn remove_font(&mut self, font_id: FontId) {
+        unsafe {
+            let f = self.font_ptr(font_id);
+            // Do not delete the default font!
+            if std::ptr::eq(f, self.Fonts[0]) {
+                return;
+            }
+            self.RemoveFont(f);
+        }
+    }
+
     /// Adds several fonts with as a single ImGui font.
     ///
     /// This is useful mainly if different TTF files have different charset coverage but you want
@@ -3506,8 +3515,6 @@ impl FontAtlas {
         }
     }
 
-    /// TODO  add_font_glyph(
-
     /// Adds an arbitrary image to the font atlas.
     ///
     /// The returned `CustomRectIndex` can be used later to draw the image.
@@ -3545,6 +3552,15 @@ impl FontAtlas {
             draw(&mut sub_image);
 
             idx
+        }
+    }
+
+    pub fn remove_custom_rect(&mut self, idx: CustomRectIndex) {
+        if idx.0 < 0 {
+            return;
+        }
+        unsafe {
+            self.RemoveCustomRect(idx.0);
         }
     }
 }
@@ -3933,7 +3949,7 @@ impl<A> WindowDrawList<'_, A> {
             let (start, end) = text_ptrs(text);
             ImDrawList_AddText1(
                 self.ptr,
-                font_ptr(font),
+                self.ui.io().font_atlas().font_ptr(font),
                 font_size,
                 &v2_to_im(pos),
                 color.as_u32(),
@@ -4271,7 +4287,7 @@ impl<T: Pushable> Pushable for Option<T> {
 //TODO rework the font pushables
 impl Pushable for FontId {
     unsafe fn push(&self) {
-        let font = font_ptr(*self);
+        let font = current_font_ptr(*self);
         ImGui_PushFont(font, -1.0);
     }
     unsafe fn pop(&self) {
@@ -4295,7 +4311,7 @@ pub struct FontAndSize(pub FontId, pub f32);
 
 impl Pushable for FontAndSize {
     unsafe fn push(&self) {
-        ImGui_PushFont(font_ptr(self.0), self.1);
+        ImGui_PushFont(current_font_ptr(self.0), self.1);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();

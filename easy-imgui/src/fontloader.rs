@@ -151,8 +151,8 @@ impl GlyphLoaderArg<'_> {
     pub fn font_size(&self) -> f32 {
         self.baked.Size
     }
-    pub fn dpi_density(&self) {
-        self.rasterizer_density;
+    pub fn dpi_density(&self) -> f32 {
+        self.rasterizer_density
     }
     pub fn set_dpi_density(&mut self, scale: f32) {
         self.rasterizer_density = scale;
@@ -185,8 +185,8 @@ impl GlyphLoaderArg<'_> {
         if flags.contains(GlyphBuildFlags::PRESCALED_SIZE) {
             bmp_size_x = size.x.round() as u32;
             bmp_size_y = size.y.round() as u32;
-            size.x = size.x / scale_for_raster.x;
-            size.y = size.y / scale_for_raster.y;
+            size.x /= scale_for_raster.x;
+            size.y /= scale_for_raster.y;
         } else {
             bmp_size_x = (size.x * scale_for_raster.x).round() as u32;
             bmp_size_y = (size.y * scale_for_raster.y).round() as u32;

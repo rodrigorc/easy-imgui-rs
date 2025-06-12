@@ -62,6 +62,11 @@ impl Renderer {
                 pio.Renderer_TextureMaxWidth = max_tex_size;
                 pio.Renderer_TextureMaxHeight = max_tex_size;
             }
+            let fonts = imgui.io_mut().font_atlas_mut();
+            if fonts.TexMaxWidth == 0 || fonts.TexMaxWidth > max_tex_size {
+                fonts.TexMaxWidth = max_tex_size;
+                fonts.TexMaxHeight = max_tex_size;
+            }
 
             let glsl_version = if cfg!(not(target_arch = "wasm32")) {
                 "#version 150\n"
@@ -187,7 +192,7 @@ impl Renderer {
         match tex.Status {
             ImTextureStatus::ImTextureStatus_WantCreate => {
                 let pixels = tex.Pixels;
-                let tex_id = glr::Texture::generate(&gl).unwrap();
+                let tex_id = glr::Texture::generate(gl).unwrap();
                 gl.bind_texture(glow::TEXTURE_2D, Some(tex_id.id()));
                 gl.tex_parameter_i32(
                     glow::TEXTURE_2D,

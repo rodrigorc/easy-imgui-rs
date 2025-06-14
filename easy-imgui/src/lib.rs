@@ -3372,7 +3372,7 @@ impl<A> Ui<A> {
 ///
 /// `FontId::default()` will be the default font.
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct FontId(usize);
+pub struct FontId(u32);
 
 /// Identifier for a registered custom rectangle.
 ///
@@ -3419,7 +3419,11 @@ impl FontAtlas {
 
     unsafe fn font_ptr(&self, font: FontId) -> *mut ImFont {
         // fonts.Fonts is never empty, at least there is the default font
-        *self.Fonts.get(font.0).unwrap_or(&self.Fonts[0])
+        *self
+            .Fonts
+            .iter()
+            .find(|f| f.as_ref().map(|f| f.FontId) == Some(font.0))
+            .unwrap_or(&self.Fonts[0])
     }
 
     pub fn check_texture_unique_id(&self, uid: TextureUniqueId) -> bool {
@@ -3490,7 +3494,7 @@ impl FontAtlas {
             fc.Flags = font.flags.bits();
             fc.SizePixels = font.size;
 
-            match font.ttf {
+            let font_ptr = match font.ttf {
                 TtfData::Bytes(bytes) => {
                     self.AddFontFromMemoryTTF(
                         bytes.as_ptr() as *mut _,
@@ -3498,20 +3502,22 @@ impl FontAtlas {
                         /* size_pixels */ 0.0,
                         &fc,
                         std::ptr::null(),
-                    );
+                    )
                 }
-                TtfData::DefaultFont => {
-                    self.AddFontDefault(&fc);
-                }
+                TtfData::DefaultFont => self.AddFontDefault(&fc),
                 TtfData::CustomLoader(glyph_loader) => {
                     let ptr = Box::into_raw(Box::new(glyph_loader));
                     fc.FontLoader = &fontloader::FONT_LOADER.0;
                     fc.FontData = ptr as *mut c_void;
                     fc.FontDataOwnedByAtlas = true;
-                    self.AddFont(&fc);
+                    self.AddFont(&fc)
                 }
-            }
-            FontId(self.Fonts.len() - 1)
+            };
+            let Some(font) = font_ptr.as_ref() else {
+                log::error!("Error loading font!");
+                return FontId::default();
+            };
+            FontId(font.FontId)
         }
     }
 

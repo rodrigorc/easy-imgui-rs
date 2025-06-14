@@ -29,8 +29,8 @@ impl Application for App {
         imgui.set_ini_file_name(Some("imgui.ini"));
         let font_atlas = imgui.io_mut().font_atlas_mut();
         font_atlas.add_font(imgui::FontInfo::default_font());
-        font_atlas.add_font(imgui::FontInfo::new(KARLA_TTF));
-        font_atlas.add_font(imgui::FontInfo::new(UBUNTU_TTF));
+        font_atlas.add_font(imgui::FontInfo::new(KARLA_TTF).set_name("karla"));
+        font_atlas.add_font(imgui::FontInfo::new(UBUNTU_TTF).set_name("ubuntu"));
         //imgui.style_mut().FontSizeBase = 16.0;
         App
     }

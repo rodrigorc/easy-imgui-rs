@@ -388,7 +388,7 @@ impl Context {
                 ini_file_name: None,
             };
             let io = ctx.io_mut();
-            io.font_atlas_mut().TexPixelsUseColors = true;
+            io.font_atlas_mut().0.TexPixelsUseColors = true;
 
             let io = io.inner();
             io.IniFilename = null();
@@ -3253,7 +3253,7 @@ impl ListClipper {
     }
 }
 
-transparent_mut! {
+transparent! {
     // TODO: do a proper impl Font?
     pub struct Font(ImFont);
 }
@@ -3328,6 +3328,18 @@ impl FontBaked {
             p.as_ref().map(FontGlyph::cast)
         }
     }
+
+    pub unsafe fn inner(&mut self) -> &mut ImFontBaked {
+        &mut self.0
+    }
+
+    // The only safe values for a loader to set are these
+    pub fn set_ascent(&mut self, ascent: f32) {
+        self.0.Ascent = ascent;
+    }
+    pub fn set_descent(&mut self, descent: f32) {
+        self.0.Descent = descent;
+    }
 }
 
 #[cfg(feature = "docking")]
@@ -3388,7 +3400,7 @@ impl Default for CustomRectIndex {
     }
 }
 
-transparent_mut! {
+transparent! {
     #[derive(Debug)]
     pub struct FontAtlas(ImFontAtlas);
 }
@@ -3399,6 +3411,9 @@ type SubPixelImage<'a, 'b> = image::SubImage<&'a mut PixelImage<'b>>;
 impl FontAtlas {
     pub unsafe fn texture_ref(&self) -> ImTextureRef {
         self.TexRef
+    }
+    pub unsafe fn inner(&mut self) -> &mut ImFontAtlas {
+        &mut self.0
     }
 
     pub fn current_texture_unique_id(&self) -> TextureUniqueId {
@@ -3461,7 +3476,7 @@ impl FontAtlas {
             if std::ptr::eq(f, self.Fonts[0]) {
                 return;
             }
-            self.RemoveFont(f);
+            self.0.RemoveFont(f);
         }
     }
 
@@ -3496,7 +3511,7 @@ impl FontAtlas {
 
             let font_ptr = match font.ttf {
                 TtfData::Bytes(bytes) => {
-                    self.AddFontFromMemoryTTF(
+                    self.0.AddFontFromMemoryTTF(
                         bytes.as_ptr() as *mut _,
                         bytes.len() as i32,
                         /* size_pixels */ 0.0,
@@ -3504,13 +3519,13 @@ impl FontAtlas {
                         std::ptr::null(),
                     )
                 }
-                TtfData::DefaultFont => self.AddFontDefault(&fc),
+                TtfData::DefaultFont => self.0.AddFontDefault(&fc),
                 TtfData::CustomLoader(glyph_loader) => {
                     let ptr = Box::into_raw(Box::new(glyph_loader));
                     fc.FontLoader = &fontloader::FONT_LOADER.0;
                     fc.FontData = ptr as *mut c_void;
                     fc.FontDataOwnedByAtlas = true;
-                    self.AddFont(&fc)
+                    self.0.AddFont(&fc)
                 }
             };
             let Some(font) = font_ptr.as_ref() else {
@@ -3532,7 +3547,7 @@ impl FontAtlas {
         let size = size.into();
         unsafe {
             let mut rect = MaybeUninit::zeroed();
-            let idx = self.AddCustomRect(
+            let idx = self.0.AddCustomRect(
                 i32::try_from(size.x).unwrap(),
                 i32::try_from(size.y).unwrap(),
                 rect.as_mut_ptr(),
@@ -3566,7 +3581,7 @@ impl FontAtlas {
             return;
         }
         unsafe {
-            self.RemoveCustomRect(idx.0);
+            self.0.RemoveCustomRect(idx.0);
         }
     }
 }

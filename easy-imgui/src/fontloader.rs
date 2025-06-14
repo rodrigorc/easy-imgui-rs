@@ -1,4 +1,4 @@
-use super::{vec2, PixelImage, SubPixelImage, Vector2};
+use super::{vec2, FontBaked, PixelImage, SubPixelImage, Vector2};
 use bitflags::bitflags;
 use easy_imgui_sys::*;
 use image::GenericImage;
@@ -6,6 +6,8 @@ use image::GenericImage;
 pub trait GlyphLoader {
     fn contains_glyph(&mut self, codepoint: char) -> bool;
     fn load_glyph(&mut self, arg: GlyphLoaderArg<'_>);
+    fn font_baked_init(&mut self, _baked: &mut FontBaked) {}
+    fn font_baked_destroy(&mut self, _baked: &mut FontBaked) {}
 }
 
 pub type BoxGlyphLoader = Box<dyn GlyphLoader + 'static>;
@@ -25,8 +27,8 @@ impl FontLoader {
             FontSrcInit: Some(font_src_init),
             FontSrcDestroy: Some(font_src_destroy),
             FontSrcContainsGlyph: Some(font_src_contains_glyph),
-            FontBakedInit: None,
-            FontBakedDestroy: None,
+            FontBakedInit: Some(font_baked_init),
+            FontBakedDestroy: Some(font_baked_destroy),
             FontBakedLoadGlyph: Some(font_baked_load_glyph),
             FontBakedSrcLoaderDataSize: 0,
         };
@@ -112,6 +114,39 @@ unsafe extern "C" fn font_baked_load_glyph(
     };
     ldr.load_glyph(arg);
     result
+}
+
+unsafe extern "C" fn font_baked_init(
+    _atlas: *mut ImFontAtlas,
+    src: *mut ImFontConfig,
+    baked: *mut ImFontBaked,
+    _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
+) -> bool {
+    let ptr = (*src).FontLoaderData;
+    if ptr.is_null() {
+        return false;
+    }
+    let ptr = ptr as *mut BoxGlyphLoader;
+    let ldr = &mut *ptr;
+
+    ldr.font_baked_init(FontBaked::cast_mut(&mut *baked));
+    true
+}
+
+unsafe extern "C" fn font_baked_destroy(
+    _atlas: *mut ImFontAtlas,
+    src: *mut ImFontConfig,
+    baked: *mut ImFontBaked,
+    _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
+) {
+    let ptr = (*src).FontLoaderData;
+    if ptr.is_null() {
+        return;
+    }
+    let ptr = ptr as *mut BoxGlyphLoader;
+    let ldr = &mut *ptr;
+
+    ldr.font_baked_destroy(FontBaked::cast_mut(&mut *baked));
 }
 
 pub struct GlyphLoaderArg<'a> {

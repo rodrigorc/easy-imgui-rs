@@ -62,7 +62,7 @@ impl Renderer {
                 pio.Renderer_TextureMaxWidth = max_tex_size;
                 pio.Renderer_TextureMaxHeight = max_tex_size;
             }
-            let fonts = imgui.io_mut().font_atlas_mut();
+            let fonts = imgui.io_mut().font_atlas_mut().inner();
             if fonts.TexMaxWidth == 0 || fonts.TexMaxWidth > max_tex_size {
                 fonts.TexMaxWidth = max_tex_size;
                 fonts.TexMaxHeight = max_tex_size;
@@ -525,7 +525,7 @@ impl Drop for Renderer {
         unsafe {
             let gl = self.gl.clone();
             let imgui = self.imgui();
-            imgui.io_mut().font_atlas_mut().Clear();
+            imgui.io_mut().font_atlas_mut().inner().Clear();
 
             // Destroy all textures
             for tex in imgui.platform_io_mut().textures_mut() {

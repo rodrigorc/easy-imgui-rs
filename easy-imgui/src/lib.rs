@@ -105,8 +105,6 @@
  * These are the available features for this crate:
  *  * `freetype`: Uses an external _freetype_ font loader for Dear ImGui, instead of the embedded
  *    `stb_truetype` library.
- *  * `docking`: Uses the `docking` branch of Dear ImGui. Note that this is considered somewhat
- *    experimental.
  *
  * # Usage
  * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
@@ -393,12 +391,8 @@ impl Context {
             let io = io.inner();
             io.IniFilename = null();
 
-            // If you enabled the "docking" feature you will want to use it
-            #[cfg(feature = "docking")]
-            {
-                io.add_config_flags(ConfigFlags::DockingEnable);
-                io.ConfigDpiScaleFonts = true;
-            }
+            io.add_config_flags(ConfigFlags::DockingEnable);
+            io.ConfigDpiScaleFonts = true;
             io.ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
             ctx
         }
@@ -2606,19 +2600,13 @@ impl<A> Ui<A> {
     }
     pub fn foreground_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
-            #[cfg(feature = "docking")]
             let ptr = ImGui_GetForegroundDrawList(std::ptr::null_mut());
-            #[cfg(not(feature = "docking"))]
-            let ptr = ImGui_GetForegroundDrawList();
             WindowDrawList { ui: self, ptr }
         }
     }
     pub fn background_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
-            #[cfg(feature = "docking")]
             let ptr = ImGui_GetBackgroundDrawList(std::ptr::null_mut());
-            #[cfg(not(feature = "docking"))]
-            let ptr = ImGui_GetBackgroundDrawList();
             WindowDrawList { ui: self, ptr }
         }
     }
@@ -3216,6 +3204,41 @@ impl<A> Ui<A> {
         let tex_ref = self.get_atlas_texture_ref();
         Some(TextureRect { rect, tex_ref })
     }
+
+    pub fn dock_space(
+        &self,
+        id: ImGuiID,
+        size: Vector2,
+        flags: DockNodeFlags, /*window_class: &WindowClass*/
+    ) -> ImGuiID {
+        unsafe { ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null()) }
+    }
+    pub fn dock_space_over_viewport(
+        &self,
+        dockspace_id: ImGuiID,
+        flags: DockNodeFlags, /*window_class: &WindowClass*/
+    ) -> ImGuiID {
+        unsafe {
+            ImGui_DockSpaceOverViewport(
+                dockspace_id,
+                std::ptr::null(),
+                flags.bits(),
+                std::ptr::null(),
+            )
+        }
+    }
+    pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
+        unsafe {
+            ImGui_SetNextWindowDockID(dock_id, cond.bits());
+        }
+    }
+    //SetNextWindowClass(const ImGuiWindowClass* window_class)
+    pub fn get_window_doc_id(&self) -> ImGuiID {
+        unsafe { ImGui_GetWindowDockID() }
+    }
+    pub fn is_window_docked(&self) -> bool {
+        unsafe { ImGui_IsWindowDocked() }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -3339,44 +3362,6 @@ impl FontBaked {
     }
     pub fn set_descent(&mut self, descent: f32) {
         self.0.Descent = descent;
-    }
-}
-
-#[cfg(feature = "docking")]
-impl<A> Ui<A> {
-    pub fn dock_space(
-        &self,
-        id: ImGuiID,
-        size: Vector2,
-        flags: DockNodeFlags, /*window_class: &WindowClass*/
-    ) -> ImGuiID {
-        unsafe { ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null()) }
-    }
-    pub fn dock_space_over_viewport(
-        &self,
-        dockspace_id: ImGuiID,
-        flags: DockNodeFlags, /*window_class: &WindowClass*/
-    ) -> ImGuiID {
-        unsafe {
-            ImGui_DockSpaceOverViewport(
-                dockspace_id,
-                std::ptr::null(),
-                flags.bits(),
-                std::ptr::null(),
-            )
-        }
-    }
-    pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
-        unsafe {
-            ImGui_SetNextWindowDockID(dock_id, cond.bits());
-        }
-    }
-    //SetNextWindowClass(const ImGuiWindowClass* window_class)
-    pub fn get_window_doc_id(&self) -> ImGuiID {
-        unsafe { ImGui_GetWindowDockID() }
-    }
-    pub fn is_window_docked(&self) -> bool {
-        unsafe { ImGui_IsWindowDocked() }
     }
 }
 

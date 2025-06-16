@@ -1,6 +1,3 @@
 [submodule "imgui"]
 	path = easy-imgui-sys/imgui
 	url = https://github.com/ocornut/imgui
-[submodule "imgui-docking"]
-	path = easy-imgui-sys/imgui-docking
-	url = https://github.com/ocornut/imgui

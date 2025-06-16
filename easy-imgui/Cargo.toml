@@ -21,7 +21,6 @@ log = "0.4"
 [features]
 default = []
 freetype = ["easy-imgui-sys/freetype"]
-docking = ["easy-imgui-sys/docking"]
 
 #[dev-dependencies]
 #easy-imgui-window = { version = "=0.6.0", path = "../easy-imgui-window" }

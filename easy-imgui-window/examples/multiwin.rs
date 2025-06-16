@@ -86,11 +86,7 @@ struct App;
 
 impl imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
-        #[cfg(feature = "docking")]
-        {
-            ui.dock_space_over_viewport(0, imgui::DockNodeFlags::None);
-        }
-
+        ui.dock_space_over_viewport(0, imgui::DockNodeFlags::None);
         ui.show_demo_window(None);
     }
 }

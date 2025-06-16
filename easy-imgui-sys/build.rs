@@ -18,11 +18,7 @@ fn main() {
     // set $DEP_IMGUI_THIRD_PARTY to point to that.
 
     let sh = Shell::new().unwrap();
-    let imgui_ori = if cfg!(feature = "docking") {
-        manifest_dir.join("imgui-docking")
-    } else {
-        manifest_dir.join("imgui")
-    };
+    let imgui_ori = manifest_dir.join("imgui");
     let imgui_src = out_path.join("imgui_src");
     let imgui_misc_ft = imgui_src.join("misc/freetype");
 

@@ -191,9 +191,7 @@ imgui_enum! {
         TabDimmed,
         TabDimmedSelected,
         TabDimmedSelectedOverline,
-        #[cfg(feature="docking")]
         DockingPreview,
-        #[cfg(feature="docking")]
         DockingEmptyBg,
         PlotLines,
         PlotLinesHovered,
@@ -249,7 +247,6 @@ imgui_enum! {
         SeparatorTextBorderSize,
         SeparatorTextAlign,
         SeparatorTextPadding,
-        #[cfg(feature="docking")]
         DockingSeparatorSize,
     }
 }
@@ -276,7 +273,6 @@ imgui_flags! {
         NoNavInputs,
         NoNavFocus,
         UnsavedDocument,
-        #[cfg(feature="docking")]
         NoDocking,
         NoNav,
         NoDecoration,
@@ -401,7 +397,6 @@ imgui_flags! {
         RootWindow,
         AnyWindow,
         NoPopupHierarchy,
-        #[cfg(feature="docking")]
         DockHierarchy,
         AllowWhenBlockedByPopup,
         //AllowWhenBlockedByModal,
@@ -645,27 +640,16 @@ imgui_flags! {
         IsPlatformWindow,
         IsPlatformMonitor,
         OwnedByApp,
-        #[cfg(feature="docking")]
         NoDecoration,
-        #[cfg(feature="docking")]
         NoTaskBarIcon,
-        #[cfg(feature="docking")]
         NoFocusOnAppearing,
-        #[cfg(feature="docking")]
         NoFocusOnClick,
-        #[cfg(feature="docking")]
         NoInputs,
-        #[cfg(feature="docking")]
         NoRendererClear,
-        #[cfg(feature="docking")]
         NoAutoMerge,
-        #[cfg(feature="docking")]
         TopMost,
-        #[cfg(feature="docking")]
         CanHostOtherWindows,
-        #[cfg(feature="docking")]
         IsMinimized,
-        #[cfg(feature="docking")]
         IsFocused,
     }
 }
@@ -694,7 +678,6 @@ imgui_flags! {
         NavEnableGamepad,
         NoMouse,
         NoMouseCursorChange,
-        #[cfg(feature="docking")]
         DockingEnable,
         IsSRGB,
         IsTouchScreen,
@@ -736,7 +719,6 @@ imgui_flags! {
         RootWindow,
         AnyWindow,
         NoPopupHierarchy,
-        #[cfg(feature="docking")]
         DockHierarchy,
         RootAndChildWindows,
     }
@@ -913,7 +895,6 @@ imgui_enum! {
     }
 }
 
-#[cfg(feature = "docking")]
 imgui_flags! {
     pub DockNodeFlags: ImGuiDockNodeFlags_ {
         None,

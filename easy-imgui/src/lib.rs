@@ -370,32 +370,68 @@ pub struct Context {
     ini_file_name: Option<CString>,
 }
 
+/// A context that we are sure is made current.
 pub struct CurrentContext<'a> {
     ctx: &'a mut Context,
 }
 
+pub struct ContextBuilder {
+    docking: bool,
+    debug_highlight_id_conflicts: bool,
+    ini_file_name: Option<String>,
+}
+
+impl ContextBuilder {
+    pub fn new() -> ContextBuilder {
+        ContextBuilder {
+            docking: false,
+            debug_highlight_id_conflicts: cfg!(debug_assertions),
+            ini_file_name: None,
+        }
+    }
+    pub fn set_docking(&mut self, docking: bool) -> &mut Self {
+        self.docking = docking;
+        self
+    }
+    pub fn set_debug_highlight_id_conflicts(
+        &mut self,
+        debug_highlight_id_conflicts: bool,
+    ) -> &mut Self {
+        self.debug_highlight_id_conflicts = debug_highlight_id_conflicts;
+        self
+    }
+    pub fn set_ini_file_name(&mut self, ini_file_name: Option<&str>) -> &mut Self {
+        self.ini_file_name = ini_file_name.map(|s| s.to_string());
+        self
+    }
+    pub unsafe fn build(&self) -> Context {
+        let imgui = ImGui_CreateContext(null_mut());
+        // Probably not needed but just in case
+        ImGui_SetCurrentContext(imgui);
+        let imgui = NonNull::new(imgui).unwrap();
+        let mut ctx = Context {
+            imgui: imgui.cast(),
+            ini_file_name: None,
+        };
+        ctx.set_ini_file_name(self.ini_file_name.as_deref());
+
+        let io = ctx.io_mut();
+        io.font_atlas_mut().0.TexPixelsUseColors = true;
+
+        let io = io.inner();
+
+        if self.docking {
+            io.add_config_flags(ConfigFlags::DockingEnable);
+        }
+        io.ConfigDpiScaleFonts = true;
+        io.ConfigDebugHighlightIdConflicts = self.debug_highlight_id_conflicts;
+        ctx
+    }
+}
+
 impl Context {
     pub unsafe fn new() -> Context {
-        unsafe {
-            let imgui = ImGui_CreateContext(null_mut());
-            // Probably not needed but just in case
-            ImGui_SetCurrentContext(imgui);
-            let imgui = NonNull::new(imgui).unwrap();
-            let mut ctx = Context {
-                imgui: imgui.cast(),
-                ini_file_name: None,
-            };
-            let io = ctx.io_mut();
-            io.font_atlas_mut().0.TexPixelsUseColors = true;
-
-            let io = io.inner();
-            io.IniFilename = null();
-
-            io.add_config_flags(ConfigFlags::DockingEnable);
-            io.ConfigDpiScaleFonts = true;
-            io.ConfigDebugHighlightIdConflicts = cfg!(debug_assertions);
-            ctx
-        }
+        ContextBuilder::new().build()
     }
 
     pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
@@ -568,6 +604,14 @@ impl RawContext {
         // SAFETY: Changing the style is only unsafe during the frame (use pushables there),
         // but during a frame the context is borrowed inside the `&Ui`, that is immutable.
         unsafe { style::Style::cast_mut(&mut self.inner().Style) }
+    }
+
+    /// Gets a reference to the main viewport
+    pub fn get_main_viewport(&self) -> &Viewport {
+        unsafe {
+            let ptr = (*self.Viewports)[0];
+            Viewport::cast(&(*ptr)._base)
+        }
     }
 }
 
@@ -2598,6 +2642,9 @@ impl<A> Ui<A> {
             WindowDrawList { ui: self, ptr }
         }
     }
+    pub fn window_dpi_scale(&self) -> f32 {
+        unsafe { ImGui_GetWindowDpiScale() }
+    }
     pub fn foreground_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList(std::ptr::null_mut());
@@ -2733,13 +2780,6 @@ impl<A> Ui<A> {
     }
     pub fn get_item_rect_size(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectSize()) }
-    }
-    pub fn get_main_viewport(&self) -> Viewport<'_> {
-        unsafe {
-            Viewport {
-                ptr: &*ImGui_GetMainViewport(),
-            }
-        }
     }
     pub fn get_content_region_avail(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetContentRegionAvail()) }
@@ -3216,14 +3256,15 @@ impl<A> Ui<A> {
     pub fn dock_space_over_viewport(
         &self,
         dockspace_id: ImGuiID,
+        viewport: &Viewport,
         flags: DockNodeFlags, /*window_class: &WindowClass*/
     ) -> ImGuiID {
         unsafe {
             ImGui_DockSpaceOverViewport(
                 dockspace_id,
-                std::ptr::null(),
+                viewport.get(),
                 flags.bits(),
-                std::ptr::null(),
+                std::ptr::null(), //window_class
             )
         }
     }
@@ -3238,6 +3279,25 @@ impl<A> Ui<A> {
     }
     pub fn is_window_docked(&self) -> bool {
         unsafe { ImGui_IsWindowDocked() }
+    }
+
+    pub fn get_window_viewport(&self) -> &Viewport {
+        unsafe { Viewport::cast(&*ImGui_GetWindowViewport()) }
+    }
+    pub fn set_next_window_viewport(&self, id: ImGuiID) {
+        unsafe { ImGui_SetNextWindowViewport(id) }
+    }
+    pub fn viewport_foreground_draw_list(&self, viewport: &Viewport) -> WindowDrawList<'_, A> {
+        unsafe {
+            let ptr = ImGui_GetForegroundDrawList((&raw const *viewport.get()).cast_mut());
+            WindowDrawList { ui: self, ptr }
+        }
+    }
+    pub fn viewport_background_draw_list(&self, viewport: &Viewport) -> WindowDrawList<'_, A> {
+        unsafe {
+            let ptr = ImGui_GetBackgroundDrawList((&raw const *viewport.get()).cast_mut());
+            WindowDrawList { ui: self, ptr }
+        }
     }
 }
 
@@ -4533,25 +4593,26 @@ impl<H: Hashable> Pushable for ItemId<H> {
     }
 }
 
-pub struct Viewport<'s> {
-    ptr: &'s ImGuiViewport,
+transparent! {
+    #[derive(Debug)]
+    pub struct Viewport(ImGuiViewport);
 }
 
-impl Viewport<'_> {
+impl Viewport {
     pub fn flags(&self) -> ViewportFlags {
-        ViewportFlags::from_bits_truncate(self.ptr.Flags)
+        ViewportFlags::from_bits_truncate(self.Flags)
     }
     pub fn pos(&self) -> Vector2 {
-        im_to_v2(self.ptr.Pos)
+        im_to_v2(self.Pos)
     }
     pub fn size(&self) -> Vector2 {
-        im_to_v2(self.ptr.Size)
+        im_to_v2(self.Size)
     }
     pub fn work_pos(&self) -> Vector2 {
-        im_to_v2(self.ptr.WorkPos)
+        im_to_v2(self.WorkPos)
     }
     pub fn work_size(&self) -> Vector2 {
-        im_to_v2(self.ptr.WorkSize)
+        im_to_v2(self.WorkSize)
     }
 }
 

@@ -733,8 +733,11 @@ mod main_window {
     impl MainWindowWithRenderer {
         /// Creates a new [`Renderer`] and attaches it to the given window.
         pub fn new(main_window: MainWindow) -> Self {
+            Self::with_builder(main_window, &imgui::ContextBuilder::new())
+        }
+        pub fn with_builder(main_window: MainWindow, builder: &imgui::ContextBuilder) -> Self {
             let gl = main_window.create_gl_context();
-            let renderer = Renderer::new(std::rc::Rc::new(gl)).unwrap();
+            let renderer = Renderer::with_builder(std::rc::Rc::new(gl), builder).unwrap();
             Self::new_with_renderer(main_window, renderer)
         }
         /// Sets the time after which the UI will stop rendering, if there is no user input.
@@ -1076,6 +1079,7 @@ mod main_window {
     /// If you have special needs you can skip this and write your own implementation
     /// of `winit::application::ApplicationHandler`.
     pub struct AppHandler<A: Application> {
+        builder: imgui::ContextBuilder,
         wattrs: WindowAttributes,
         event_proxy: EventLoopProxy<AppEvent<A>>,
         window: Option<MainWindowWithRenderer>,
@@ -1089,12 +1093,16 @@ mod main_window {
         /// It creates an empty handler. It automatically creates an `EventLoopProxy`.
         pub fn new(event_loop: &EventLoop<AppEvent<A>>, app_data: A::Data) -> Self {
             AppHandler {
+                builder: imgui::ContextBuilder::new(),
                 wattrs: Window::default_attributes(),
                 event_proxy: event_loop.create_proxy(),
                 window: None,
                 app: None,
                 app_data,
             }
+        }
+        pub fn imgui_builder(&mut self) -> &mut imgui::ContextBuilder {
+            &mut self.builder
         }
         /// Sets the window attributes that will be used to create the main window.
         pub fn set_attributes(&mut self, wattrs: WindowAttributes) {
@@ -1158,7 +1166,7 @@ mod main_window {
         }
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             let main_window = MainWindow::new(event_loop, self.wattrs.clone()).unwrap();
-            let mut window = MainWindowWithRenderer::new(main_window);
+            let mut window = MainWindowWithRenderer::with_builder(main_window, &self.builder);
 
             let args = Args {
                 window: &mut window,

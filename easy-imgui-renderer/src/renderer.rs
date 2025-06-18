@@ -34,6 +34,13 @@ impl Renderer {
     ///
     /// You need to provide the OpenGL context yourself.
     pub fn new(gl: glr::GlContext) -> Result<Renderer> {
+        Self::with_builder(gl, &imgui::ContextBuilder::new())
+    }
+
+    /// Creates a new renderer object.
+    ///
+    /// Just like `new()` but you can specify context parameters.
+    pub fn with_builder(gl: glr::GlContext, builder: &imgui::ContextBuilder) -> Result<Renderer> {
         let program;
         let vao;
         let (vbuf, ibuf);
@@ -43,7 +50,7 @@ impl Renderer {
         let u_matrix_location;
         let u_tex_location;
 
-        let mut imgui = unsafe { imgui::Context::new() };
+        let mut imgui = unsafe { builder.build() };
 
         unsafe {
             if !cfg!(target_arch = "wasm32") {

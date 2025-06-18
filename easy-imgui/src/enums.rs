@@ -679,6 +679,7 @@ imgui_flags! {
         NoMouse,
         NoMouseCursorChange,
         DockingEnable,
+        ViewportsEnable,
         IsSRGB,
         IsTouchScreen,
     }
@@ -794,6 +795,9 @@ imgui_flags! {
         HasSetMousePos,
         RendererHasVtxOffset,
         RendererHasTextures,
+        PlatformHasViewports,
+        HasMouseHoveredViewport,
+        RendererHasViewports,
     }
 }
 

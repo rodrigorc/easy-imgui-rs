@@ -375,10 +375,17 @@ pub struct CurrentContext<'a> {
     ctx: &'a mut Context,
 }
 
+#[derive(Debug)]
 pub struct ContextBuilder {
     docking: bool,
     debug_highlight_id_conflicts: bool,
     ini_file_name: Option<String>,
+}
+
+impl Default for ContextBuilder {
+    fn default() -> ContextBuilder {
+        ContextBuilder::new()
+    }
 }
 
 impl ContextBuilder {

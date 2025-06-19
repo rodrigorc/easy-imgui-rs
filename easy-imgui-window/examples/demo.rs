@@ -10,6 +10,7 @@ fn main() {
     let event_loop = EventLoop::with_user_event().build().unwrap();
 
     let mut main = AppHandler::<App>::new(&event_loop, ());
+    main.imgui_builder().set_docking(true);
     main.attributes().title = String::from("Example");
 
     event_loop.run_app(&mut main).unwrap();

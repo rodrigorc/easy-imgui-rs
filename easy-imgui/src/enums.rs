@@ -1020,7 +1020,6 @@ imgui_flags! {
 imgui_flags! {
     pub FontFlags: ImFontFlags_ {
         None,
-        DefaultToLegacySize,
         NoLoadError,
 
         // internal but bound anyways

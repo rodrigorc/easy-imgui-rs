@@ -198,6 +198,7 @@ impl Renderer {
     unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
         match tex.Status {
             ImTextureStatus::ImTextureStatus_WantCreate => {
+                log::debug!("Texture create {}", tex.UniqueID);
                 let pixels = tex.Pixels;
                 let tex_id = glr::Texture::generate(gl).unwrap();
                 gl.bind_texture(glow::TEXTURE_2D, Some(tex_id.id()));
@@ -244,6 +245,7 @@ impl Renderer {
                 std::mem::forget(tex_id);
             }
             ImTextureStatus::ImTextureStatus_WantUpdates => {
+                log::debug!("Texture update {}", tex.UniqueID);
                 let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
                 gl.bind_texture(glow::TEXTURE_2D, Some(tex_id));
                 gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, tex.Width);
@@ -272,6 +274,7 @@ impl Renderer {
                 gl.bind_texture(glow::TEXTURE_2D, None);
             }
             ImTextureStatus::ImTextureStatus_WantDestroy => {
+                log::debug!("Texture destroy {}", tex.UniqueID);
                 if let Some(ntex) = std::num::NonZero::new(tex.TexID as u32) {
                     let ntex = glow::NativeTexture(ntex);
                     gl.delete_texture(ntex);

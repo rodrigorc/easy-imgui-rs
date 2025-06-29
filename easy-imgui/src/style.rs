@@ -36,4 +36,18 @@ impl Style {
         c.a *= a * alpha_mul;
         c
     }
+    pub fn font_size_base(&self) -> f32 {
+        self.FontSizeBase
+    }
+    pub fn font_scale_main(&self) -> f32 {
+        self.FontScaleMain
+    }
+    pub fn font_scale_dpi(&self) -> f32 {
+        self.FontScaleDpi
+    }
+    pub fn scale_all_sizes(&mut self, scale_factor: f32) {
+        unsafe {
+            self.ScaleAllSizes(scale_factor);
+        }
+    }
 }

@@ -4361,7 +4361,7 @@ impl<T: Pushable> Pushable for Option<T> {
 impl Pushable for FontId {
     unsafe fn push(&self) {
         let font = current_font_ptr(*self);
-        ImGui_PushFont(font, -1.0);
+        ImGui_PushFont(font, 0.0);
     }
     unsafe fn pop(&self) {
         ImGui_PopFont();
@@ -4373,10 +4373,10 @@ pub struct FontSize(pub f32);
 impl Pushable for FontSize {
     unsafe fn push(&self) {
         // maybe this should get ui and do ui.scale()
-        ImGui_PushFontSize(self.0);
+        ImGui_PushFont(std::ptr::null_mut(), self.0);
     }
     unsafe fn pop(&self) {
-        ImGui_PopFontSize();
+        ImGui_PopFont();
     }
 }
 

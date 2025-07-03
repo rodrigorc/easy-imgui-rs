@@ -79,6 +79,7 @@ unsafe extern "C" fn font_baked_load_glyph(
     _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
     codepoint: ImWchar,
     out_glyph: *mut ImFontGlyph,
+    out_advance_x: *mut f32,
 ) -> bool {
     let ptr = (*src).FontLoaderData;
     if ptr.is_null() {
@@ -93,14 +94,17 @@ unsafe extern "C" fn font_baked_load_glyph(
     let atlas = &mut *atlas;
     let baked = &mut *baked;
     let src = &mut *src;
-    let out_glyph = &mut *out_glyph;
-
     let mut oversample_h = 0;
     let mut oversample_v = 0;
     ImFontAtlasBuildGetOversampleFactors(src, baked, &mut oversample_h, &mut oversample_v);
     let rasterizer_density = src.RasterizerDensity * baked.RasterizerDensity;
-
     let mut result = false;
+
+    let output = if out_advance_x.is_null() {
+        GlyphLoaderResult::Glyph(&mut *out_glyph)
+    } else {
+        GlyphLoaderResult::AdvanceX(&mut *out_advance_x)
+    };
     let arg = GlyphLoaderArg {
         codepoint,
         oversample: vec2(oversample_h as f32, oversample_v as f32),
@@ -109,7 +113,7 @@ unsafe extern "C" fn font_baked_load_glyph(
         atlas,
         src,
         baked,
-        out_glyph,
+        output,
     };
     ldr.load_glyph(arg);
     result
@@ -148,6 +152,11 @@ unsafe extern "C" fn font_baked_destroy(
     ldr.font_baked_destroy(FontBaked::cast_mut(&mut *baked));
 }
 
+enum GlyphLoaderResult<'a> {
+    Glyph(&'a mut ImFontGlyph),
+    AdvanceX(&'a mut f32),
+}
+
 pub struct GlyphLoaderArg<'a> {
     codepoint: char,
     // This are integer in DearImGui, but why not fractions?
@@ -158,7 +167,7 @@ pub struct GlyphLoaderArg<'a> {
     atlas: &'a mut ImFontAtlas,
     src: &'a mut ImFontConfig,
     baked: &'a mut ImFontBaked,
-    out_glyph: &'a mut ImFontGlyph,
+    output: GlyphLoaderResult<'a>,
 }
 
 bitflags! {
@@ -197,6 +206,9 @@ impl GlyphLoaderArg<'_> {
     pub fn set_oversample(&mut self, oversample: Vector2) {
         self.oversample = oversample;
     }
+    pub fn only_advance_x(&self) -> bool {
+        matches!(self.output, GlyphLoaderResult::AdvanceX(_))
+    }
     pub fn build(
         mut self,
         origin: Vector2,
@@ -205,82 +217,90 @@ impl GlyphLoaderArg<'_> {
         flags: GlyphBuildFlags,
         draw: impl FnOnce(&mut SubPixelImage<'_, '_>),
     ) {
-        if flags.contains(GlyphBuildFlags::IGNORE_DPI) {
-            self.rasterizer_density = 1.0;
-        }
-        if flags.contains(GlyphBuildFlags::IGNORE_OVERSAMPLE) {
-            self.oversample = vec2(1.0, 1.0);
-        }
+        match self.output {
+            GlyphLoaderResult::AdvanceX(out_advance_x) => {
+                *out_advance_x = advance_x;
+            }
+            GlyphLoaderResult::Glyph(out_glyph) => {
+                if flags.contains(GlyphBuildFlags::IGNORE_DPI) {
+                    self.rasterizer_density = 1.0;
+                }
+                if flags.contains(GlyphBuildFlags::IGNORE_OVERSAMPLE) {
+                    self.oversample = vec2(1.0, 1.0);
+                }
 
-        let scale_for_raster = self.rasterizer_density * self.oversample;
+                let scale_for_raster = self.rasterizer_density * self.oversample;
 
-        let (bmp_size_x, bmp_size_y);
+                let (bmp_size_x, bmp_size_y);
 
-        if flags.contains(GlyphBuildFlags::PRESCALED_SIZE) {
-            bmp_size_x = size.x.round() as u32;
-            bmp_size_y = size.y.round() as u32;
-            size.x /= scale_for_raster.x;
-            size.y /= scale_for_raster.y;
-        } else {
-            bmp_size_x = (size.x * scale_for_raster.x).round() as u32;
-            bmp_size_y = (size.y * scale_for_raster.y).round() as u32;
-        }
+                if flags.contains(GlyphBuildFlags::PRESCALED_SIZE) {
+                    bmp_size_x = size.x.round() as u32;
+                    bmp_size_y = size.y.round() as u32;
+                    size.x /= scale_for_raster.x;
+                    size.y /= scale_for_raster.y;
+                } else {
+                    bmp_size_x = (size.x * scale_for_raster.x).round() as u32;
+                    bmp_size_y = (size.y * scale_for_raster.y).round() as u32;
+                }
 
-        let pack_id = unsafe {
-            ImFontAtlasPackAddRect(
-                self.atlas,
-                bmp_size_x as i32,
-                bmp_size_y as i32,
-                std::ptr::null_mut(),
-            )
-        };
-        if pack_id == ImFontAtlasRectId_Invalid {
-            return;
-        }
-        let r = unsafe {
-            let r = ImFontAtlasPackGetRect(self.atlas, pack_id);
-            &mut *r
-        };
+                let pack_id = unsafe {
+                    ImFontAtlasPackAddRect(
+                        self.atlas,
+                        bmp_size_x as i32,
+                        bmp_size_y as i32,
+                        std::ptr::null_mut(),
+                    )
+                };
+                if pack_id == ImFontAtlasRectId_Invalid {
+                    return;
+                }
+                let r = unsafe {
+                    let r = ImFontAtlasPackGetRect(self.atlas, pack_id);
+                    &mut *r
+                };
 
-        let ref_size = unsafe { (*(&(*self.baked.ContainerFont).Sources)[0]).SizePixels };
-        let offsets_scale = if ref_size != 0.0 {
-            self.font_size() / ref_size
-        } else {
-            1.0
-        };
-        let mut font_off_x = self.src.GlyphOffset.x * offsets_scale;
-        let mut font_off_y = self.src.GlyphOffset.y * offsets_scale;
-        if self.src.PixelSnapH {
-            font_off_x = font_off_x.round();
-        }
-        if self.src.PixelSnapV {
-            font_off_y = font_off_y.round();
-        }
+                let ref_size = unsafe { (*(&(*self.baked.ContainerFont).Sources)[0]).SizePixels };
+                let offsets_scale = if ref_size != 0.0 {
+                    self.baked.Size / ref_size
+                } else {
+                    1.0
+                };
+                let mut font_off_x = self.src.GlyphOffset.x * offsets_scale;
+                let mut font_off_y = self.src.GlyphOffset.y * offsets_scale;
+                if self.src.PixelSnapH {
+                    font_off_x = font_off_x.round();
+                }
+                if self.src.PixelSnapV {
+                    font_off_y = font_off_y.round();
+                }
 
-        self.out_glyph.set_Codepoint(self.codepoint as u32);
-        self.out_glyph.AdvanceX = advance_x;
-        self.out_glyph.X0 = font_off_x + origin.x;
-        self.out_glyph.Y0 = font_off_y + origin.y;
-        self.out_glyph.X1 = self.out_glyph.X0 + size.x;
-        self.out_glyph.Y1 = self.out_glyph.Y0 + size.y;
-        self.out_glyph.set_Visible(1);
-        self.out_glyph.PackId = pack_id;
+                out_glyph.set_Codepoint(self.codepoint as u32);
+                out_glyph.AdvanceX = advance_x;
+                out_glyph.X0 = font_off_x + origin.x;
+                out_glyph.Y0 = font_off_y + origin.y;
+                out_glyph.X1 = out_glyph.X0 + size.x;
+                out_glyph.Y1 = out_glyph.Y0 + size.y;
+                out_glyph.set_Visible(1);
+                out_glyph.PackId = pack_id;
 
-        let mut pixels =
-            image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(bmp_size_x, bmp_size_y).into_raw();
-        let mut image = PixelImage::from_raw(bmp_size_x, bmp_size_y, &mut pixels).unwrap();
-        draw(&mut image.sub_image(0, 0, bmp_size_x, bmp_size_y));
-        unsafe {
-            ImFontAtlasBakedSetFontGlyphBitmap(
-                self.atlas,
-                self.baked,
-                self.src,
-                self.out_glyph,
-                r,
-                pixels.as_ptr(),
-                ImTextureFormat::ImTextureFormat_RGBA32,
-                4 * bmp_size_x as i32,
-            );
+                let mut pixels =
+                    image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::new(bmp_size_x, bmp_size_y)
+                        .into_raw();
+                let mut image = PixelImage::from_raw(bmp_size_x, bmp_size_y, &mut pixels).unwrap();
+                draw(&mut image.sub_image(0, 0, bmp_size_x, bmp_size_y));
+                unsafe {
+                    ImFontAtlasBakedSetFontGlyphBitmap(
+                        self.atlas,
+                        self.baked,
+                        self.src,
+                        out_glyph,
+                        r,
+                        pixels.as_ptr(),
+                        ImTextureFormat::ImTextureFormat_RGBA32,
+                        4 * bmp_size_x as i32,
+                    );
+                }
+            }
         }
         *self.result = true;
     }

@@ -1221,7 +1221,7 @@ decl_builder_with! {Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
         decl_builder_setter!{flags: WindowFlags}
     }
     {
-        pub fn window_config<S: IntoCStr>(&self, name: LblId<S>) -> Window<S> {
+        pub fn window_config<S: IntoCStr>(&self, name: LblId<S>) -> Window<'_, S> {
             Window {
                 name: name.into(),
                 open: None,
@@ -1256,7 +1256,7 @@ decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
         decl_builder_setter!{enabled: bool}
     }
     {
-        pub fn menu_item_config<S: IntoCStr>(&self, label: LblId<S>) -> MenuItem<S, &str> {
+        pub fn menu_item_config<S: IntoCStr>(&self, label: LblId<S>) -> MenuItem<'_, S, &str> {
             MenuItem {
                 _pd: PhantomData,
                 label: label.into(),
@@ -1296,7 +1296,7 @@ decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn small_button_config<S: IntoCStr>(&self, label: LblId<S>) -> SmallButton<S> {
+        pub fn small_button_config<S: IntoCStr>(&self, label: LblId<S>) -> SmallButton<'_, S> {
             SmallButton {
                 _pd: PhantomData,
                 label: label.into(),
@@ -1319,7 +1319,7 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
         decl_builder_setter!{flags: ButtonFlags}
     }
     {
-        pub fn invisible_button_config<S: IntoCStr>(&self, id: S) -> InvisibleButton<S> {
+        pub fn invisible_button_config<S: IntoCStr>(&self, id: S) -> InvisibleButton<'_, S> {
             InvisibleButton {
                 _pd: PhantomData,
                 id: id.into(),
@@ -1337,7 +1337,7 @@ decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn arrow_button_config<S: IntoCStr>(&self, id: S, dir: Dir) -> ArrowButton<S> {
+        pub fn arrow_button_config<S: IntoCStr>(&self, id: S, dir: Dir) -> ArrowButton<'_, S> {
             ArrowButton {
                 _pd: PhantomData,
                 id: id.into(),
@@ -1377,7 +1377,7 @@ decl_builder! { RadioButton -> bool, ImGui_RadioButton () (S: IntoCStr)
     )
     {}
     {
-        pub fn radio_button_config<S: IntoCStr>(&self, label: LblId<S>, active: bool) -> RadioButton<S> {
+        pub fn radio_button_config<S: IntoCStr>(&self, label: LblId<S>, active: bool) -> RadioButton<'_, S> {
             RadioButton {
                 _pd: PhantomData,
                 label: label.into(),
@@ -1405,7 +1405,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
         }
     }
     {
-        pub fn progress_bar_config<'a>(&self, fraction: f32) -> ProgressBar<&'a str> {
+        pub fn progress_bar_config<'a>(&self, fraction: f32) -> ProgressBar<'_, &'a str> {
             ProgressBar {
                 _pd: PhantomData,
                 fraction,
@@ -1534,7 +1534,7 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
         decl_builder_setter_vector2!{size: Vector2}
     }
     {
-        pub fn selectable_config<S: IntoCStr>(&self, label: LblId<S>) -> Selectable<S> {
+        pub fn selectable_config<S: IntoCStr>(&self, label: LblId<S>) -> Selectable<'_, S> {
             Selectable {
                 _pd: PhantomData,
                 label: label.into(),
@@ -2450,7 +2450,7 @@ decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: I
         decl_builder_setter!{opened: &'o mut bool}
     }
     {
-        pub fn tab_item_config<S: IntoCStr>(&self, str_id: LblId<S>) -> TabItem<S> {
+        pub fn tab_item_config<S: IntoCStr>(&self, str_id: LblId<S>) -> TabItem<'_, S> {
             TabItem {
                 str_id: str_id.into(),
                 opened: None,

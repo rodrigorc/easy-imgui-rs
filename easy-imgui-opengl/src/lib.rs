@@ -620,7 +620,9 @@ unsafe impl UniformField for Rgba {
 
 unsafe impl<T: UniformField, const N: usize> UniformField for [T; N] {
     unsafe fn apply_array(&self, gl: &GlContext, count: usize, location: UniformLocation) {
-        self[0].apply_array(gl, N * count, location);
+        unsafe {
+            self[0].apply_array(gl, N * count, location);
+        }
     }
 }
 
@@ -1019,7 +1021,7 @@ impl BinderFBOTarget for BinderFBORead {
 pub type BinderReadFramebuffer = BinderFramebufferT<BinderFBORead>;
 
 pub unsafe fn as_u8_slice<T>(data: &[T]) -> &[u8] {
-    std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data))
+    unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) }
 }
 
 #[macro_export]

@@ -167,11 +167,11 @@ pub use cgmath;
 use easy_imgui_sys::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::ffi::{c_char, c_void, CStr, CString, OsString};
+use std::ffi::{CStr, CString, OsString, c_char, c_void};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
-use std::ptr::{null, null_mut, NonNull};
+use std::ptr::{NonNull, null, null_mut};
 use std::time::Duration;
 
 // Adds `repr(transparent)` and basic conversions
@@ -267,14 +267,14 @@ const GEN_ID_BITS: u32 = usize::BITS - GEN_BITS;
 const GEN_MASK: usize = (1 << GEN_BITS) - 1;
 const GEN_ID_MASK: usize = (1 << GEN_ID_BITS) - 1;
 
-fn merge_generation(id: usize, gen: usize) -> usize {
+fn merge_generation(id: usize, gen_id: usize) -> usize {
     if (id & GEN_ID_MASK) != id {
         panic!("UI callback overflow")
     }
-    (gen << GEN_ID_BITS) | id
+    (gen_id << GEN_ID_BITS) | id
 }
-fn remove_generation(id: usize, gen: usize) -> Option<usize> {
-    if (id >> GEN_ID_BITS) != (gen & GEN_MASK) {
+fn remove_generation(id: usize, gen_id: usize) -> Option<usize> {
+    if (id >> GEN_ID_BITS) != (gen_id & GEN_MASK) {
         None
     } else {
         Some(id & GEN_ID_MASK)
@@ -412,9 +412,12 @@ impl ContextBuilder {
         self
     }
     pub unsafe fn build(&self) -> Context {
-        let imgui = ImGui_CreateContext(null_mut());
+        let imgui;
         // Probably not needed but just in case
-        ImGui_SetCurrentContext(imgui);
+        unsafe {
+            imgui = ImGui_CreateContext(null_mut());
+            ImGui_SetCurrentContext(imgui);
+        }
         let imgui = NonNull::new(imgui).unwrap();
         let mut ctx = Context {
             imgui: imgui.cast(),
@@ -425,7 +428,7 @@ impl ContextBuilder {
         let io = ctx.io_mut();
         io.font_atlas_mut().0.TexPixelsUseColors = true;
 
-        let io = io.inner();
+        let io = unsafe { io.inner() };
 
         if self.docking {
             io.add_config_flags(ConfigFlags::DockingEnable);
@@ -438,13 +441,15 @@ impl ContextBuilder {
 
 impl Context {
     pub unsafe fn new() -> Context {
-        ContextBuilder::new().build()
+        unsafe { ContextBuilder::new().build() }
     }
 
     pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
-        self.io_mut().inner().DisplaySize = v2_to_im(size);
-        if self.io().display_scale() != scale {
-            self.io_mut().inner().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+        unsafe {
+            self.io_mut().inner().DisplaySize = v2_to_im(size);
+            if self.io().display_scale() != scale {
+                self.io_mut().inner().DisplayFramebufferScale = ImVec2 { x: scale, y: scale };
+            }
         }
     }
 
@@ -453,8 +458,10 @@ impl Context {
     /// SAFETY: Do not make two different contexts current at the same time
     /// in the same thread.
     pub unsafe fn set_current(&mut self) -> CurrentContext<'_> {
-        ImGui_SetCurrentContext(self.imgui.as_mut().inner());
-        CurrentContext { ctx: self }
+        unsafe {
+            ImGui_SetCurrentContext(self.imgui.as_mut().inner());
+            CurrentContext { ctx: self }
+        }
     }
 
     /// Sets the ini file where ImGui persists its data.
@@ -498,54 +505,57 @@ impl CurrentContext<'_> {
         pre_render: impl FnOnce(&mut Self),
         render: impl FnOnce(&ImDrawData),
     ) {
-        let mut ui = Ui {
-            imgui: self.ctx.imgui,
-            data: std::ptr::null_mut(),
-            generation: ImGui_GetFrameCount() as usize % 1000 + 1, // avoid the 0
-            callbacks: RefCell::new(Vec::new()),
-        };
+        unsafe {
+            let mut ui = Ui {
+                imgui: self.ctx.imgui,
+                data: std::ptr::null_mut(),
+                generation: ImGui_GetFrameCount() as usize % 1000 + 1, // avoid the 0
+                callbacks: RefCell::new(Vec::new()),
+            };
 
-        self.io_mut().inner().BackendLanguageUserData = (&raw const ui).cast::<c_void>().cast_mut();
-        struct UiPtrToNullGuard<'a, 'b>(&'a mut CurrentContext<'b>);
-        impl Drop for UiPtrToNullGuard<'_, '_> {
-            fn drop(&mut self) {
-                unsafe {
-                    self.0.io_mut().inner().BackendLanguageUserData = null_mut();
+            self.io_mut().inner().BackendLanguageUserData =
+                (&raw const ui).cast::<c_void>().cast_mut();
+            struct UiPtrToNullGuard<'a, 'b>(&'a mut CurrentContext<'b>);
+            impl Drop for UiPtrToNullGuard<'_, '_> {
+                fn drop(&mut self) {
+                    unsafe {
+                        self.0.io_mut().inner().BackendLanguageUserData = null_mut();
+                    }
                 }
             }
-        }
-        let ctx_guard = UiPtrToNullGuard(self);
+            let ctx_guard = UiPtrToNullGuard(self);
 
-        // This guards for panics during the frame.
-        struct FrameGuard;
-        impl Drop for FrameGuard {
-            fn drop(&mut self) {
-                unsafe {
-                    ImGui_EndFrame();
+            // This guards for panics during the frame.
+            struct FrameGuard;
+            impl Drop for FrameGuard {
+                fn drop(&mut self) {
+                    unsafe {
+                        ImGui_EndFrame();
+                    }
                 }
             }
+
+            ImGui_NewFrame();
+
+            let end_frame_guard = FrameGuard;
+            app.do_ui(&ui);
+            std::mem::drop(end_frame_guard);
+
+            pre_render(ctx_guard.0);
+            app.pre_render(ctx_guard.0);
+
+            ImGui_Render();
+
+            ui.data = app;
+
+            // This is the same pointer, but without it, there is something fishy about stacked borrows
+            // and the mutable access to `ui` above.
+            ctx_guard.0.io_mut().inner().BackendLanguageUserData =
+                (&raw const ui).cast::<c_void>().cast_mut();
+
+            let draw_data = ImGui_GetDrawData();
+            render(&*draw_data);
         }
-
-        ImGui_NewFrame();
-
-        let end_frame_guard = FrameGuard;
-        app.do_ui(&ui);
-        std::mem::drop(end_frame_guard);
-
-        pre_render(ctx_guard.0);
-        app.pre_render(ctx_guard.0);
-
-        ImGui_Render();
-
-        ui.data = app;
-
-        // This is the same pointer, but without it, there is something fishy about stacked borrows
-        // and the mutable access to `ui` above.
-        ctx_guard.0.io_mut().inner().BackendLanguageUserData =
-            (&raw const ui).cast::<c_void>().cast_mut();
-
-        let draw_data = ImGui_GetDrawData();
-        render(&*draw_data);
     }
 }
 
@@ -567,15 +577,15 @@ transparent! {
 impl RawContext {
     #[inline]
     pub unsafe fn current<'a>() -> &'a RawContext {
-        RawContext::cast(&*ImGui_GetCurrentContext())
+        unsafe { RawContext::cast(&*ImGui_GetCurrentContext()) }
     }
     #[inline]
     pub unsafe fn from_ptr<'a>(ptr: *mut ImGuiContext) -> &'a RawContext {
-        RawContext::cast(&*ptr)
+        unsafe { RawContext::cast(&*ptr) }
     }
     #[inline]
     pub unsafe fn from_ptr_mut<'a>(ptr: *mut ImGuiContext) -> &'a mut RawContext {
-        RawContext::cast_mut(&mut *ptr)
+        unsafe { RawContext::cast_mut(&mut *ptr) }
     }
     #[inline]
     pub unsafe fn inner(&mut self) -> &mut ImGuiContext {
@@ -587,7 +597,7 @@ impl RawContext {
     }
     #[inline]
     pub unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
-        PlatformIo::cast_mut(&mut self.inner().PlatformIO)
+        unsafe { PlatformIo::cast_mut(&mut self.inner().PlatformIO) }
     }
 
     #[inline]
@@ -771,7 +781,9 @@ impl IntoCStr for &String {
         self.as_str().len()
     }
     unsafe fn push_to_non_null_vec(self, bs: &mut Vec<u8>) {
-        self.as_str().push_to_non_null_vec(bs);
+        unsafe {
+            self.as_str().push_to_non_null_vec(bs);
+        }
     }
 }
 impl IntoCStr for String {
@@ -979,8 +991,10 @@ unsafe fn text_ptrs(text: &str) -> (*const c_char, *const c_char) {
 }
 
 unsafe fn current_font_ptr(font: FontId) -> *mut ImFont {
-    let fonts = RawContext::current().io().font_atlas();
-    fonts.font_ptr(font)
+    unsafe {
+        let fonts = RawContext::current().io().font_atlas();
+        fonts.font_ptr(font)
+    }
 }
 
 // this is unsafe because it replaces a C binding function that does nothing, and adding `unsafe`
@@ -1795,14 +1809,16 @@ decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
 }
 
 unsafe extern "C" fn input_text_callback(data: *mut ImGuiInputTextCallbackData) -> i32 {
-    let data = &mut *data;
-    if data.EventFlag == InputTextFlags::CallbackResize.bits() {
-        let this = &mut *(data.UserData as *mut String);
-        let extra = (data.BufSize as usize).saturating_sub(this.len());
-        this.reserve(extra);
-        data.Buf = this.as_mut_ptr() as *mut c_char;
+    unsafe {
+        let data = &mut *data;
+        if data.EventFlag == InputTextFlags::CallbackResize.bits() {
+            let this = &mut *(data.UserData as *mut String);
+            let extra = (data.BufSize as usize).saturating_sub(this.len());
+            this.reserve(extra);
+            data.Buf = this.as_mut_ptr() as *mut c_char;
+        }
+        0
     }
-    0
 }
 
 #[inline]
@@ -1813,12 +1829,14 @@ fn text_pre_edit(text: &mut String) {
 
 #[inline]
 unsafe fn text_post_edit(text: &mut String) {
-    let buf = text.as_mut_vec();
-    // Look for the ending NUL that must be there, instead of memchr or iter::position, leverage the standard CStr
-    let len = CStr::from_ptr(buf.as_ptr() as *const c_char)
-        .to_bytes()
-        .len();
-    buf.set_len(len);
+    unsafe {
+        let buf = text.as_mut_vec();
+        // Look for the ending NUL that must be there, instead of memchr or iter::position, leverage the standard CStr
+        let len = CStr::from_ptr(buf.as_ptr() as *const c_char)
+            .to_bytes()
+            .len();
+        buf.set_len(len);
+    }
 }
 
 unsafe fn input_text_wrapper(
@@ -1826,19 +1844,21 @@ unsafe fn input_text_wrapper(
     text: &mut String,
     flags: InputTextFlags,
 ) -> bool {
-    let flags = flags | InputTextFlags::CallbackResize;
+    unsafe {
+        let flags = flags | InputTextFlags::CallbackResize;
 
-    text_pre_edit(text);
-    let r = ImGui_InputText(
-        label,
-        text.as_mut_ptr() as *mut c_char,
-        text.capacity(),
-        flags.bits(),
-        Some(input_text_callback),
-        text as *mut String as *mut c_void,
-    );
-    text_post_edit(text);
-    r
+        text_pre_edit(text);
+        let r = ImGui_InputText(
+            label,
+            text.as_mut_ptr() as *mut c_char,
+            text.capacity(),
+            flags.bits(),
+            Some(input_text_callback),
+            text as *mut String as *mut c_void,
+        );
+        text_post_edit(text);
+        r
+    }
 }
 
 decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
@@ -1867,14 +1887,16 @@ unsafe fn input_os_string_wrapper(
     os_string: &mut OsString,
     flags: InputTextFlags,
 ) -> bool {
-    let s = std::mem::take(os_string).into_string();
-    let mut s = match s {
-        Ok(s) => s,
-        Err(os) => os.to_string_lossy().into_owned(),
-    };
-    let res = input_text_wrapper(label, &mut s, flags);
-    *os_string = OsString::from(s);
-    res
+    unsafe {
+        let s = std::mem::take(os_string).into_string();
+        let mut s = match s {
+            Ok(s) => s,
+            Err(os) => os.to_string_lossy().into_owned(),
+        };
+        let res = input_text_wrapper(label, &mut s, flags);
+        *os_string = OsString::from(s);
+        res
+    }
 }
 
 decl_builder! { InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr)
@@ -1904,19 +1926,21 @@ unsafe fn input_text_multiline_wrapper(
     size: &ImVec2,
     flags: InputTextFlags,
 ) -> bool {
-    let flags = flags | InputTextFlags::CallbackResize;
-    text_pre_edit(text);
-    let r = ImGui_InputTextMultiline(
-        label,
-        text.as_mut_ptr() as *mut c_char,
-        text.capacity(),
-        size,
-        flags.bits(),
-        Some(input_text_callback),
-        text as *mut String as *mut c_void,
-    );
-    text_post_edit(text);
-    r
+    unsafe {
+        let flags = flags | InputTextFlags::CallbackResize;
+        text_pre_edit(text);
+        let r = ImGui_InputTextMultiline(
+            label,
+            text.as_mut_ptr() as *mut c_char,
+            text.capacity(),
+            size,
+            flags.bits(),
+            Some(input_text_callback),
+            text as *mut String as *mut c_void,
+        );
+        text_post_edit(text);
+        r
+    }
 }
 
 decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S: IntoCStr)
@@ -1949,19 +1973,21 @@ unsafe fn input_text_hint_wrapper(
     text: &mut String,
     flags: InputTextFlags,
 ) -> bool {
-    let flags = flags | InputTextFlags::CallbackResize;
-    text_pre_edit(text);
-    let r = ImGui_InputTextWithHint(
-        label,
-        hint,
-        text.as_mut_ptr() as *mut c_char,
-        text.capacity(),
-        flags.bits(),
-        Some(input_text_callback),
-        text as *mut String as *mut c_void,
-    );
-    text_post_edit(text);
-    r
+    unsafe {
+        let flags = flags | InputTextFlags::CallbackResize;
+        text_pre_edit(text);
+        let r = ImGui_InputTextWithHint(
+            label,
+            hint,
+            text.as_mut_ptr() as *mut c_char,
+            text.capacity(),
+            flags.bits(),
+            Some(input_text_callback),
+            text as *mut String as *mut c_void,
+        );
+        text_post_edit(text);
+        r
+    }
 }
 
 decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCStr, S2: IntoCStr)
@@ -2167,12 +2193,14 @@ unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(
     label_id: LabelId<'_, S, H>,
     flags: TreeNodeFlags,
 ) -> bool {
-    match label_id {
-        LabelId::LblId(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
-        LabelId::LabelId(lbl, id) => {
-            let (start, end) = text_ptrs(lbl);
-            // Warning! internal imgui API ahead, the alterative would be to call all the TreeNodeEx* functions without the Hashable generics
-            ImGui_TreeNodeBehavior(id.get_id(), flags.bits(), start, end)
+    unsafe {
+        match label_id {
+            LabelId::LblId(lbl) => ImGui_TreeNodeEx(lbl.into().as_ptr(), flags.bits()),
+            LabelId::LabelId(lbl, id) => {
+                let (start, end) = text_ptrs(lbl);
+                // Warning! internal imgui API ahead, the alterative would be to call all the TreeNodeEx* functions without the Hashable generics
+                ImGui_TreeNodeBehavior(id.get_id(), flags.bits(), start, end)
+            }
         }
     }
 }
@@ -2485,22 +2513,24 @@ impl<A> Ui<A> {
         merge_generation(id, self.generation)
     }
     unsafe fn run_callback<X>(id: usize, x: X) {
-        let user_data = RawContext::current().io().BackendLanguageUserData;
-        if user_data.is_null() {
-            return;
-        }
-        // The lifetime of ui has been erased, but at least the types of A and X should be correct
-        let ui = &*(user_data as *const Self);
-        let Some(id) = remove_generation(id, ui.generation) else {
-            eprintln!("lost generation callback");
-            return;
-        };
+        unsafe {
+            let user_data = RawContext::current().io().BackendLanguageUserData;
+            if user_data.is_null() {
+                return;
+            }
+            // The lifetime of ui has been erased, but at least the types of A and X should be correct
+            let ui = &*(user_data as *const Self);
+            let Some(id) = remove_generation(id, ui.generation) else {
+                eprintln!("lost generation callback");
+                return;
+            };
 
-        let mut callbacks = ui.callbacks.borrow_mut();
-        let cb = &mut callbacks[id];
-        // disable the destructor of x, it will be run inside the callback
-        let mut x = MaybeUninit::new(x);
-        cb(ui.data, x.as_mut_ptr() as *mut c_void);
+            let mut callbacks = ui.callbacks.borrow_mut();
+            let cb = &mut callbacks[id];
+            // disable the destructor of x, it will be run inside the callback
+            let mut x = MaybeUninit::new(x);
+            cb(ui.data, x.as_mut_ptr() as *mut c_void);
+        }
     }
 
     pub fn get_clipboard_text(&self) -> String {
@@ -3485,12 +3515,14 @@ impl FontAtlas {
     }
 
     unsafe fn font_ptr(&self, font: FontId) -> *mut ImFont {
-        // fonts.Fonts is never empty, at least there is the default font
-        *self
-            .Fonts
-            .iter()
-            .find(|f| f.as_ref().map(|f| f.FontId) == Some(font.0))
-            .unwrap_or(&self.Fonts[0])
+        unsafe {
+            // fonts.Fonts is never empty, at least there is the default font
+            *self
+                .Fonts
+                .iter()
+                .find(|f| f.as_ref().map(|f| f.FontId) == Some(font.0))
+                .unwrap_or(&self.Fonts[0])
+        }
     }
 
     pub fn check_texture_unique_id(&self, uid: TextureUniqueId) -> bool {
@@ -3748,10 +3780,12 @@ impl SizeCallbackData<'_> {
 }
 
 unsafe extern "C" fn call_size_callback<A>(ptr: *mut ImGuiSizeCallbackData) {
-    let ptr = &mut *ptr;
-    let id = ptr.UserData as usize;
-    let data = SizeCallbackData { ptr };
-    Ui::<A>::run_callback(id, data);
+    unsafe {
+        let ptr = &mut *ptr;
+        let id = ptr.UserData as usize;
+        let data = SizeCallbackData { ptr };
+        Ui::<A>::run_callback(id, data);
+    }
 }
 
 pub struct WindowDrawList<'ui, A> {
@@ -4218,8 +4252,10 @@ unsafe extern "C" fn call_drawlist_callback<A>(
     _parent_list: *const ImDrawList,
     cmd: *const ImDrawCmd,
 ) {
-    let id = (*cmd).UserCallbackData as usize;
-    Ui::<A>::run_callback(id, ());
+    unsafe {
+        let id = (*cmd).UserCallbackData as usize;
+        Ui::<A>::run_callback(id, ());
+    }
 }
 
 /// Represents any type that can be converted to a Dear ImGui hash id.
@@ -4231,21 +4267,27 @@ pub trait Hashable {
 
 impl Hashable for &str {
     unsafe fn get_id(&self) -> ImGuiID {
-        let (start, end) = text_ptrs(self);
-        ImGui_GetID1(start, end)
+        unsafe {
+            let (start, end) = text_ptrs(self);
+            ImGui_GetID1(start, end)
+        }
     }
     unsafe fn push(&self) {
-        let (start, end) = text_ptrs(self);
-        ImGui_PushID1(start, end);
+        unsafe {
+            let (start, end) = text_ptrs(self);
+            ImGui_PushID1(start, end);
+        }
     }
 }
 
 impl Hashable for usize {
     unsafe fn get_id(&self) -> ImGuiID {
-        ImGui_GetID2(*self as *const c_void)
+        unsafe { ImGui_GetID2(*self as *const c_void) }
     }
     unsafe fn push(&self) {
-        ImGui_PushID2(*self as *const c_void);
+        unsafe {
+            ImGui_PushID2(*self as *const c_void);
+        }
     }
 }
 
@@ -4272,8 +4314,10 @@ impl<P: Pushable> Drop for PushableGuard<'_, P> {
 
 #[allow(clippy::needless_lifetimes)]
 unsafe fn push_guard<'a, P: Pushable>(p: &'a P) -> PushableGuard<'a, P> {
-    p.push();
-    PushableGuard(p)
+    unsafe {
+        p.push();
+        PushableGuard(p)
+    }
 }
 
 /// A [`Pushable`] that does nothing.
@@ -4284,61 +4328,81 @@ impl Pushable for () {
 
 impl<A: Pushable> Pushable for (A,) {
     unsafe fn push(&self) {
-        self.0.push();
+        unsafe {
+            self.0.push();
+        }
     }
     unsafe fn pop(&self) {
-        self.0.pop();
+        unsafe {
+            self.0.pop();
+        }
     }
 }
 
 impl<A: Pushable, B: Pushable> Pushable for (A, B) {
     unsafe fn push(&self) {
-        self.0.push();
-        self.1.push();
+        unsafe {
+            self.0.push();
+            self.1.push();
+        }
     }
     unsafe fn pop(&self) {
-        self.1.pop();
-        self.0.pop();
+        unsafe {
+            self.1.pop();
+            self.0.pop();
+        }
     }
 }
 
 impl<A: Pushable, B: Pushable, C: Pushable> Pushable for (A, B, C) {
     unsafe fn push(&self) {
-        self.0.push();
-        self.1.push();
-        self.2.push();
+        unsafe {
+            self.0.push();
+            self.1.push();
+            self.2.push();
+        }
     }
     unsafe fn pop(&self) {
-        self.2.pop();
-        self.1.pop();
-        self.0.pop();
+        unsafe {
+            self.2.pop();
+            self.1.pop();
+            self.0.pop();
+        }
     }
 }
 
 impl<A: Pushable, B: Pushable, C: Pushable, D: Pushable> Pushable for (A, B, C, D) {
     unsafe fn push(&self) {
-        self.0.push();
-        self.1.push();
-        self.2.push();
-        self.3.push();
+        unsafe {
+            self.0.push();
+            self.1.push();
+            self.2.push();
+            self.3.push();
+        }
     }
     unsafe fn pop(&self) {
-        self.3.pop();
-        self.2.pop();
-        self.1.pop();
-        self.0.pop();
+        unsafe {
+            self.3.pop();
+            self.2.pop();
+            self.1.pop();
+            self.0.pop();
+        }
     }
 }
 
 impl Pushable for &[&dyn Pushable] {
     unsafe fn push(&self) {
-        for st in *self {
-            st.push();
+        unsafe {
+            for st in *self {
+                st.push();
+            }
         }
     }
     unsafe fn pop(&self) {
-        for st in self.iter().rev() {
-            st.pop();
+        unsafe {
+            for st in self.iter().rev() {
+                st.pop();
+            }
         }
     }
 }
@@ -4346,13 +4410,17 @@ impl Pushable for &[&dyn Pushable] {
 /// A [`Pushable`] that is applied optionally.
 impl<T: Pushable> Pushable for Option<T> {
     unsafe fn push(&self) {
-        if let Some(s) = self {
-            s.push();
+        unsafe {
+            if let Some(s) = self {
+                s.push();
+            }
         }
     }
     unsafe fn pop(&self) {
-        if let Some(s) = self {
-            s.pop();
+        unsafe {
+            if let Some(s) = self {
+                s.pop();
+            }
         }
     }
 }
@@ -4360,11 +4428,15 @@ impl<T: Pushable> Pushable for Option<T> {
 //TODO rework the font pushables
 impl Pushable for FontId {
     unsafe fn push(&self) {
-        let font = current_font_ptr(*self);
-        ImGui_PushFont(font, 0.0);
+        unsafe {
+            let font = current_font_ptr(*self);
+            ImGui_PushFont(font, 0.0);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopFont();
+        unsafe {
+            ImGui_PopFont();
+        }
     }
 }
 
@@ -4372,11 +4444,15 @@ pub struct FontSize(pub f32);
 
 impl Pushable for FontSize {
     unsafe fn push(&self) {
-        // maybe this should get ui and do ui.scale()
-        ImGui_PushFont(std::ptr::null_mut(), self.0);
+        unsafe {
+            // maybe this should get ui and do ui.scale()
+            ImGui_PushFont(std::ptr::null_mut(), self.0);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopFont();
+        unsafe {
+            ImGui_PopFont();
+        }
     }
 }
 
@@ -4384,10 +4460,14 @@ pub struct FontAndSize(pub FontId, pub f32);
 
 impl Pushable for FontAndSize {
     unsafe fn push(&self) {
-        ImGui_PushFont(current_font_ptr(self.0), self.1);
+        unsafe {
+            ImGui_PushFont(current_font_ptr(self.0), self.1);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopFont();
+        unsafe {
+            ImGui_PopFont();
+        }
     }
 }
 
@@ -4414,11 +4494,13 @@ impl TextureRef<'_> {
     }
 
     pub unsafe fn tex_id(&self) -> TextureId {
-        match self {
-            TextureRef::Id(tex_id) => *tex_id,
-            TextureRef::Ref(tex_data) => {
-                let id = tex_data.TexID;
-                TextureId::from_id(id)
+        unsafe {
+            match self {
+                TextureRef::Id(tex_id) => *tex_id,
+                TextureRef::Ref(tex_data) => {
+                    let id = tex_data.TexID;
+                    TextureId::from_id(id)
+                }
             }
         }
     }
@@ -4441,30 +4523,42 @@ pub struct TextureUniqueId(i32);
 
 impl Pushable for StyleColor {
     unsafe fn push(&self) {
-        ImGui_PushStyleColor1(self.0.bits(), &self.1.into());
+        unsafe {
+            ImGui_PushStyleColor1(self.0.bits(), &self.1.into());
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleColor(1);
+        unsafe {
+            ImGui_PopStyleColor(1);
+        }
     }
 }
 
 impl Pushable for [StyleColor] {
     unsafe fn push(&self) {
-        for sc in self {
-            sc.push();
+        unsafe {
+            for sc in self {
+                sc.push();
+            }
         }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleColor(self.len() as i32);
+        unsafe {
+            ImGui_PopStyleColor(self.len() as i32);
+        }
     }
 }
 
 impl<const N: usize> Pushable for [StyleColor; N] {
     unsafe fn push(&self) {
-        self.as_slice().push();
+        unsafe {
+            self.as_slice().push();
+        }
     }
     unsafe fn pop(&self) {
-        self.as_slice().pop();
+        unsafe {
+            self.as_slice().pop();
+        }
     }
 }
 
@@ -4472,30 +4566,42 @@ pub type StyleColorF = (ColorId, ImVec4);
 
 impl Pushable for StyleColorF {
     unsafe fn push(&self) {
-        ImGui_PushStyleColor1(self.0.bits(), &self.1);
+        unsafe {
+            ImGui_PushStyleColor1(self.0.bits(), &self.1);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleColor(1);
+        unsafe {
+            ImGui_PopStyleColor(1);
+        }
     }
 }
 
 impl Pushable for [StyleColorF] {
     unsafe fn push(&self) {
-        for sc in self {
-            sc.push();
+        unsafe {
+            for sc in self {
+                sc.push();
+            }
         }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleColor(self.len() as i32);
+        unsafe {
+            ImGui_PopStyleColor(self.len() as i32);
+        }
     }
 }
 
 impl<const N: usize> Pushable for [StyleColorF; N] {
     unsafe fn push(&self) {
-        self.as_slice().push();
+        unsafe {
+            self.as_slice().push();
+        }
     }
     unsafe fn pop(&self) {
-        self.as_slice().pop();
+        unsafe {
+            self.as_slice().pop();
+        }
     }
 }
 
@@ -4511,35 +4617,47 @@ pub type Style = (StyleVar, StyleValue);
 
 impl Pushable for Style {
     unsafe fn push(&self) {
-        match self.1 {
-            StyleValue::F32(f) => ImGui_PushStyleVar(self.0.bits(), f),
-            StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v2_to_im(v)),
-            StyleValue::X(x) => ImGui_PushStyleVarX(self.0.bits(), x),
-            StyleValue::Y(y) => ImGui_PushStyleVarX(self.0.bits(), y),
+        unsafe {
+            match self.1 {
+                StyleValue::F32(f) => ImGui_PushStyleVar(self.0.bits(), f),
+                StyleValue::Vec2(v) => ImGui_PushStyleVar1(self.0.bits(), &v2_to_im(v)),
+                StyleValue::X(x) => ImGui_PushStyleVarX(self.0.bits(), x),
+                StyleValue::Y(y) => ImGui_PushStyleVarX(self.0.bits(), y),
+            }
         }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleVar(1);
+        unsafe {
+            ImGui_PopStyleVar(1);
+        }
     }
 }
 
 impl Pushable for [Style] {
     unsafe fn push(&self) {
-        for sc in self {
-            sc.push();
+        unsafe {
+            for sc in self {
+                sc.push();
+            }
         }
     }
     unsafe fn pop(&self) {
-        ImGui_PopStyleVar(self.len() as i32);
+        unsafe {
+            ImGui_PopStyleVar(self.len() as i32);
+        }
     }
 }
 
 impl<const N: usize> Pushable for [Style; N] {
     unsafe fn push(&self) {
-        self.as_slice().push();
+        unsafe {
+            self.as_slice().push();
+        }
     }
     unsafe fn pop(&self) {
-        self.as_slice().pop();
+        unsafe {
+            self.as_slice().pop();
+        }
     }
 }
 
@@ -4548,10 +4666,14 @@ pub struct ItemWidth(pub f32);
 
 impl Pushable for ItemWidth {
     unsafe fn push(&self) {
-        ImGui_PushItemWidth(self.0);
+        unsafe {
+            ImGui_PushItemWidth(self.0);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopItemWidth();
+        unsafe {
+            ImGui_PopItemWidth();
+        }
     }
 }
 
@@ -4560,10 +4682,14 @@ pub struct Indent(pub f32);
 
 impl Pushable for Indent {
     unsafe fn push(&self) {
-        ImGui_Indent(self.0);
+        unsafe {
+            ImGui_Indent(self.0);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_Unindent(self.0);
+        unsafe {
+            ImGui_Unindent(self.0);
+        }
     }
 }
 
@@ -4572,19 +4698,27 @@ pub struct TextWrapPos(pub f32);
 
 impl Pushable for TextWrapPos {
     unsafe fn push(&self) {
-        ImGui_PushTextWrapPos(self.0);
+        unsafe {
+            ImGui_PushTextWrapPos(self.0);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopTextWrapPos();
+        unsafe {
+            ImGui_PopTextWrapPos();
+        }
     }
 }
 
 impl Pushable for (ItemFlags, bool) {
     unsafe fn push(&self) {
-        ImGui_PushItemFlag(self.0.bits(), self.1);
+        unsafe {
+            ImGui_PushItemFlag(self.0.bits(), self.1);
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopItemFlag();
+        unsafe {
+            ImGui_PopItemFlag();
+        }
     }
 }
 
@@ -4593,10 +4727,14 @@ pub struct ItemId<H: Hashable>(pub H);
 
 impl<H: Hashable> Pushable for ItemId<H> {
     unsafe fn push(&self) {
-        self.0.push();
+        unsafe {
+            self.0.push();
+        }
     }
     unsafe fn pop(&self) {
-        ImGui_PopID();
+        unsafe {
+            ImGui_PopID();
+        }
     }
 }
 
@@ -4887,7 +5025,7 @@ impl KeyChord {
         KeyChord(ImGuiKey(mods.bits() | key.bits().0))
     }
     pub fn bits(&self) -> i32 {
-        self.0 .0
+        self.0.0
     }
     pub fn from_bits(bits: i32) -> Option<KeyChord> {
         // Validate that the bits are valid when building self

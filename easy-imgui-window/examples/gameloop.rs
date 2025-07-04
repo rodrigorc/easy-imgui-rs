@@ -2,12 +2,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use easy_imgui_window::{
+    EventFlags, MainWindow, MainWindowStatus,
     easy_imgui_renderer::{
-        glow::{self, Context, HasContext},
         Renderer,
+        glow::{self, Context, HasContext},
     },
     glutin::prelude::GlSurface,
-    winit, EventFlags, MainWindow, MainWindowStatus,
+    winit,
 };
 use winit::{
     application::ApplicationHandler,

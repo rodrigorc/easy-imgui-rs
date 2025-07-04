@@ -1,11 +1,10 @@
 use easy_imgui_window::{
-    easy_imgui as imgui,
+    MainWindow, MainWindowWithRenderer, easy_imgui as imgui,
     easy_imgui_renderer::Renderer,
     winit::{
         event_loop::{ActiveEventLoop, EventLoop},
         window::Window,
     },
-    MainWindow, MainWindowWithRenderer,
 };
 use std::rc::Rc;
 

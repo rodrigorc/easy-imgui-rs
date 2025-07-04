@@ -1,7 +1,7 @@
 [package]
 name = "easy-imgui"
 version = "0.15.0"
-edition = "2021"
+edition = "2024"
 description = "Rust wrapper for the Dear ImGui library"
 license = "MIT"
 readme = "../README.md"

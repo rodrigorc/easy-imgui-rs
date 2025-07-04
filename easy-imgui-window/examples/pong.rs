@@ -5,7 +5,7 @@ use std::{
 
 use easy_imgui::FontSize;
 use easy_imgui_window::{
-    easy_imgui as imgui, winit, AppHandler, Application, Args, EventFlags, EventResult,
+    AppHandler, Application, Args, EventFlags, EventResult, easy_imgui as imgui, winit,
 };
 use winit::{event::WindowEvent, event_loop::EventLoop, window::Window};
 

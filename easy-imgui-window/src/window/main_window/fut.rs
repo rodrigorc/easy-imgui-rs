@@ -1,6 +1,6 @@
 use futures_util::{
-    task::{waker, ArcWake},
     FutureExt,
+    task::{ArcWake, waker},
 };
 use send_wrapper::SendWrapper;
 use std::{
@@ -194,10 +194,10 @@ impl<T> FutureHandle<T> {
     /// Converts this handle into a future that is satisfied when the original job finishes.
     /// It returns the value returned by the original future.
     pub async fn future(self) -> T {
-        if let Some(task) = self.task.upgrade() {
-            if let Some(fut) = task.future.take() {
-                fut.take().await;
-            }
+        if let Some(task) = self.task.upgrade()
+            && let Some(fut) = task.future.take()
+        {
+            fut.take().await;
         }
         //This unwrap() cannot fail: if the future has finished, then self.res must be Some,
         //because the last action of the future is assigning to it.

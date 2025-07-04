@@ -1,7 +1,7 @@
 use std::mem::size_of;
 
 use crate::glow::{self, HasContext};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use cgmath::{EuclideanSpace, Matrix3, Point2, Transform};
 use easy_imgui::{self as imgui, PlatformIo, TextureId};
 use easy_imgui_opengl::{self as glr};
@@ -191,98 +191,102 @@ impl Renderer {
     }
 
     unsafe fn update_textures(gl: &glr::GlContext, pio: &mut PlatformIo) {
-        for tex in pio.textures_mut() {
-            Self::update_texture(gl, tex);
+        unsafe {
+            for tex in pio.textures_mut() {
+                Self::update_texture(gl, tex);
+            }
         }
     }
     unsafe fn update_texture(gl: &glr::GlContext, tex: &mut ImTextureData) {
-        match tex.Status {
-            ImTextureStatus::ImTextureStatus_WantCreate => {
-                log::debug!("Texture create {}", tex.UniqueID);
-                let pixels = tex.Pixels;
-                let tex_id = glr::Texture::generate(gl).unwrap();
-                gl.bind_texture(glow::TEXTURE_2D, Some(tex_id.id()));
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_WRAP_S,
-                    glow::CLAMP_TO_EDGE as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_WRAP_T,
-                    glow::CLAMP_TO_EDGE as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MIN_FILTER,
-                    glow::LINEAR as i32,
-                );
-                gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MAG_FILTER,
-                    glow::LINEAR as i32,
-                );
-                gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
-                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
-                gl.tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA as i32,
-                    tex.Width,
-                    tex.Height,
-                    0,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
-                        pixels,
-                        (tex.Width * tex.Height * 4) as usize,
-                    ))),
-                );
-                gl.bind_texture(glow::TEXTURE_2D, None);
-                tex.Status = ImTextureStatus::ImTextureStatus_OK;
-                // Warning: SetTexUserId() is inline;
-                tex.TexID = Self::map_tex(tex_id.id()).id();
-                std::mem::forget(tex_id);
-            }
-            ImTextureStatus::ImTextureStatus_WantUpdates => {
-                log::debug!("Texture update {}", tex.UniqueID);
-                let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
-                gl.bind_texture(glow::TEXTURE_2D, Some(tex_id));
-                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, tex.Width);
-                // TODO: GL ES doesn't have GL_UNPACK_ROW_LENGTH, so we need to (A) copy to a contiguous buffer or (B) upload line by line.
-                for r in &tex.Updates {
-                    let ptr = tex.Pixels.offset(
-                        ((i32::from(r.x) + i32::from(r.y) * tex.Width) * tex.BytesPerPixel)
-                            as isize,
+        unsafe {
+            match tex.Status {
+                ImTextureStatus::ImTextureStatus_WantCreate => {
+                    log::debug!("Texture create {}", tex.UniqueID);
+                    let pixels = tex.Pixels;
+                    let tex_id = glr::Texture::generate(gl).unwrap();
+                    gl.bind_texture(glow::TEXTURE_2D, Some(tex_id.id()));
+                    gl.tex_parameter_i32(
+                        glow::TEXTURE_2D,
+                        glow::TEXTURE_WRAP_S,
+                        glow::CLAMP_TO_EDGE as i32,
                     );
-                    // the length of the slice is fake :-(
-                    let mem = std::slice::from_raw_parts(ptr, 1);
-                    gl.tex_sub_image_2d(
+                    gl.tex_parameter_i32(
+                        glow::TEXTURE_2D,
+                        glow::TEXTURE_WRAP_T,
+                        glow::CLAMP_TO_EDGE as i32,
+                    );
+                    gl.tex_parameter_i32(
+                        glow::TEXTURE_2D,
+                        glow::TEXTURE_MIN_FILTER,
+                        glow::LINEAR as i32,
+                    );
+                    gl.tex_parameter_i32(
+                        glow::TEXTURE_2D,
+                        glow::TEXTURE_MAG_FILTER,
+                        glow::LINEAR as i32,
+                    );
+                    gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAX_LEVEL, 0);
+                    gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                    gl.tex_image_2d(
                         glow::TEXTURE_2D,
                         0,
-                        i32::from(r.x),
-                        i32::from(r.y),
-                        i32::from(r.w),
-                        i32::from(r.h),
+                        glow::RGBA as i32,
+                        tex.Width,
+                        tex.Height,
+                        0,
                         glow::RGBA,
                         glow::UNSIGNED_BYTE,
-                        glow::PixelUnpackData::Slice(Some(mem)),
+                        glow::PixelUnpackData::Slice(Some(std::slice::from_raw_parts(
+                            pixels,
+                            (tex.Width * tex.Height * 4) as usize,
+                        ))),
                     );
+                    gl.bind_texture(glow::TEXTURE_2D, None);
+                    tex.Status = ImTextureStatus::ImTextureStatus_OK;
+                    // Warning: SetTexUserId() is inline;
+                    tex.TexID = Self::map_tex(tex_id.id()).id();
+                    std::mem::forget(tex_id);
                 }
-                gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
-                tex.Status = ImTextureStatus::ImTextureStatus_OK;
-                gl.bind_texture(glow::TEXTURE_2D, None);
-            }
-            ImTextureStatus::ImTextureStatus_WantDestroy => {
-                log::debug!("Texture destroy {}", tex.UniqueID);
-                if let Some(ntex) = std::num::NonZero::new(tex.TexID as u32) {
-                    let ntex = glow::NativeTexture(ntex);
-                    gl.delete_texture(ntex);
-                    tex.TexID = 0;
+                ImTextureStatus::ImTextureStatus_WantUpdates => {
+                    log::debug!("Texture update {}", tex.UniqueID);
+                    let tex_id = Self::unmap_tex(TextureId::from_id(tex.TexID)).unwrap();
+                    gl.bind_texture(glow::TEXTURE_2D, Some(tex_id));
+                    gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, tex.Width);
+                    // TODO: GL ES doesn't have GL_UNPACK_ROW_LENGTH, so we need to (A) copy to a contiguous buffer or (B) upload line by line.
+                    for r in &tex.Updates {
+                        let ptr = tex.Pixels.offset(
+                            ((i32::from(r.x) + i32::from(r.y) * tex.Width) * tex.BytesPerPixel)
+                                as isize,
+                        );
+                        // the length of the slice is fake :-(
+                        let mem = std::slice::from_raw_parts(ptr, 1);
+                        gl.tex_sub_image_2d(
+                            glow::TEXTURE_2D,
+                            0,
+                            i32::from(r.x),
+                            i32::from(r.y),
+                            i32::from(r.w),
+                            i32::from(r.h),
+                            glow::RGBA,
+                            glow::UNSIGNED_BYTE,
+                            glow::PixelUnpackData::Slice(Some(mem)),
+                        );
+                    }
+                    gl.pixel_store_i32(glow::UNPACK_ROW_LENGTH, 0);
+                    tex.Status = ImTextureStatus::ImTextureStatus_OK;
+                    gl.bind_texture(glow::TEXTURE_2D, None);
                 }
-                tex.Status = ImTextureStatus::ImTextureStatus_Destroyed;
+                ImTextureStatus::ImTextureStatus_WantDestroy => {
+                    log::debug!("Texture destroy {}", tex.UniqueID);
+                    if let Some(ntex) = std::num::NonZero::new(tex.TexID as u32) {
+                        let ntex = glow::NativeTexture(ntex);
+                        gl.delete_texture(ntex);
+                        tex.TexID = 0;
+                    }
+                    tex.Status = ImTextureStatus::ImTextureStatus_Destroyed;
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 
@@ -292,209 +296,211 @@ impl Renderer {
         draw_data: &ImDrawData,
         matrix: Option<&Matrix3<f32>>,
     ) {
-        enum ScissorViewportMatrix {
-            Default,
-            Custom(Matrix3<f32>),
-            None,
-        }
-        let default_matrix;
-        let (matrix, viewport_matrix) = match matrix {
-            None => {
-                let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
-                let ImVec2 {
-                    x: width,
-                    y: height,
-                } = draw_data.DisplaySize;
-                let right = left + width;
-                let bottom = top + height;
-                gl.enable(glow::SCISSOR_TEST);
-                default_matrix = Matrix3::new(
-                    2.0 / width,
-                    0.0,
-                    0.0,
-                    0.0,
-                    -2.0 / height,
-                    0.0,
-                    -(right + left) / width,
-                    (top + bottom) / height,
-                    1.0,
-                );
-                (&default_matrix, ScissorViewportMatrix::Default)
+        unsafe {
+            enum ScissorViewportMatrix {
+                Default,
+                Custom(Matrix3<f32>),
+                None,
             }
-            Some(matrix) => {
-                // If there is a custom matrix we have to compute the scissor rectangle in viewport coordinates.
-                // This only works if the transformed scissor rectangle is axis aligned, ie the rotation is 0°, 90°, 180° or 270°.
-                // TODO: for other angles a fragment shader would be needed, maybe with a `discard`.
-                // A rotation of multiple of 90° always has two 0 in the matrix:
-                // * 0° and 180°: at (0,0) and (1,1), the sines.
-                // * 90° and 270°: at (0,1) and (1,0), the cosines.
-                if (matrix[0][0].abs() < f32::EPSILON && matrix[1][1].abs() < f32::EPSILON)
-                    || (matrix[1][0].abs() < f32::EPSILON && matrix[0][1].abs() < f32::EPSILON)
-                {
-                    let mut viewport = [0; 4];
-                    gl.get_parameter_i32_slice(glow::VIEWPORT, &mut viewport);
-                    let viewport_x = viewport[0] as f32;
-                    let viewport_y = viewport[1] as f32;
-                    let viewport_w2 = viewport[2] as f32 / 2.0;
-                    let viewport_h2 = viewport[3] as f32 / 2.0;
-                    let vm = Matrix3::new(
-                        viewport_w2,
+            let default_matrix;
+            let (matrix, viewport_matrix) = match matrix {
+                None => {
+                    let ImVec2 { x: left, y: top } = draw_data.DisplayPos;
+                    let ImVec2 {
+                        x: width,
+                        y: height,
+                    } = draw_data.DisplaySize;
+                    let right = left + width;
+                    let bottom = top + height;
+                    gl.enable(glow::SCISSOR_TEST);
+                    default_matrix = Matrix3::new(
+                        2.0 / width,
                         0.0,
                         0.0,
                         0.0,
-                        viewport_h2,
+                        -2.0 / height,
                         0.0,
-                        viewport_x + viewport_w2,
-                        viewport_y + viewport_h2,
+                        -(right + left) / width,
+                        (top + bottom) / height,
                         1.0,
                     );
-                    gl.enable(glow::SCISSOR_TEST);
-                    (matrix, ScissorViewportMatrix::Custom(vm * matrix))
-                } else {
-                    gl.disable(glow::SCISSOR_TEST);
-                    (matrix, ScissorViewportMatrix::None)
+                    (&default_matrix, ScissorViewportMatrix::Default)
                 }
-            }
-        };
-
-        gl.bind_vertex_array(Some(objs.vao.id()));
-        gl.use_program(Some(objs.program.id()));
-        gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));
-        gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(objs.ibuf.id()));
-        gl.enable(glow::BLEND);
-        gl.blend_func_separate(
-            glow::SRC_ALPHA,
-            glow::ONE_MINUS_SRC_ALPHA,
-            glow::ONE,
-            glow::ONE_MINUS_SRC_ALPHA,
-        );
-        gl.disable(glow::CULL_FACE);
-        gl.disable(glow::DEPTH_TEST);
-
-        gl.active_texture(glow::TEXTURE0);
-        gl.uniform_1_i32(Some(&objs.u_tex_location), 0);
-
-        gl.uniform_matrix_3_f32_slice(
-            Some(&objs.u_matrix_location),
-            false,
-            AsRef::<[f32; 9]>::as_ref(matrix),
-        );
-
-        for cmd_list in &draw_data.CmdLists {
-            let cmd_list = &**cmd_list;
-
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                glr::as_u8_slice(&cmd_list.VtxBuffer),
-                glow::DYNAMIC_DRAW,
-            );
-            gl.buffer_data_u8_slice(
-                glow::ELEMENT_ARRAY_BUFFER,
-                glr::as_u8_slice(&cmd_list.IdxBuffer),
-                glow::DYNAMIC_DRAW,
-            );
-            let stride = size_of::<ImDrawVert>() as i32;
-            gl.vertex_attrib_pointer_f32(
-                objs.a_pos_location,
-                2, /*xy*/
-                glow::FLOAT,
-                false,
-                stride,
-                0,
-            );
-            gl.vertex_attrib_pointer_f32(
-                objs.a_uv_location,
-                2, /*xy*/
-                glow::FLOAT,
-                false,
-                stride,
-                8,
-            );
-            gl.vertex_attrib_pointer_f32(
-                objs.a_color_location,
-                4, /*rgba*/
-                glow::UNSIGNED_BYTE,
-                true,
-                stride,
-                16,
-            );
-
-            for cmd in &cmd_list.CmdBuffer {
-                match viewport_matrix {
-                    ScissorViewportMatrix::Default => {
-                        let clip_x = cmd.ClipRect.x - draw_data.DisplayPos.x;
-                        let clip_y = cmd.ClipRect.y - draw_data.DisplayPos.y;
-                        let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
-                        let clip_h = cmd.ClipRect.w - cmd.ClipRect.y;
-                        let scale = draw_data.FramebufferScale.x;
-                        gl.scissor(
-                            (clip_x * scale) as i32,
-                            ((draw_data.DisplaySize.y - (clip_y + clip_h)) * scale) as i32,
-                            (clip_w * scale) as i32,
-                            (clip_h * scale) as i32,
+                Some(matrix) => {
+                    // If there is a custom matrix we have to compute the scissor rectangle in viewport coordinates.
+                    // This only works if the transformed scissor rectangle is axis aligned, ie the rotation is 0°, 90°, 180° or 270°.
+                    // TODO: for other angles a fragment shader would be needed, maybe with a `discard`.
+                    // A rotation of multiple of 90° always has two 0 in the matrix:
+                    // * 0° and 180°: at (0,0) and (1,1), the sines.
+                    // * 90° and 270°: at (0,1) and (1,0), the cosines.
+                    if (matrix[0][0].abs() < f32::EPSILON && matrix[1][1].abs() < f32::EPSILON)
+                        || (matrix[1][0].abs() < f32::EPSILON && matrix[0][1].abs() < f32::EPSILON)
+                    {
+                        let mut viewport = [0; 4];
+                        gl.get_parameter_i32_slice(glow::VIEWPORT, &mut viewport);
+                        let viewport_x = viewport[0] as f32;
+                        let viewport_y = viewport[1] as f32;
+                        let viewport_w2 = viewport[2] as f32 / 2.0;
+                        let viewport_h2 = viewport[3] as f32 / 2.0;
+                        let vm = Matrix3::new(
+                            viewport_w2,
+                            0.0,
+                            0.0,
+                            0.0,
+                            viewport_h2,
+                            0.0,
+                            viewport_x + viewport_w2,
+                            viewport_y + viewport_h2,
+                            1.0,
                         );
+                        gl.enable(glow::SCISSOR_TEST);
+                        (matrix, ScissorViewportMatrix::Custom(vm * matrix))
+                    } else {
+                        gl.disable(glow::SCISSOR_TEST);
+                        (matrix, ScissorViewportMatrix::None)
                     }
-                    ScissorViewportMatrix::Custom(vm) => {
-                        let pos = Vector2::new(draw_data.DisplayPos.x, draw_data.DisplayPos.y);
-                        let clip_aa = Vector2::new(cmd.ClipRect.x, cmd.ClipRect.y) - pos;
-                        let clip_bb = Vector2::new(cmd.ClipRect.z, cmd.ClipRect.w) - pos;
-                        let clip_aa = vm.transform_point(Point2::from_vec(clip_aa));
-                        let clip_bb = vm.transform_point(Point2::from_vec(clip_bb));
-                        gl.scissor(
-                            clip_aa.x.min(clip_bb.x).round() as i32,
-                            clip_aa.y.min(clip_bb.y).round() as i32,
-                            (clip_bb.x - clip_aa.x).abs().round() as i32,
-                            (clip_bb.y - clip_aa.y).abs().round() as i32,
-                        );
-                    }
-                    ScissorViewportMatrix::None => {}
                 }
+            };
 
-                match cmd.UserCallback {
-                    Some(cb) => {
-                        cb(cmd_list, cmd);
+            gl.bind_vertex_array(Some(objs.vao.id()));
+            gl.use_program(Some(objs.program.id()));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(objs.vbuf.id()));
+            gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(objs.ibuf.id()));
+            gl.enable(glow::BLEND);
+            gl.blend_func_separate(
+                glow::SRC_ALPHA,
+                glow::ONE_MINUS_SRC_ALPHA,
+                glow::ONE,
+                glow::ONE_MINUS_SRC_ALPHA,
+            );
+            gl.disable(glow::CULL_FACE);
+            gl.disable(glow::DEPTH_TEST);
+
+            gl.active_texture(glow::TEXTURE0);
+            gl.uniform_1_i32(Some(&objs.u_tex_location), 0);
+
+            gl.uniform_matrix_3_f32_slice(
+                Some(&objs.u_matrix_location),
+                false,
+                AsRef::<[f32; 9]>::as_ref(matrix),
+            );
+
+            for cmd_list in &draw_data.CmdLists {
+                let cmd_list = &**cmd_list;
+
+                gl.buffer_data_u8_slice(
+                    glow::ARRAY_BUFFER,
+                    glr::as_u8_slice(&cmd_list.VtxBuffer),
+                    glow::DYNAMIC_DRAW,
+                );
+                gl.buffer_data_u8_slice(
+                    glow::ELEMENT_ARRAY_BUFFER,
+                    glr::as_u8_slice(&cmd_list.IdxBuffer),
+                    glow::DYNAMIC_DRAW,
+                );
+                let stride = size_of::<ImDrawVert>() as i32;
+                gl.vertex_attrib_pointer_f32(
+                    objs.a_pos_location,
+                    2, /*xy*/
+                    glow::FLOAT,
+                    false,
+                    stride,
+                    0,
+                );
+                gl.vertex_attrib_pointer_f32(
+                    objs.a_uv_location,
+                    2, /*xy*/
+                    glow::FLOAT,
+                    false,
+                    stride,
+                    8,
+                );
+                gl.vertex_attrib_pointer_f32(
+                    objs.a_color_location,
+                    4, /*rgba*/
+                    glow::UNSIGNED_BYTE,
+                    true,
+                    stride,
+                    16,
+                );
+
+                for cmd in &cmd_list.CmdBuffer {
+                    match viewport_matrix {
+                        ScissorViewportMatrix::Default => {
+                            let clip_x = cmd.ClipRect.x - draw_data.DisplayPos.x;
+                            let clip_y = cmd.ClipRect.y - draw_data.DisplayPos.y;
+                            let clip_w = cmd.ClipRect.z - cmd.ClipRect.x;
+                            let clip_h = cmd.ClipRect.w - cmd.ClipRect.y;
+                            let scale = draw_data.FramebufferScale.x;
+                            gl.scissor(
+                                (clip_x * scale) as i32,
+                                ((draw_data.DisplaySize.y - (clip_y + clip_h)) * scale) as i32,
+                                (clip_w * scale) as i32,
+                                (clip_h * scale) as i32,
+                            );
+                        }
+                        ScissorViewportMatrix::Custom(vm) => {
+                            let pos = Vector2::new(draw_data.DisplayPos.x, draw_data.DisplayPos.y);
+                            let clip_aa = Vector2::new(cmd.ClipRect.x, cmd.ClipRect.y) - pos;
+                            let clip_bb = Vector2::new(cmd.ClipRect.z, cmd.ClipRect.w) - pos;
+                            let clip_aa = vm.transform_point(Point2::from_vec(clip_aa));
+                            let clip_bb = vm.transform_point(Point2::from_vec(clip_bb));
+                            gl.scissor(
+                                clip_aa.x.min(clip_bb.x).round() as i32,
+                                clip_aa.y.min(clip_bb.y).round() as i32,
+                                (clip_bb.x - clip_aa.x).abs().round() as i32,
+                                (clip_bb.y - clip_aa.y).abs().round() as i32,
+                            );
+                        }
+                        ScissorViewportMatrix::None => {}
                     }
-                    None => {
-                        // bindgen: inline function
-                        let tex_id = if cmd.TexRef._TexData.is_null() {
-                            cmd.TexRef._TexID
-                        } else {
-                            (*cmd.TexRef._TexData).TexID
-                        };
-                        let tex_id = TextureId::from_id(tex_id);
-                        gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(tex_id));
 
-                        if cfg!(target_arch = "wasm32") {
-                            gl.draw_elements(
-                                glow::TRIANGLES,
-                                cmd.ElemCount as i32,
-                                if size_of::<ImDrawIdx>() == 2 {
-                                    glow::UNSIGNED_SHORT
-                                } else {
-                                    glow::UNSIGNED_INT
-                                },
-                                (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
-                            );
-                        } else {
-                            gl.draw_elements_base_vertex(
-                                glow::TRIANGLES,
-                                cmd.ElemCount as i32,
-                                if size_of::<ImDrawIdx>() == 2 {
-                                    glow::UNSIGNED_SHORT
-                                } else {
-                                    glow::UNSIGNED_INT
-                                },
-                                (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
-                                cmd.VtxOffset as i32,
-                            );
+                    match cmd.UserCallback {
+                        Some(cb) => {
+                            cb(cmd_list, cmd);
+                        }
+                        None => {
+                            // bindgen: inline function
+                            let tex_id = if cmd.TexRef._TexData.is_null() {
+                                cmd.TexRef._TexID
+                            } else {
+                                (*cmd.TexRef._TexData).TexID
+                            };
+                            let tex_id = TextureId::from_id(tex_id);
+                            gl.bind_texture(glow::TEXTURE_2D, Self::unmap_tex(tex_id));
+
+                            if cfg!(target_arch = "wasm32") {
+                                gl.draw_elements(
+                                    glow::TRIANGLES,
+                                    cmd.ElemCount as i32,
+                                    if size_of::<ImDrawIdx>() == 2 {
+                                        glow::UNSIGNED_SHORT
+                                    } else {
+                                        glow::UNSIGNED_INT
+                                    },
+                                    (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
+                                );
+                            } else {
+                                gl.draw_elements_base_vertex(
+                                    glow::TRIANGLES,
+                                    cmd.ElemCount as i32,
+                                    if size_of::<ImDrawIdx>() == 2 {
+                                        glow::UNSIGNED_SHORT
+                                    } else {
+                                        glow::UNSIGNED_INT
+                                    },
+                                    (size_of::<ImDrawIdx>() * cmd.IdxOffset as usize) as i32,
+                                    cmd.VtxOffset as i32,
+                                );
+                            }
                         }
                     }
                 }
             }
+            gl.use_program(None);
+            gl.bind_vertex_array(None);
+            gl.disable(glow::SCISSOR_TEST);
         }
-        gl.use_program(None);
-        gl.bind_vertex_array(None);
-        gl.disable(glow::SCISSOR_TEST);
     }
     /// Maps an OpenGL texture to an ImGui texture.
     pub fn map_tex(ntex: glow::Texture) -> TextureId {

@@ -87,6 +87,12 @@ extern thread_local ImGuiContext* MyImGuiTLS;
     };
 
     let mut bindings = bindgen::Builder::default();
+    // Edition 2024!
+    bindings = bindings
+        .rust_target(bindgen::RustTarget::stable(85, 0).unwrap())
+        .rust_edition(bindgen::RustEdition::Edition2024)
+        .wrap_unsafe_ops(true);
+
     bindings = bindings
         .clang_args(["-I", &imgui_src.to_string_lossy()])
         .clang_args(["-x", "c++"])

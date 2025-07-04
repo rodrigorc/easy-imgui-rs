@@ -1,7 +1,7 @@
 [package]
 name = "easy-imgui-filechooser"
 version = "0.2.5"
-edition = "2021"
+edition = "2024"
 description = "File-chooser widget for easy-imgui"
 license = "MIT"
 readme = "README.md"
@@ -30,4 +30,4 @@ easy-imgui-window = { version = "0.15.0", path = "../easy-imgui-window" }
 sys-locale = "0.3"
 
 [build-dependencies]
-include-po = { version = "0.1", optional = true }
+include-po = { version = "0.2", optional = true }

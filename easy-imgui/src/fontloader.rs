@@ -1,4 +1,4 @@
-use super::{vec2, FontBaked, PixelImage, SubPixelImage, Vector2};
+use super::{FontBaked, PixelImage, SubPixelImage, Vector2, vec2};
 use bitflags::bitflags;
 use easy_imgui_sys::*;
 use image::GenericImage;
@@ -37,22 +37,26 @@ impl FontLoader {
 }
 
 unsafe extern "C" fn font_src_init(_atlas: *mut ImFontAtlas, src: *mut ImFontConfig) -> bool {
-    let ptr = (*src).FontLoaderData;
-    if !ptr.is_null() {
-        return false;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if !ptr.is_null() {
+            return false;
+        }
+        (*src).FontLoaderData = std::mem::replace(&mut (*src).FontData, std::ptr::null_mut());
+        true
     }
-    (*src).FontLoaderData = std::mem::replace(&mut (*src).FontData, std::ptr::null_mut());
-    true
 }
 
 unsafe extern "C" fn font_src_destroy(_atlas: *mut ImFontAtlas, src: *mut ImFontConfig) {
-    let ptr = (*src).FontLoaderData;
-    if ptr.is_null() {
-        return;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return;
+        }
+        let ptr = ptr as *mut BoxGlyphLoader;
+        drop(Box::from_raw(ptr));
+        (*src).FontLoaderData = std::ptr::null_mut();
     }
-    let ptr = ptr as *mut BoxGlyphLoader;
-    drop(Box::from_raw(ptr));
-    (*src).FontLoaderData = std::ptr::null_mut();
 }
 
 unsafe extern "C" fn font_src_contains_glyph(
@@ -60,16 +64,18 @@ unsafe extern "C" fn font_src_contains_glyph(
     src: *mut ImFontConfig,
     codepoint: ImWchar,
 ) -> bool {
-    let ptr = (*src).FontLoaderData;
-    if ptr.is_null() {
-        return false;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return false;
+        }
+        let Some(c) = char::from_u32(codepoint) else {
+            return false;
+        };
+        let ptr = ptr as *mut BoxGlyphLoader;
+        let ldr = &mut *ptr;
+        ldr.contains_glyph(c)
     }
-    let Some(c) = char::from_u32(codepoint) else {
-        return false;
-    };
-    let ptr = ptr as *mut BoxGlyphLoader;
-    let ldr = &mut *ptr;
-    ldr.contains_glyph(c)
 }
 
 unsafe extern "C" fn font_baked_load_glyph(
@@ -81,42 +87,44 @@ unsafe extern "C" fn font_baked_load_glyph(
     out_glyph: *mut ImFontGlyph,
     out_advance_x: *mut f32,
 ) -> bool {
-    let ptr = (*src).FontLoaderData;
-    if ptr.is_null() {
-        return false;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return false;
+        }
+        let Some(codepoint) = char::from_u32(codepoint) else {
+            return false;
+        };
+        let ptr = ptr as *mut BoxGlyphLoader;
+        let ldr = &mut *ptr;
+
+        let atlas = &mut *atlas;
+        let baked = &mut *baked;
+        let src = &mut *src;
+        let mut oversample_h = 0;
+        let mut oversample_v = 0;
+        ImFontAtlasBuildGetOversampleFactors(src, baked, &mut oversample_h, &mut oversample_v);
+        let rasterizer_density = src.RasterizerDensity * baked.RasterizerDensity;
+        let mut result = false;
+
+        let output = if out_advance_x.is_null() {
+            GlyphLoaderResult::Glyph(&mut *out_glyph)
+        } else {
+            GlyphLoaderResult::AdvanceX(&mut *out_advance_x)
+        };
+        let arg = GlyphLoaderArg {
+            codepoint,
+            oversample: vec2(oversample_h as f32, oversample_v as f32),
+            rasterizer_density,
+            result: &mut result,
+            atlas,
+            src,
+            baked,
+            output,
+        };
+        ldr.load_glyph(arg);
+        result
     }
-    let Some(codepoint) = char::from_u32(codepoint) else {
-        return false;
-    };
-    let ptr = ptr as *mut BoxGlyphLoader;
-    let ldr = &mut *ptr;
-
-    let atlas = &mut *atlas;
-    let baked = &mut *baked;
-    let src = &mut *src;
-    let mut oversample_h = 0;
-    let mut oversample_v = 0;
-    ImFontAtlasBuildGetOversampleFactors(src, baked, &mut oversample_h, &mut oversample_v);
-    let rasterizer_density = src.RasterizerDensity * baked.RasterizerDensity;
-    let mut result = false;
-
-    let output = if out_advance_x.is_null() {
-        GlyphLoaderResult::Glyph(&mut *out_glyph)
-    } else {
-        GlyphLoaderResult::AdvanceX(&mut *out_advance_x)
-    };
-    let arg = GlyphLoaderArg {
-        codepoint,
-        oversample: vec2(oversample_h as f32, oversample_v as f32),
-        rasterizer_density,
-        result: &mut result,
-        atlas,
-        src,
-        baked,
-        output,
-    };
-    ldr.load_glyph(arg);
-    result
 }
 
 unsafe extern "C" fn font_baked_init(
@@ -125,15 +133,17 @@ unsafe extern "C" fn font_baked_init(
     baked: *mut ImFontBaked,
     _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
 ) -> bool {
-    let ptr = (*src).FontLoaderData;
-    if ptr.is_null() {
-        return false;
-    }
-    let ptr = ptr as *mut BoxGlyphLoader;
-    let ldr = &mut *ptr;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return false;
+        }
+        let ptr = ptr as *mut BoxGlyphLoader;
+        let ldr = &mut *ptr;
 
-    ldr.font_baked_init(FontBaked::cast_mut(&mut *baked));
-    true
+        ldr.font_baked_init(FontBaked::cast_mut(&mut *baked));
+        true
+    }
 }
 
 unsafe extern "C" fn font_baked_destroy(
@@ -142,14 +152,16 @@ unsafe extern "C" fn font_baked_destroy(
     baked: *mut ImFontBaked,
     _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
 ) {
-    let ptr = (*src).FontLoaderData;
-    if ptr.is_null() {
-        return;
-    }
-    let ptr = ptr as *mut BoxGlyphLoader;
-    let ldr = &mut *ptr;
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return;
+        }
+        let ptr = ptr as *mut BoxGlyphLoader;
+        let ldr = &mut *ptr;
 
-    ldr.font_baked_destroy(FontBaked::cast_mut(&mut *baked));
+        ldr.font_baked_destroy(FontBaked::cast_mut(&mut *baked));
+    }
 }
 
 enum GlyphLoaderResult<'a> {

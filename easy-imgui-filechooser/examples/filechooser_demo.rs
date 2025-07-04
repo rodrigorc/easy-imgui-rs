@@ -1,5 +1,5 @@
 use easy_imgui::{id, lbl_id};
-use easy_imgui_window::{easy_imgui as imgui, winit, AppHandler, Application};
+use easy_imgui_window::{AppHandler, Application, easy_imgui as imgui, winit};
 use winit::event_loop::EventLoop;
 
 use easy_imgui_filechooser as filechooser;

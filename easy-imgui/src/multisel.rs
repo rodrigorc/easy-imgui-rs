@@ -124,11 +124,7 @@ extern "C" fn adapter_index_to_storage_id(
 ) -> ImGuiID {
     unsafe {
         let f = (*this).UserData as *mut BoxFnIdxToID;
-        if f.is_null() {
-            0
-        } else {
-            (*f)(idx as usize)
-        }
+        if f.is_null() { 0 } else { (*f)(idx as usize) }
     }
 }
 

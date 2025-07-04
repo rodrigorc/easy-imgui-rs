@@ -5,7 +5,7 @@
  * proper place.
  */
 use bytesize::ByteSize;
-use easy_imgui::{self as imgui, id, lbl, lbl_id, CustomRectIndex};
+use easy_imgui::{self as imgui, CustomRectIndex, id, lbl, lbl_id};
 pub use glob::{self, Pattern};
 use image::DynamicImage;
 use std::io::Result;
@@ -374,10 +374,10 @@ impl FileChooser {
     pub fn full_path(&self, default_extension: Option<&str>) -> PathBuf {
         let file_name = self.file_name();
         let mut res = self.path.join(file_name);
-        if let (None, Some(new_ext)) = (res.extension(), default_extension) {
-            if !res.exists() {
-                res.set_extension(new_ext);
-            }
+        if let (None, Some(new_ext)) = (res.extension(), default_extension)
+            && !res.exists()
+        {
+            res.set_extension(new_ext);
         }
         res
     }
@@ -639,10 +639,10 @@ impl FileChooser {
                 // If `scroll_dirty` we have to move the scroll to the "best" place.
                 // If there is a selected item, that is the best one, so it has to be added to the
                 // clipper, or it will be skipped.
-                if let (Some(i_sel), true) = (self.selected, self.scroll_dirty) {
-                    if let Some(idx) = self.visible_entries.iter().position(|i| *i == i_sel) {
-                        clipper.add_included_range(idx..idx + 1);
-                    }
+                if let (Some(i_sel), true) = (self.selected, self.scroll_dirty)
+                    && let Some(idx) = self.visible_entries.iter().position(|i| *i == i_sel)
+                {
+                    clipper.add_included_range(idx..idx + 1);
                 }
                 clipper.with(|i| {
                     let i_entry = self.visible_entries[i];

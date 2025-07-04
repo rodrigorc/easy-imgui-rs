@@ -1,6 +1,6 @@
 use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
 use cgmath::Matrix3;
-use easy_imgui::{self as imgui, cgmath, mint, Vector2};
+use easy_imgui::{self as imgui, Vector2, cgmath, mint};
 use easy_imgui_renderer::Renderer;
 use easy_imgui_sys::*;
 use glutin::{
@@ -401,13 +401,11 @@ pub fn window_event(
                     }
                 }
             }
-            if pressed {
-                if let Some(text) = text {
-                    unsafe {
-                        let io = renderer.imgui().io_mut().inner();
-                        for c in text.chars() {
-                            io.AddInputCharacter(c as u32);
-                        }
+            if pressed && let Some(text) = text {
+                unsafe {
+                    let io = renderer.imgui().io_mut().inner();
+                    for c in text.chars() {
+                        io.AddInputCharacter(c as u32);
                     }
                 }
             }
@@ -493,7 +491,7 @@ pub fn window_event(
 /// enabling the faature.
 pub mod clipboard {
     use easy_imgui::{self as imgui};
-    use std::ffi::{c_char, c_void, CStr, CString};
+    use std::ffi::{CStr, CString, c_char, c_void};
 
     /// Sets up the ImGui clipboard using the `arboard` crate.
     pub fn setup(imgui: &mut imgui::Context) {
@@ -514,14 +512,16 @@ pub mod clipboard {
         imgui: *mut easy_imgui_sys::ImGuiContext,
         text: *const c_char,
     ) {
-        let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
-        let clip = &mut *(user as *mut MyClipboard);
-        if text.is_null() {
-            let _ = clip.ctx.clear();
-        } else {
-            let cstr = CStr::from_ptr(text);
-            let str = String::from_utf8_lossy(cstr.to_bytes()).to_string();
-            let _ = clip.ctx.set_text(str);
+        unsafe {
+            let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
+            let clip = &mut *(user as *mut MyClipboard);
+            if text.is_null() {
+                let _ = clip.ctx.clear();
+            } else {
+                let cstr = CStr::from_ptr(text);
+                let str = String::from_utf8_lossy(cstr.to_bytes()).to_string();
+                let _ = clip.ctx.set_text(str);
+            }
         }
     }
 
@@ -529,16 +529,18 @@ pub mod clipboard {
     unsafe extern "C" fn get_clipboard_text(
         imgui: *mut easy_imgui_sys::ImGuiContext,
     ) -> *const c_char {
-        let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
-        let clip = &mut *(user as *mut MyClipboard);
-        let Ok(text) = clip.ctx.get_text() else {
-            return std::ptr::null();
-        };
-        let Ok(text) = CString::new(text) else {
-            return std::ptr::null();
-        };
-        clip.text = text;
-        clip.text.as_ptr()
+        unsafe {
+            let user = (*imgui).PlatformIO.Platform_ClipboardUserData;
+            let clip = &mut *(user as *mut MyClipboard);
+            let Ok(text) = clip.ctx.get_text() else {
+                return std::ptr::null();
+            };
+            let Ok(text) = CString::new(text) else {
+                return std::ptr::null();
+            };
+            clip.text = text;
+            clip.text.as_ptr()
+        }
     }
 
     struct MyClipboard {
@@ -552,7 +554,7 @@ mod main_window {
     use super::*;
     use std::future::Future;
     mod fut;
-    use anyhow::{anyhow, Result};
+    use anyhow::{Result, anyhow};
     use easy_imgui_renderer::glow;
     pub use fut::{FutureBackCaller, FutureHandle, FutureHandleGuard};
     use glutin::{

@@ -4,9 +4,9 @@
  */
 use std::time::Duration;
 
-use easy_imgui::{lbl_id, vec2, Color, DrawFlags, UiBuilder, Vector2, WindowFlags};
+use easy_imgui::{Color, DrawFlags, UiBuilder, Vector2, WindowFlags, lbl_id, vec2};
 use easy_imgui_window::{
-    winit, AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult,
+    AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult, winit,
 };
 use winit::{
     event::WindowEvent,

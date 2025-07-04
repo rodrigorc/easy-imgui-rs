@@ -1,4 +1,4 @@
-use easy_imgui_window::{easy_imgui as imgui, winit, AppHandler, Application, Args, EventResult};
+use easy_imgui_window::{AppHandler, Application, Args, EventResult, easy_imgui as imgui, winit};
 use winit::{event::WindowEvent, event_loop::EventLoop};
 
 fn main() {

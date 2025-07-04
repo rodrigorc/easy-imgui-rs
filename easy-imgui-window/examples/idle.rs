@@ -4,8 +4,8 @@
  */
 
 use easy_imgui_window::{
-    easy_imgui as imgui, winit, AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult,
-    FutureBackCaller, FutureHandleGuard, LocalProxy,
+    AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult, FutureBackCaller,
+    FutureHandleGuard, LocalProxy, easy_imgui as imgui, winit,
 };
 use imgui::{lbl, lbl_id};
 use std::num::Wrapping;

@@ -1,7 +1,7 @@
 [package]
 name = "easy-imgui-window"
 version = "0.15.0"
-edition = "2021"
+edition = "2024"
 description = "Default windowing for the easy-imgui crate using winit and easy-imgui-renderer"
 license = "MIT"
 readme = "../README.md"

@@ -150,7 +150,9 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .expect("Couldn't write bindings!");
 
     let mut build = cc::Build::new();
-    if target_arch != "wasm32" {
+    if target_arch == "wasm32" {
+        build.define("IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS", "1");
+    } else {
         build.cpp(true).std("c++20");
     }
     build.include(&imgui_src);

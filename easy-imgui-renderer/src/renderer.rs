@@ -57,10 +57,13 @@ impl Renderer {
                 imgui.io_mut().inner().add_backend_flags(
                     imgui::BackendFlags::HasMouseCursors
                         | imgui::BackendFlags::HasSetMousePos
-                        | imgui::BackendFlags::RendererHasVtxOffset
-                        | imgui::BackendFlags::RendererHasTextures,
+                        | imgui::BackendFlags::RendererHasVtxOffset,
                 );
             }
+            imgui
+                .io_mut()
+                .inner()
+                .add_backend_flags(imgui::BackendFlags::RendererHasTextures);
 
             let pio = imgui.platform_io_mut();
             let max_tex_size = gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE);
@@ -258,8 +261,10 @@ impl Renderer {
                             ((i32::from(r.x) + i32::from(r.y) * tex.Width) * tex.BytesPerPixel)
                                 as isize,
                         );
-                        // the length of the slice is fake :-(
-                        let mem = std::slice::from_raw_parts(ptr, 1);
+                        let mem = std::slice::from_raw_parts(
+                            ptr,
+                            (4 * i32::from(r.h) * tex.Width) as usize,
+                        );
                         gl.tex_sub_image_2d(
                             glow::TEXTURE_2D,
                             0,
@@ -278,9 +283,8 @@ impl Renderer {
                 }
                 ImTextureStatus::ImTextureStatus_WantDestroy => {
                     log::debug!("Texture destroy {}", tex.UniqueID);
-                    if let Some(ntex) = std::num::NonZero::new(tex.TexID as u32) {
-                        let ntex = glow::NativeTexture(ntex);
-                        gl.delete_texture(ntex);
+                    if let Some(tex_id) = Self::delete_tex(TextureId::from_id(tex.TexID)) {
+                        gl.delete_texture(tex_id);
                         tex.TexID = 0;
                     }
                     tex.Status = ImTextureStatus::ImTextureStatus_Destroyed;
@@ -507,9 +511,18 @@ impl Renderer {
         #[cfg(target_arch = "wasm32")]
         {
             let mut tex_map = WASM_TEX_MAP.lock().unwrap();
-            let id = tex_map.len();
-            tex_map.push(ntex);
-            unsafe { TextureId::from_id(id as *mut std::ffi::c_void) }
+            let id = match tex_map.iter().position(|t| t.is_none()) {
+                Some(free) => {
+                    tex_map[free] = Some(ntex);
+                    free
+                }
+                None => {
+                    let id = tex_map.len();
+                    tex_map.push(Some(ntex));
+                    id
+                }
+            };
+            unsafe { TextureId::from_id(id as u64) }
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -522,7 +535,7 @@ impl Renderer {
         {
             let tex_map = WASM_TEX_MAP.lock().unwrap();
             let id = tex.id() as usize;
-            tex_map.get(id).cloned()
+            tex_map.get(id).cloned().flatten()
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -531,10 +544,25 @@ impl Renderer {
             )?))
         }
     }
+
+    pub fn delete_tex(tex: TextureId) -> Option<glow::Texture> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let mut tex_map = WASM_TEX_MAP.lock().unwrap();
+            let id = tex.id() as usize;
+            tex_map.get_mut(id).map(|x| x.take()).flatten()
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self::unmap_tex(tex)
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
-static WASM_TEX_MAP: std::sync::Mutex<Vec<glow::Texture>> = std::sync::Mutex::new(Vec::new());
+static WASM_TEX_MAP: std::sync::Mutex<Vec<Option<glow::Texture>>> =
+    std::sync::Mutex::new(Vec::new());
 
 impl Drop for Renderer {
     fn drop(&mut self) {

@@ -19,7 +19,6 @@ fn main() {
 struct App;
 
 static KARLA_TTF: &[u8] = include_bytes!("Karla-Regular.ttf");
-static UBUNTU_TTF: &[u8] = include_bytes!("Ubuntu-R.ttf");
 
 impl Application for App {
     type UserEvent = ();
@@ -31,7 +30,6 @@ impl Application for App {
         let font_atlas = imgui.io_mut().font_atlas_mut();
         font_atlas.add_font(imgui::FontInfo::default_font());
         font_atlas.add_font(imgui::FontInfo::new(KARLA_TTF).set_name("karla"));
-        font_atlas.add_font(imgui::FontInfo::new(UBUNTU_TTF).set_name("ubuntu"));
         //imgui.style_mut().FontSizeBase = 16.0;
         App
     }

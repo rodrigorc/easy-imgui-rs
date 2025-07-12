@@ -792,7 +792,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "bitflags 2.9.1",
  "cgmath",
@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-renderer"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sys"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "bindgen",
  "cc",
@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-window"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "anyhow",
  "arboard",

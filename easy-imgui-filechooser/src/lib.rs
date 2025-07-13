@@ -353,12 +353,22 @@ impl FileChooser {
         &self.file_name
     }
     /// Gets the current active filter, if any.
+    ///
     /// It is None only if no filters have been added.
     pub fn active_filter(&self) -> Option<FilterId> {
         if self.filters.is_empty() {
             None
         } else {
             Some(self.filters[self.active_filter_idx].id)
+        }
+    }
+    /// Sets the current active filter.
+    ///
+    /// Adding filters can change the active filter, so for best results
+    /// do this after all filter have been added.
+    pub fn set_active_filter(&mut self, filter_id: FilterId) {
+        if let Some(p) = self.filters.iter().position(|f| f.id == filter_id) {
+            self.active_filter_idx = p;
         }
     }
     /// Gets the status of the read-only check box.

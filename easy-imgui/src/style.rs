@@ -1,3 +1,6 @@
+/*! Module with Dear Imgui Style definitions
+ */
+
 use super::*;
 
 transparent_mut! {

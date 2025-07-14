@@ -545,6 +545,9 @@ impl Renderer {
         }
     }
 
+    /// Deletes an OpenGL texture from the texture map.
+    ///
+    /// Returns the native texture, if any.
     pub fn delete_tex(tex: TextureId) -> Option<glow::Texture> {
         #[cfg(target_arch = "wasm32")]
         {
@@ -582,6 +585,10 @@ impl Drop for Renderer {
     }
 }
 
+/// Helper function to compile an OpenGL shader program from source.
+///
+/// The vertex and fragment shaders should be separated by a line with `###`.
+/// The `prefix` argument, if specified, is prepended to both shaders.
 pub fn gl_program_from_source(
     gl: &glr::GlContext,
     prefix: Option<&str>,

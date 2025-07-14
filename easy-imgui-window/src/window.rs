@@ -737,6 +737,9 @@ mod main_window {
         pub fn new(main_window: MainWindow) -> Self {
             Self::with_builder(main_window, &imgui::ContextBuilder::new())
         }
+        /// Creates a new [`Renderer`] and attaches it to the given window.
+        ///
+        /// The `builder` argument can be used to modify the inner ImGui context.
         pub fn with_builder(main_window: MainWindow, builder: &imgui::ContextBuilder) -> Self {
             let gl = main_window.create_gl_context();
             let renderer = Renderer::with_builder(std::rc::Rc::new(gl), builder).unwrap();
@@ -1103,6 +1106,9 @@ mod main_window {
                 app_data,
             }
         }
+        /// Returns the `ContextBuilder` of this application.
+        ///
+        /// With this you can change the ImGui options before the context is created.
         pub fn imgui_builder(&mut self) -> &mut imgui::ContextBuilder {
             &mut self.builder
         }

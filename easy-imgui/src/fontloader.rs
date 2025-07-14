@@ -3,10 +3,21 @@ use bitflags::bitflags;
 use easy_imgui_sys::*;
 use image::GenericImage;
 
+/// Trait that implements a custom font loader.
 pub trait GlyphLoader {
+    /// Return true if this font loader contains this character.
     fn contains_glyph(&mut self, codepoint: char) -> bool;
+    /// Try to load a glyph.
+    ///
+    /// Refer to [`GlyphLoaderArg`] for details.
     fn load_glyph(&mut self, arg: GlyphLoaderArg<'_>);
+    /// Initialize the parameters of the corresponding `FontBaked`.
+    ///
+    /// Not needed if this custom loader is part of a font collection and is not the first one.
     fn font_baked_init(&mut self, _baked: &mut FontBaked) {}
+    /// The font baked is about to be destroyed.
+    ///
+    /// Rarely useful, maybe if you had some raw resource stored in the `baked`.
     fn font_baked_destroy(&mut self, _baked: &mut FontBaked) {}
 }
 
@@ -169,6 +180,9 @@ enum GlyphLoaderResult<'a> {
     AdvanceX(&'a mut f32),
 }
 
+/// Arguments for [`GlyphLoader::load_glyph`].
+///
+/// Having a struct instead of a collection of parameters makes it easier to write and use.
 pub struct GlyphLoaderArg<'a> {
     codepoint: char,
     // This are integer in DearImGui, but why not fractions?
@@ -186,41 +200,80 @@ bitflags! {
     /// Flags to modify the behavior of `GlyphLoaderArg::build()`.
     #[derive(Copy, Clone, Debug)]
     pub struct GlyphBuildFlags: u32 {
-        // Sets the oversample to (1, 1) before building the image.
+        /// Sets the oversample to (1, 1) before building the image.
         const IGNORE_OVERSAMPLE = 1;
         /// Sets dpi_density to 1.0 before building the image.
         const IGNORE_DPI = 2;
         /// The size passed in already scaled to the final size.
         const PRESCALED_SIZE = 4;
-        /// Sets all the scaling factors to 1. This will make the final image to the size passed to `build)`.
+        /// Sets all the scaling factors to 1. This will make the final image to the size passed to `build()`.
         ///
-        /// Setting `PRESCALED_SIZE` and `IGNORE_SCALE` does nothing.
+        /// Note that setting `PRESCALED_SIZE` and `IGNORE_SCALE` does nothing.
         const IGNORE_SCALE = Self::IGNORE_OVERSAMPLE.bits() | Self::IGNORE_DPI.bits();
     }
 }
 
 impl GlyphLoaderArg<'_> {
+    /// The character to be loaded.
     pub fn codepoint(&self) -> char {
         self.codepoint
     }
+    /// The current size of the font requested.
     pub fn font_size(&self) -> f32 {
         self.baked.Size
     }
+    /// Gets the rasterizer density (DPI) of the renderer that requests this glyph.
+    ///
+    /// It is usually 1.0, but in hiDPI settings it may be 2.0 (or any other value, actually).
     pub fn dpi_density(&self) -> f32 {
         self.rasterizer_density
     }
+    /// Sets the rasterizer density.
+    ///
+    /// If you can't (or don't want to) support hiDPI environments you can disable it by either
+    /// setting the `GlyphBuildFlags::IGNORE_DPI` or by calling this function.
+    /// You can set it to values other than 1.0, but the usefulness is limited.
     pub fn set_dpi_density(&mut self, scale: f32) {
         self.rasterizer_density = scale;
     }
+    /// Gets the X/Y oversample factor.
+    ///
+    /// This is usually (1.0, 1.0), but for small fonts, it may be (2.0, 1.0).
+    /// If so, you should render your glyph scaled by these factors in X and Y.
     pub fn oversample(&self) -> Vector2 {
         self.oversample
     }
+    /// Sets the X/Y oversample factor.
+    ///
+    /// If you can't (or don't want to) support oversampling you can disable it by either
+    /// setting the `GlyphBuildFlags::IGNORE_OVERSAMPLE` or by calling this function.
     pub fn set_oversample(&mut self, oversample: Vector2) {
         self.oversample = oversample;
     }
+    /// Returns the "only advance X" flag.
+    ///
+    /// If this is true, when you call `build`, the `draw` callback will not actually be called:
+    /// only the `advance_x` parameter will be used.
+    ///
+    /// This is used by Dear ImGui when using very big fonts to compute the position of the glyphs
+    /// before rendering them, to save space in the texture atlas.
+    ///
+    /// You can safely ignore this, if you don't need to micro-optimize the loading of very big
+    /// custom fonts.
     pub fn only_advance_x(&self) -> bool {
         matches!(self.output, GlyphLoaderResult::AdvanceX(_))
     }
+    /// Builds the requested glyph.
+    ///
+    /// `origin` is the offset of the origin of the glyph, by default it will be just over the
+    /// baseline.
+    /// `size` is the size of the glyph, when drawn to the screen.
+    /// `advance_x` is how many pixels this glyph occupies when part of a string.
+    /// `flags`: how to interpret the size and scale the bitmap.
+    /// `draw`: callback that actually draws the glyph.
+    ///
+    /// Note that `draw()` may not be actually called every time. You can use `only_advance_x()` to
+    /// detect this case, if you need it.
     pub fn build(
         mut self,
         origin: Vector2,

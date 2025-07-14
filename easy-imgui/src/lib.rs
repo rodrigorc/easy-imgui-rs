@@ -184,9 +184,14 @@ macro_rules! transparent_options {
         $( transparent_options! { @OPTS $options $outer $inner } )*
 
         impl $outer {
+            /// Converts a native reference into a wrapper reference.
             pub fn cast(r: &$inner) -> &$outer {
                 unsafe { &*<*const $inner>::cast(r) }
             }
+
+            /// Converts a native reference into a wrapper reference.
+            ///
+            /// It is safe because if you have a reference to the native reference, you already can change anything.
             pub fn cast_mut(r: &mut $inner) -> &mut $outer {
                 unsafe { &mut *<*mut $inner>::cast(r) }
             }
@@ -202,6 +207,7 @@ macro_rules! transparent_options {
         }
 
         impl $outer {
+            /// Gets a reference to the native wrapper struct.
             pub fn get(&self) -> &$inner {
                 &self.0
             }
@@ -309,23 +315,37 @@ pub fn im_to_v2(v: impl Into<ImVec2>) -> Vector2 {
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(C)]
 pub struct Color {
+    /// Red component
     pub r: f32,
+    /// Green component
     pub g: f32,
+    /// Blue component
     pub b: f32,
+    /// Alpha component
     pub a: f32,
 }
 impl Color {
     // Primary and secondary colors
+    /// Transparent color: rgba(0, 0, 0, 0)
     pub const TRANSPARENT: Color = Color::new(0.0, 0.0, 0.0, 0.0);
+    /// White color: rgba(255, 255, 255, 1)
     pub const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+    /// Black color: rgba(0, 0, 0, 1)
     pub const BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
+    /// Red color: rgba(255, 0, 0, 1)
     pub const RED: Color = Color::new(1.0, 0.0, 0.0, 1.0);
+    /// Green color: rgba(0, 255, 0, 1)
     pub const GREEN: Color = Color::new(0.0, 1.0, 0.0, 1.0);
+    /// Blue color: rgba(0, 0, 255, 1)
     pub const BLUE: Color = Color::new(0.0, 0.0, 1.0, 1.0);
+    /// Yellow color: rgba(255, 255, 0, 1)
     pub const YELLOW: Color = Color::new(1.0, 1.0, 0.0, 1.0);
+    /// Magenta color: rgba(255, 0, 255, 1)
     pub const MAGENTA: Color = Color::new(1.0, 0.0, 1.0, 1.0);
+    /// Cyan color: rgba(0, 255, 255, 1)
     pub const CYAN: Color = Color::new(0.0, 1.0, 1.0, 1.0);
 
+    /// Builds a new color from its components
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color { r, g, b, a }
     }
@@ -375,6 +395,9 @@ pub struct CurrentContext<'a> {
     ctx: &'a mut Context,
 }
 
+/// Builder for a `Context`.
+///
+/// Call `build()` to build the context.
 #[derive(Debug)]
 pub struct ContextBuilder {
     docking: bool,
@@ -389,6 +412,12 @@ impl Default for ContextBuilder {
 }
 
 impl ContextBuilder {
+    /// Creates a builder with default values.
+    ///
+    /// Defaults are:
+    /// * no docking
+    /// * hightlight ids only on debug builds
+    /// * ini file name disabled
     pub fn new() -> ContextBuilder {
         ContextBuilder {
             docking: false,
@@ -396,10 +425,12 @@ impl ContextBuilder {
             ini_file_name: None,
         }
     }
+    /// Sets the docking feature
     pub fn set_docking(&mut self, docking: bool) -> &mut Self {
         self.docking = docking;
         self
     }
+    /// Sets the debug highlight id
     pub fn set_debug_highlight_id_conflicts(
         &mut self,
         debug_highlight_id_conflicts: bool,
@@ -407,10 +438,15 @@ impl ContextBuilder {
         self.debug_highlight_id_conflicts = debug_highlight_id_conflicts;
         self
     }
+    /// Sets the ini file name
     pub fn set_ini_file_name(&mut self, ini_file_name: Option<&str>) -> &mut Self {
         self.ini_file_name = ini_file_name.map(|s| s.to_string());
         self
     }
+    /// Builds the ImGui context.
+    ///
+    /// SAFETY: read `Context::new()`.
+    #[must_use]
     pub unsafe fn build(&self) -> Context {
         let imgui;
         // Probably not needed but just in case
@@ -440,10 +476,15 @@ impl ContextBuilder {
 }
 
 impl Context {
+    /// Creates a new ImGui context with default values.
+    ///
+    /// SAFETY: It is unsafe because it makes the context current, and that may brake the current context
+    /// if called at the wrong time.
     pub unsafe fn new() -> Context {
         unsafe { ContextBuilder::new().build() }
     }
 
+    /// Sets the size and scale of the context area.
     pub unsafe fn set_size(&mut self, size: Vector2, scale: f32) {
         unsafe {
             self.io_mut().inner().DisplaySize = v2_to_im(size);
@@ -575,42 +616,52 @@ transparent! {
 }
 
 impl RawContext {
+    /// Gets the current ImGui context.
+    ///
+    /// SAFETY: unsafe because the reference lifetime is not well defined.
     #[inline]
     pub unsafe fn current<'a>() -> &'a RawContext {
         unsafe { RawContext::cast(&*ImGui_GetCurrentContext()) }
     }
+    /// Converts a raw DearImGui context pointer into a `&RawContext``.
     #[inline]
     pub unsafe fn from_ptr<'a>(ptr: *mut ImGuiContext) -> &'a RawContext {
         unsafe { RawContext::cast(&*ptr) }
     }
+    /// Converts a raw DearImGui context pointer into a `&mut RawContext``.
     #[inline]
     pub unsafe fn from_ptr_mut<'a>(ptr: *mut ImGuiContext) -> &'a mut RawContext {
         unsafe { RawContext::cast_mut(&mut *ptr) }
     }
+    /// Gets a reference to the actual DearImGui context struct.
     #[inline]
     pub unsafe fn inner(&mut self) -> &mut ImGuiContext {
         &mut self.0
     }
+    /// Returns a safe wrapper for the `PlatformIo`.
     #[inline]
     pub fn platform_io(&self) -> &PlatformIo {
         PlatformIo::cast(&self.PlatformIO)
     }
+    /// Returns an unsafe mutable wrapper for the `PlatformIo`.
     #[inline]
     pub unsafe fn platform_io_mut(&mut self) -> &mut PlatformIo {
         unsafe { PlatformIo::cast_mut(&mut self.inner().PlatformIO) }
     }
 
+    /// Returns a safe wrapper for the IO.
     #[inline]
     pub fn io(&self) -> &Io {
         Io::cast(&self.IO)
     }
-    /// This returns a safe mutable wrapper for the IO.
+    /// Returns a safe mutable wrapper for the IO.
     ///
     /// Use `io_mut().inner()` to get the unsafe wrapper
     #[inline]
     pub fn io_mut(&mut self) -> &mut IoMut {
         unsafe { IoMut::cast_mut(&mut self.inner().IO) }
     }
+    /// Returns a reference for the current style definition.
     #[inline]
     pub fn style(&self) -> &style::Style {
         style::Style::cast(&self.Style)
@@ -701,15 +752,23 @@ impl FontInfo {
             flags: FontFlags::None,
         }
     }
+    /// Sets the name of this font.
+    ///
+    /// It is used only for diagnostics and the "demo" window.
     pub fn set_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
+    /// Sets the legacy size of this font.
+    ///
+    /// The size of the default font (the first one registered) is saved
+    /// as the default font size. Any other font size is not actually used,
+    /// although it is visible as `Font:.LegacySize`.
     pub fn set_size(mut self, size: f32) -> Self {
         self.size = size;
         self
     }
-    /// Creates a `FontInfo` using the embedded default Dear ImGui font, with the given font size.
+    /// Creates a `FontInfo` using the embedded default Dear ImGui font.
     pub fn default_font() -> FontInfo {
         FontInfo {
             ttf: TtfData::DefaultFont,
@@ -718,6 +777,9 @@ impl FontInfo {
             flags: FontFlags::None,
         }
     }
+    /// Registers a custom font loader.
+    ///
+    /// A custom font loader is any static type that implements the trait `GlyphLoader`.
     pub fn custom<GL: GlyphLoader + 'static>(glyph_loader: GL) -> FontInfo {
         let t = fontloader::BoxGlyphLoader::from(Box::new(glyph_loader));
         FontInfo {
@@ -731,16 +793,23 @@ impl FontInfo {
 
 /// Represents any type that can be converted into something that can be deref'ed to a `&CStr`.
 pub trait IntoCStr: Sized {
+    /// The type that can actually be converted into a `CStr`.
     type Temp: Deref<Target = CStr>;
+    /// Convert this value into a `Temp` that can be converted into a `CStr`.
     fn into(self) -> Self::Temp;
+    /// Convert this value directly into a `CString`.
     fn into_cstring(self) -> CString;
+    /// Length in bytes of the `CString` within.
     fn len(&self) -> usize;
+    /// Checks whether the string is empty.
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    // Unsafe because we will not check there are no NULs.
-    // Reimplement this if `fn into()` does extra allocations.
+    /// Adds the bytes of the `CStr` within to the given `Vec`.
+    ///
+    /// SAFETY: Unsafe because we will not check there are no NULs.
+    /// Reimplement this if `fn into()` does extra allocations.
     unsafe fn push_to_non_null_vec(self, bs: &mut Vec<u8>) {
         let c = IntoCStr::into(self);
         let c = c.to_bytes();
@@ -884,18 +953,22 @@ pub struct Id<C: IntoCStr>(C);
 pub struct LblId<C: IntoCStr>(C);
 
 impl<C: IntoCStr> Id<C> {
+    /// Converts this `Id` into a value that can be converted to a `CStr`.
     pub fn into(self) -> C::Temp {
         self.0.into()
     }
+    /// Converts this `Id` into a `IntoCStr`.
     pub fn into_inner(self) -> C {
         self.0
     }
 }
 
 impl<C: IntoCStr> LblId<C> {
+    /// Converts this `LblId` into a value that can be converted to a `CStr`.
     pub fn into(self) -> C::Temp {
         self.0.into()
     }
+    /// Converts this `LblId` into a `IntoCStr`.
     pub fn into_inner(self) -> C {
         self.0
     }
@@ -3557,9 +3630,9 @@ impl FontAtlas {
         unsafe {
             let f = self.font_ptr(font_id);
             // Do not delete the default font!
-            if std::ptr::eq(f, self.Fonts[0]) {
+            /*if std::ptr::eq(f, self.Fonts[0]) {
                 return;
-            }
+            }*/
             self.0.RemoveFont(f);
         }
     }

@@ -1505,7 +1505,7 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
 
 decl_builder! { Image -> (), ImGui_Image ('t) ()
     (
-        texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
+        texture_ref (TextureRef<'t>) (&texture_ref.tex_ref()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),
@@ -1535,7 +1535,7 @@ decl_builder! { Image -> (), ImGui_Image ('t) ()
 
 decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
     (
-        texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
+        texture_ref (TextureRef<'t>) (&texture_ref.tex_ref()),
         size (ImVec2) (&size),
         uv0 (ImVec2) (&uv0),
         uv1 (ImVec2) (&uv1),

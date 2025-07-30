@@ -127,6 +127,7 @@ fn game_handle(
         &mut g.game.app,
         window_id,
         event,
+        None,
         EventFlags::DoNotRender,
     );
     if imgui_wants.window_closed {

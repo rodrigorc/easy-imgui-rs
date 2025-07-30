@@ -195,15 +195,6 @@ impl Renderer {
                 },
                 |draw_data| {
                     Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
-
-                    ImGui_UpdatePlatformWindows();
-
-                    // Doc says that ImGui_RenderPlatformWindowsDefault() isn't mandatory...
-                    let platform = &*ImGui_GetPlatformIO(); //TODO: take as parameter
-                    // First viewport is already rendered
-                    for vp in &platform.Viewports[1..] {
-                        ((*platform).Platform_RenderWindow.unwrap())(*vp, std::ptr::null_mut());
-                    }
                 },
             );
         }

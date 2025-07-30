@@ -1,15 +1,12 @@
 use std::{
     cell::Cell,
-    ffi::{CStr, c_char, c_void},
+    ffi::{CStr, c_char},
     num::NonZeroU32,
     ptr::NonNull,
 };
 
 use easy_imgui::{self as imgui, ViewportFlags};
-use easy_imgui_renderer::{
-    Renderer,
-    glow::{self, HasContext},
-};
+use easy_imgui_renderer::glow::{self, HasContext};
 use easy_imgui_sys::{ImGuiViewport, ImVec2};
 use glutin_winit::finalize_window;
 use raw_window_handle::HasWindowHandle;
@@ -19,7 +16,7 @@ use winit::{
     window::{WindowAttributes, WindowLevel},
 };
 
-use crate::{MainWindow, MainWindowWithRenderer, ViewportRef};
+use crate::{MainWindow, ViewportRef};
 
 use anyhow::{Result, anyhow};
 use glutin::{
@@ -32,7 +29,7 @@ use glutin::{
 use winit::window::Window;
 
 thread_local! {
-    pub static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<MainWindowWithRenderer>)>> = Cell::new(None);
+    pub static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<PossiblyCurrentContext>, f32)>> = Cell::new(None);
 }
 
 pub struct ViewportWindow {
@@ -44,14 +41,11 @@ pub struct ViewportWindow {
 impl ViewportWindow {
     fn new(
         event_loop: &ActiveEventLoop,
-        main_window: &MainWindow,
+        gl_ctx: &PossiblyCurrentContext,
         pos: ImVec2,
         size: ImVec2,
         flags: ViewportFlags,
     ) -> Result<ViewportWindow> {
-        let gl_ctx = main_window.glutin_context();
-        //let gl = main_window.renderer().gl_context().clone();
-        dbg!(flags);
         let wattr = WindowAttributes::default()
             .with_visible(false)
             .with_active(false)
@@ -64,7 +58,6 @@ impl ViewportWindow {
             })
             .with_decorations(false);
 
-        //.with(main_window.window().window_handle().ok().map(|h| h.as_raw()))
         let gl_config = gl_ctx.config();
         let window =
             finalize_window(event_loop, wattr, &gl_config).map_err(|e| anyhow!("{:#?}", e))?;
@@ -97,8 +90,8 @@ impl ViewportWindow {
         &self.window
     }
 
-    fn pre_render(
-        &mut self,
+    pub fn pre_render(
+        &self,
         gl_ctx: &PossiblyCurrentContext,
         size: ImVec2,
         scale: f32,
@@ -110,7 +103,7 @@ impl ViewportWindow {
 
         unsafe { gl.viewport(0, 0, (size.x * scale) as i32, (size.y * scale) as i32) };
     }
-    fn post_render(&mut self, gl_ctx: &PossiblyCurrentContext) {
+    pub fn post_render(&self, gl_ctx: &PossiblyCurrentContext) {
         let _ = self
             .surface
             .swap_buffers(gl_ctx)
@@ -140,7 +133,7 @@ pub unsafe fn setup_viewports(imgui: &mut imgui::Context) {
         pio.Platform_SetWindowTitle = Some(set_window_title);
         pio.Platform_SetWindowAlpha = None; // not supported by winit
         pio.Platform_UpdateWindow = None; // set parent?
-        pio.Platform_RenderWindow = Some(render_window);
+        pio.Platform_RenderWindow = None; // implemented manually
         pio.Platform_SwapBuffers = None; // render does it
         pio.Platform_GetWindowDpiScale = None; // TODO beta
         pio.Platform_OnChangedViewport = None; // TODO beta
@@ -153,31 +146,7 @@ pub unsafe fn setup_viewports(imgui: &mut imgui::Context) {
     }
 }
 
-pub unsafe extern "C" fn create_window(vp: *mut ImGuiViewport) {
-    unsafe {
-        //let id = (*vp).ID;
-        //let flags = easy_imgui::ViewportFlags::from_bits((*vp).Flags);
-        //dbg!(flags);
-        //println!("create {id}");
-        let (looper, mut main_window) = LOOPER.get().unwrap();
-        let looper = looper.as_ref();
-        let main_window = main_window.as_mut();
-        (*vp).FramebufferScale = main_window.imgui().io().DisplayFramebufferScale;
-        let main = main_window.main_window();
-        let pos = (*vp).Pos;
-        let size = (*vp).Size;
-        let flags = ViewportFlags::from_bits_truncate((*vp).Flags);
-        let w = ViewportWindow::new(looper, main, pos, size, flags).unwrap();
-        let w = Box::new(w);
-        let w: *mut ViewportWindow = Box::into_raw(w);
-        (*vp).PlatformHandle = w as _;
-        (*vp).PlatformUserData = 1 as _;
-        (*vp).PlatformRequestResize = true;
-        (*vp).PlatformRequestMove = true;
-    }
-}
-
-unsafe fn get_viewport(vp: *mut ImGuiViewport) -> ViewportRef {
+pub unsafe fn get_viewport(vp: *mut ImGuiViewport) -> ViewportRef {
     unsafe {
         match (*vp).PlatformUserData as usize {
             0 => ViewportRef::MainWindow,
@@ -190,10 +159,33 @@ unsafe fn get_viewport(vp: *mut ImGuiViewport) -> ViewportRef {
     }
 }
 
+pub unsafe extern "C" fn create_window(vp: *mut ImGuiViewport) {
+    unsafe {
+        let id = (*vp).ID;
+        let flags = easy_imgui::ViewportFlags::from_bits_truncate((*vp).Flags);
+        log::debug!("create {id} {flags:?}");
+
+        let (looper, gl_ctx, scale) = LOOPER.get().unwrap();
+        let looper = looper.as_ref();
+        let gl_ctx = gl_ctx.as_ref();
+        (*vp).FramebufferScale = ImVec2 { x: scale, y: scale };
+        let pos = (*vp).Pos;
+        let size = (*vp).Size;
+        let w = ViewportWindow::new(looper, gl_ctx, pos, size, flags).unwrap();
+        log::debug!("viewport wid {:?}", w.window().id());
+        let w = Box::new(w);
+        let w: *mut ViewportWindow = Box::into_raw(w);
+        (*vp).PlatformHandle = w as _;
+        (*vp).PlatformUserData = 1 as _;
+        (*vp).PlatformRequestResize = true;
+        (*vp).PlatformRequestMove = true;
+    }
+}
+
 pub unsafe extern "C" fn destroy_window(vp: *mut ImGuiViewport) {
     unsafe {
-        //let id = (*vp).ID;
-        //println!("destroy {id}");
+        let id = (*vp).ID;
+        log::debug!("destroy {id}");
         match get_viewport(vp) {
             ViewportRef::Unknown => {}
             ViewportRef::MainWindow => {}
@@ -268,6 +260,7 @@ pub unsafe extern "C" fn get_window_pos(vp: *mut ImGuiViewport) -> ImVec2 {
         let Ok(pos) = pos else {
             return ImVec2 { x: 0.0, y: 0.0 };
         };
+        // Use u32 instead of f32 to avoid rounding errors in the real window position
         let pos: LogicalPosition<u32> = pos.to_logical(scale as f64);
         ImVec2 {
             x: pos.x as f32,
@@ -304,11 +297,12 @@ pub unsafe extern "C" fn get_window_size(vp: *mut ImGuiViewport) -> ImVec2 {
         //let id = (*vp).ID;
         //println!("get_size {id}");
         let scale = (*vp).FramebufferScale.x;
+        // Use u32 instead of f32 to avoid rounding errors in the real window size
         match get_viewport(vp) {
             ViewportRef::MainWindow => {
                 let w = (*vp).PlatformHandle as *mut MainWindow;
                 let w = &*w;
-                let size: LogicalSize<f32> = w.window().outer_size().to_logical(scale as f64);
+                let size: LogicalSize<u32> = w.window().outer_size().to_logical(scale as f64);
                 ImVec2 {
                     x: size.width as f32,
                     y: size.height as f32,
@@ -316,7 +310,7 @@ pub unsafe extern "C" fn get_window_size(vp: *mut ImGuiViewport) -> ImVec2 {
             }
             ViewportRef::Viewport(w, _) => {
                 let w = &*w;
-                let size: LogicalSize<f32> = w.window.inner_size().to_logical(scale as f64);
+                let size: LogicalSize<u32> = w.window.inner_size().to_logical(scale as f64);
                 ImVec2 {
                     x: size.width as f32,
                     y: size.height as f32,
@@ -425,35 +419,13 @@ pub unsafe extern "C" fn set_window_title(vp: *mut ImGuiViewport, title: *const 
     }
 }
 
-pub unsafe extern "C" fn render_window(vp: *mut ImGuiViewport, _render_arg: *mut c_void) {
+/*
+pub unsafe fn render_window(vp: *mut ImGuiViewport) {
     unsafe {
         //let id = vp.ID;
         //println!("render {id}");
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {}
-            ViewportRef::Unknown => {}
-            ViewportRef::Viewport(w, _) => {
-                let (_, mut main_window) = LOOPER.get().unwrap();
-                let main_window = main_window.as_mut();
-                let gl = main_window.renderer().gl_context().clone();
-                let w = &mut *w;
-                let scale = w.window().scale_factor() as f32;
-                w.pre_render(
-                    main_window.main_window().glutin_context(),
-                    (*vp).Size,
-                    scale,
-                    &gl,
-                );
-                let dd = &*(*vp).DrawData;
-                let gl_objs = main_window.renderer().gl_objs();
-                Renderer::render(&gl, gl_objs, dd, None);
-                w.post_render(main_window.main_window().glutin_context());
-            }
-        }
     }
 }
-
-/*
 pub unsafe extern "C" fn renderer_create_window(vp: *mut ImGuiViewport) {
     let id = (*vp).ID;
     println!("renderer_create {id}");

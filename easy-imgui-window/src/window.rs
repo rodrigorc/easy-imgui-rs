@@ -1,4 +1,7 @@
-use crate::conv::{from_imgui_cursor, to_imgui_button, to_imgui_key};
+use crate::{
+    conv::{from_imgui_cursor, to_imgui_button, to_imgui_key},
+    viewports,
+};
 use cgmath::Matrix3;
 use easy_imgui::{self as imgui, Vector2, cgmath, mint};
 use easy_imgui_renderer::Renderer;
@@ -148,6 +151,17 @@ pub trait MainWindowRef {
             ViewportRef::Unknown
         }
     }
+
+    unsafe fn glutin_context(&self) -> Option<&PossiblyCurrentContext> {
+        None
+    }
+    unsafe fn render_viewport(
+        &mut self,
+        _renderer: &Renderer,
+        _w: &viewports::ViewportWindow,
+        _vp: &imgui::Viewport,
+    ) {
+    }
 }
 
 fn transform_position_with_optional_matrix(
@@ -218,10 +232,6 @@ impl MainWindowRef for MainWindowPieces<'_> {
     }
     fn post_render(&mut self) {
         self.window.pre_present_notify();
-        let _ = self
-            .gl_context
-            .make_current(self.surface)
-            .inspect_err(|e| log::error!("{e}"));
         let _ = self
             .surface
             .swap_buffers(self.gl_context)
@@ -309,6 +319,7 @@ pub fn window_event(
     app: &mut impl imgui::UiBuilder,
     window_id: WindowId,
     event: &winit::event::WindowEvent,
+    event_loop: Option<&winit::event_loop::ActiveEventLoop>,
     flags: EventFlags,
 ) -> EventResult {
     use winit::event::WindowEvent::*;
@@ -326,6 +337,8 @@ pub fn window_event(
             }
         }
         RedrawRequested => unsafe {
+            renderer.imgui().set_current();
+
             let io = renderer.imgui().io();
             let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
             if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
@@ -341,10 +354,38 @@ pub fn window_event(
                     status.current_cursor = cursor;
                 }
             }
+
             if !flags.contains(EventFlags::DoNotRender) {
                 main_window.pre_render();
                 renderer.do_frame(app);
                 main_window.post_render();
+
+                if let (Some(event_loop), Some(glutin_context)) =
+                    (event_loop, main_window.glutin_context())
+                {
+                    let scale = renderer.imgui().io().DisplayFramebufferScale.x;
+                    viewports::LOOPER.set(Some((event_loop.into(), glutin_context.into(), scale)));
+                    ImGui_UpdatePlatformWindows();
+                    viewports::LOOPER.set(None); //TODO RTTI
+
+                    // Doc says that ImGui_RenderPlatformWindowsDefault() isn't mandatory...
+                    let pio = renderer.imgui().platform_io();
+                    // First viewport is already rendered.
+                    // Clone the viewports array to release the borrow of `renderer`.
+                    let viewports: Vec<_> = pio.Viewports[1..].into_iter().map(|v| *v).collect();
+
+                    for vp in viewports {
+                        match viewports::get_viewport(vp) {
+                            ViewportRef::MainWindow => {}
+                            ViewportRef::Unknown => {}
+                            ViewportRef::Viewport(w, _) => {
+                                let w = &*w;
+                                let v = imgui::Viewport::cast(&*vp);
+                                main_window.render_viewport(renderer, w, v);
+                            }
+                        }
+                    }
+                }
             }
         },
         Resized(size) => {
@@ -870,6 +911,7 @@ mod main_window {
             app: &mut impl imgui::UiBuilder,
             window_id: WindowId,
             event: &winit::event::WindowEvent,
+            event_loop: &ActiveEventLoop,
             flags: EventFlags,
         ) -> EventResult {
             unsafe {
@@ -924,6 +966,7 @@ mod main_window {
                 app,
                 window_id,
                 event,
+                Some(event_loop),
                 flags,
             )
         }
@@ -959,10 +1002,6 @@ mod main_window {
         }
         fn post_render(&mut self) {
             self.window.pre_present_notify();
-            let _ = self
-                .gl_context
-                .make_current(&self.surface)
-                .inspect_err(|e| log::error!("{e}"));
             let _ = self
                 .surface
                 .swap_buffers(&self.gl_context)
@@ -1005,6 +1044,28 @@ mod main_window {
                 }
             }
             ViewportRef::Unknown
+        }
+        unsafe fn glutin_context(&self) -> Option<&PossiblyCurrentContext> {
+            Some(&self.gl_context)
+        }
+        unsafe fn render_viewport(
+            &mut self,
+            renderer: &Renderer,
+            w: &viewports::ViewportWindow,
+            vp: &imgui::Viewport,
+        ) {
+            w.pre_render(
+                &mut self.glutin_context(),
+                vp.Size,
+                vp.FramebufferScale.x,
+                renderer.gl_context(),
+            );
+            unsafe {
+                let dd = &*(*vp).DrawData;
+                let gl_objs = renderer.gl_objs();
+                Renderer::render(&renderer.gl_context(), gl_objs, dd, None);
+            }
+            w.post_render(&mut self.glutin_context());
         }
     }
 
@@ -1139,12 +1200,14 @@ mod main_window {
             window_id: WindowId,
             event: winit::event::WindowEvent,
         ) {
-            viewports::LOOPER.set(Some((args.event_loop.into(), args.window.into())));
-            let res = args
-                .window
-                .window_event(self, window_id, &event, Self::EVENT_FLAGS);
+            let res = args.window.window_event(
+                self,
+                window_id,
+                &event,
+                args.event_loop,
+                Self::EVENT_FLAGS,
+            );
             self.window_event(args, window_id, event, res);
-            viewports::LOOPER.set(None); //TODO RTTI
         }
 
         /// A device event has been received.

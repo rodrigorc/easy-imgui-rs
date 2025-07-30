@@ -62,6 +62,7 @@ impl winit::application::ApplicationHandler for AppHandler {
                 &mut self.app,
                 window_id,
                 &event,
+                event_loop,
                 easy_imgui_window::EventFlags::empty(),
             );
             if res.window_closed {

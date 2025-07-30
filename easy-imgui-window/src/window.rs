@@ -993,7 +993,7 @@ mod main_window {
             }
 
             let io = unsafe { &*ImGui_GetPlatformIO() };
-            for vpp in &io.Viewports {
+            for vpp in &io.Viewports[1..] {
                 let vp = unsafe { &**vpp };
                 if vp.PlatformHandle.is_null() {
                     continue;

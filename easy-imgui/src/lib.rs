@@ -2891,6 +2891,7 @@ impl<A> Ui<A> {
     pub fn get_item_rect_size(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectSize()) }
     }
+    /// Available space from current position. This is your best friend!
     pub fn get_content_region_avail(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetContentRegionAvail()) }
     }
@@ -3000,36 +3001,45 @@ impl<A> Ui<A> {
             ImGui_Unindent(indent_w);
         }
     }
+    /// Prefer `get_cursor_screen_pos` over this.
     pub fn get_cursor_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetCursorPos()) }
     }
+    /// Prefer `get_cursor_screen_pos` over this.
     pub fn get_cursor_pos_x(&self) -> f32 {
         unsafe { ImGui_GetCursorPosX() }
     }
+    /// Prefer `get_cursor_screen_pos` over this.
     pub fn get_cursor_pos_y(&self) -> f32 {
         unsafe { ImGui_GetCursorPosY() }
     }
+    /// Prefer `set_cursor_screen_pos` over this.
     pub fn set_cursor_pos(&self, local_pos: Vector2) {
         unsafe {
             ImGui_SetCursorPos(&v2_to_im(local_pos));
         }
     }
+    /// Prefer `set_cursor_screen_pos` over this.
     pub fn set_cursor_pos_x(&self, local_x: f32) {
         unsafe {
             ImGui_SetCursorPosX(local_x);
         }
     }
+    /// Prefer `set_cursor_screen_pos` over this.
     pub fn set_cursor_pos_y(&self, local_y: f32) {
         unsafe {
             ImGui_SetCursorPosY(local_y);
         }
     }
+    /// Prefer `get_cursor_screen_pos` over this.
     pub fn get_cursor_start_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetCursorStartPos()) }
     }
+    /// Get cursor position in absolute coordinates. This is your best friend!
     pub fn get_cursor_screen_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetCursorScreenPos()) }
     }
+    /// Set cursor position in absolute coordinates. This is your best friend!
     pub fn set_cursor_screen_pos(&self, pos: Vector2) {
         unsafe {
             ImGui_SetCursorScreenPos(&v2_to_im(pos));
@@ -3384,7 +3394,7 @@ impl<A> Ui<A> {
         }
     }
     //SetNextWindowClass(const ImGuiWindowClass* window_class)
-    pub fn get_window_doc_id(&self) -> ImGuiID {
+    pub fn get_window_dock_id(&self) -> ImGuiID {
         unsafe { ImGui_GetWindowDockID() }
     }
     pub fn is_window_docked(&self) -> bool {

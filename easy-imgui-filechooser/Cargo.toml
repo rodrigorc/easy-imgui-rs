@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-filechooser"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 description = "File-chooser widget for easy-imgui"
 license = "MIT"
@@ -14,7 +14,7 @@ default = []
 tr = ["dep:tr", "dep:include-po"]
 
 [dependencies]
-easy-imgui = { version = "0.16.1", path = "../easy-imgui" }
+easy-imgui = { version = "0.17", path = "../easy-imgui" }
 image = "0.25"
 glob = "0.3"
 time = { version = "0.3", features = ["macros", "formatting"] }
@@ -26,7 +26,7 @@ tr = { version = "0.1.10", default-features = false, optional = true }
 windows = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
-easy-imgui-window = { version = "0.16.1", path = "../easy-imgui-window" }
+easy-imgui-window = { version = "0.17", path = "../easy-imgui-window" }
 sys-locale = "0.3"
 
 [build-dependencies]

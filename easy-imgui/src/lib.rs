@@ -537,9 +537,8 @@ impl Context {
         let ini = self.ini_file_name.as_deref()?.to_str().unwrap_or_default();
         Some(ini)
     }
-    pub unsafe fn get_main_viewport_mut(&mut self) -> &mut Viewport {
-        let ptr = (self.Viewports)[0];
-        unsafe { Viewport::cast_mut(&mut (*ptr)._base) }
+    pub unsafe fn get_main_viewport_mut(&mut self) -> *mut ImGuiViewport {
+        unsafe { &mut (*(self.Viewports)[0])._base }
     }
 }
 

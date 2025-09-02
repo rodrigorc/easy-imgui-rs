@@ -1,5 +1,5 @@
 use easy_imgui_window::{AppHandler, Application, Args, easy_imgui as imgui, winit};
-use winit::{event_loop::EventLoop, window::WindowId};
+use winit::event_loop::EventLoop;
 
 fn main() {
     env_logger::Builder::new()

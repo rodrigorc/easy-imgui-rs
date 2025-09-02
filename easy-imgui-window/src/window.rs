@@ -1,6 +1,7 @@
 use crate::{
+    ViewportWindow,
     conv::{from_imgui_cursor, to_imgui_button, to_imgui_key},
-    viewports,
+    viewports::{self, RealViewportRef},
 };
 use cgmath::Matrix3;
 use easy_imgui::{self as imgui, Vector2, cgmath, mint};
@@ -88,6 +89,12 @@ impl MainWindowIdler {
     }
 }
 
+#[derive(Debug)]
+pub enum ViewportRef {
+    MainWindow,
+    Viewport(*mut ViewportWindow, *mut ImGuiViewport),
+}
+
 /// This traits grants access to a Window.
 ///
 /// Usually you will have a [`MainWindow`], but if you create the `Window` with an external
@@ -144,11 +151,11 @@ pub trait MainWindowRef {
         }
     }
 
-    fn get_viewport(&mut self, window_id: WindowId) -> ViewportRef {
+    fn get_viewport_by_id(&mut self, window_id: WindowId) -> Option<ViewportRef> {
         if self.window().id() == window_id {
-            ViewportRef::MainWindow
+            Some(ViewportRef::MainWindow)
         } else {
-            ViewportRef::Unknown
+            None
         }
     }
 
@@ -327,13 +334,9 @@ pub fn window_event(
     let mut window_closed = false;
     match event {
         CloseRequested => {
-            let vp = main_window.get_viewport(window_id);
-            match vp {
-                ViewportRef::Unknown => {}
-                ViewportRef::Viewport(_, _) => {}
-                ViewportRef::MainWindow => {
-                    window_closed = true;
-                }
+            let vp = main_window.get_viewport_by_id(window_id);
+            if let Some(ViewportRef::MainWindow) = vp {
+                window_closed = true;
             }
         }
         RedrawRequested => unsafe {
@@ -364,21 +367,18 @@ pub fn window_event(
                     (event_loop, main_window.glutin_context())
                 {
                     let scale = renderer.imgui().io().DisplayFramebufferScale.x;
-                    viewports::LOOPER.set(Some((event_loop.into(), glutin_context.into(), scale)));
-                    ImGui_UpdatePlatformWindows();
-                    viewports::LOOPER.set(None); //TODO RTTI
+                    viewports::update_platform_windows(event_loop, glutin_context, scale);
 
                     // Doc says that ImGui_RenderPlatformWindowsDefault() isn't mandatory...
-                    let pio = renderer.imgui().platform_io();
-                    // First viewport is already rendered.
-                    // Clone the viewports array to release the borrow of `renderer`.
-                    let viewports: Vec<_> = pio.Viewports[1..].into_iter().map(|v| *v).collect();
 
-                    for vp in viewports {
-                        match viewports::get_viewport(vp) {
-                            ViewportRef::MainWindow => {}
-                            ViewportRef::Unknown => {}
-                            ViewportRef::Viewport(w, _) => {
+                    // Use a direct get to the current ImGui to avoid borrowing the renderer
+                    // when iterating the viewports. It is a C++ struct, so it should be ok, I guess...
+                    let pio = imgui::RawContext::current().platform_io();
+                    // First viewport is already rendered.
+                    for &vp in &pio.Viewports[1..] {
+                        match viewports::get_real_viewport(vp) {
+                            RealViewportRef::MainWindow(_) => {}
+                            RealViewportRef::Viewport(w) => {
                                 let w = &*w;
                                 let v = imgui::Viewport::cast(&*vp);
                                 main_window.render_viewport(renderer, w, v);
@@ -391,10 +391,10 @@ pub fn window_event(
         Resized(size) => {
             // Do not skip this line or the gl surface may be wrong in Wayland
             // GL surface in physical pixels, imgui in logical
-            let vp = main_window.get_viewport(window_id);
-            let vp = match vp {
-                ViewportRef::Unknown => unreachable!(),
-                ViewportRef::MainWindow => {
+            let vp = main_window.get_viewport_by_id(window_id);
+            match vp {
+                None => {}
+                Some(ViewportRef::MainWindow) => {
                     let size = main_window.resize(*size);
                     if !flags.contains(EventFlags::DoNotResize) {
                         main_window.ping_user_input();
@@ -404,20 +404,28 @@ pub fn window_event(
                             renderer.imgui().io_mut().inner().DisplaySize = imgui::v2_to_im(size);
                         }
                     }
-                    unsafe { renderer.imgui().get_main_viewport_mut() }
+                    unsafe {
+                        let vp = renderer.imgui().get_main_viewport_mut();
+                        (*vp).PlatformRequestResize = true;
+                    }
                 }
-                ViewportRef::Viewport(_, vp) => unsafe { &mut *vp },
+                Some(ViewportRef::Viewport(_, vp)) => unsafe {
+                    (*vp).PlatformRequestResize = true;
+                },
             };
-            vp.PlatformRequestResize = true;
         }
         Moved(_) => {
-            let vp = main_window.get_viewport(window_id);
-            let vp = match vp {
-                ViewportRef::Unknown => unreachable!(),
-                ViewportRef::MainWindow => unsafe { renderer.imgui().get_main_viewport_mut() },
-                ViewportRef::Viewport(_, vp) => unsafe { &mut *vp },
+            let vp = main_window.get_viewport_by_id(window_id);
+            match vp {
+                None => {}
+                Some(ViewportRef::MainWindow) => unsafe {
+                    let vp = renderer.imgui().get_main_viewport_mut();
+                    (*vp).PlatformRequestMove = true;
+                },
+                Some(ViewportRef::Viewport(_, vp)) => unsafe {
+                    (*vp).PlatformRequestMove = true;
+                },
             };
-            vp.PlatformRequestMove = true;
         }
         ScaleFactorChanged { scale_factor, .. } => {
             if !flags.contains(EventFlags::DoNotResize) {
@@ -502,19 +510,19 @@ pub fn window_event(
             main_window.ping_user_input();
             unsafe {
                 let io = renderer.imgui().io_mut().inner();
-                let vp = main_window.get_viewport(window_id);
+                let vp = main_window.get_viewport_by_id(window_id);
                 let mut position = Vector2::new(position.x as f32, position.y as f32);
                 // MainWindow must not be scaled, but Viewport must be, not sure why
                 match vp {
-                    ViewportRef::Unknown => {}
-                    ViewportRef::MainWindow => {
+                    None => {}
+                    Some(ViewportRef::MainWindow) => {
                         if let Ok(wpos) = main_window.window().inner_position() {
                             position += Vector2::new(wpos.x as f32, wpos.y as f32);
                         }
                         let position = main_window.transform_position(position);
                         io.AddMousePosEvent(position.x, position.y);
                     }
-                    ViewportRef::Viewport(vp, _ivp) => {
+                    Some(ViewportRef::Viewport(vp, _ivp)) => {
                         let vp = &*vp;
                         let scale = vp.window().scale_factor() as f32;
                         let mut position = Vector2::new(position.x as f32, position.y as f32);
@@ -674,9 +682,8 @@ mod main_window {
     /// This type represents a `winit` window and an OpenGL context.
     pub struct MainWindow {
         gl_context: PossiblyCurrentContext,
-        // The surface must be dropped before the window.
-        surface: Surface<WindowSurface>,
-        window: Window,
+        // Move the main_viewport into a box to have a stable address
+        main_viewport: Box<ViewportWindow>,
         matrix: Option<Matrix3<f32>>,
         idler: MainWindowIdler,
     }
@@ -767,8 +774,7 @@ mod main_window {
 
             Ok(MainWindow {
                 gl_context,
-                window,
-                surface,
+                main_viewport: Box::new(ViewportWindow { window, surface }),
                 matrix: None,
                 idler: MainWindowIdler::default(),
             })
@@ -785,7 +791,11 @@ mod main_window {
         pub unsafe fn into_pieces(
             self,
         ) -> (PossiblyCurrentContext, Surface<WindowSurface>, Window) {
-            (self.gl_context, self.surface, self.window)
+            (
+                self.gl_context,
+                self.main_viewport.surface,
+                self.main_viewport.window,
+            )
         }
         /// Returns the `glutin` context.
         pub fn glutin_context(&self) -> &PossiblyCurrentContext {
@@ -798,15 +808,15 @@ mod main_window {
         }
         /// Gets a reference to the `winit` window.
         pub fn window(&self) -> &Window {
-            &self.window
+            &self.main_viewport.window
         }
         /// Returns the `glutin` surface.
         pub fn surface(&self) -> &Surface<WindowSurface> {
-            &self.surface
+            &self.main_viewport.surface
         }
         /// Converts the given physical size to a logical size, using the window scale factor.
         pub fn to_logical_size<X: Pixel, Y: Pixel>(&self, size: PhysicalSize<X>) -> LogicalSize<Y> {
-            let scale = self.window.scale_factor();
+            let scale = self.main_viewport.window.scale_factor();
             size.to_logical(scale)
         }
         /// Converts the given logical size to a physical size, using the window scale factor.
@@ -814,7 +824,7 @@ mod main_window {
             &self,
             size: LogicalSize<X>,
         ) -> PhysicalSize<Y> {
-            let scale = self.window.scale_factor();
+            let scale = self.main_viewport.window.scale_factor();
             size.to_physical(scale)
         }
         /// Converts the given physical position to a logical position, using the window scale factor.
@@ -822,7 +832,7 @@ mod main_window {
             &self,
             pos: PhysicalPosition<X>,
         ) -> LogicalPosition<Y> {
-            let scale = self.window.scale_factor();
+            let scale = self.main_viewport.window.scale_factor();
             pos.to_logical(scale)
         }
         /// Converts the given logical position to a physical position, using the window scale factor.
@@ -830,7 +840,7 @@ mod main_window {
             &self,
             pos: LogicalPosition<X>,
         ) -> PhysicalPosition<Y> {
-            let scale = self.window.scale_factor();
+            let scale = self.main_viewport.window.scale_factor();
             pos.to_physical(scale)
         }
     }
@@ -916,17 +926,16 @@ mod main_window {
         ) -> EventResult {
             unsafe {
                 let vp = self.imgui().get_main_viewport_mut();
-                if vp.PlatformHandle.is_null() {
+                if (*vp).PlatformHandle.is_null() {
                     // first time only
-                    dbg!(vp.ID);
-                    let ph = self.main_window() as *mut MainWindow as _;
                     let scale = self.imgui().io().DisplayFramebufferScale;
-                    let vp = self.imgui().get_main_viewport_mut();
-                    vp.PlatformHandle = ph;
-                    vp.PlatformUserData = 0 as _;
-                    vp.PlatformRequestResize = false;
-                    vp.PlatformRequestMove = false;
-                    vp.FramebufferScale = scale;
+                    viewports::set_viewport_as_main_window(
+                        vp,
+                        self.main_window.main_viewport.as_mut(),
+                    );
+                    (*vp).PlatformRequestResize = false;
+                    (*vp).PlatformRequestMove = false;
+                    (*vp).FramebufferScale = scale;
 
                     let mons: Vec<_> = self.main_window().window().available_monitors().collect();
                     let pio = self.imgui().platform_io_mut();
@@ -981,28 +990,22 @@ mod main_window {
         }
     }
 
-    #[derive(Debug)]
-    pub enum ViewportRef {
-        MainWindow,
-        Viewport(*mut ViewportWindow, *mut ImGuiViewport),
-        Unknown,
-    }
-
     /// Main implementation of the `MainWindowRef` trait for an owned `MainWindow`.
     impl MainWindowRef for MainWindow {
         fn window(&self) -> &Window {
-            &self.window
+            &self.main_viewport.window
         }
         fn pre_render(&mut self) {
             self.idler.incr_frame();
             let _ = self
                 .gl_context
-                .make_current(&self.surface)
+                .make_current(&self.main_viewport.surface)
                 .inspect_err(|e| log::error!("A {e}"));
         }
         fn post_render(&mut self) {
-            self.window.pre_present_notify();
+            self.main_viewport.window.pre_present_notify();
             let _ = self
+                .main_viewport
                 .surface
                 .swap_buffers(&self.gl_context)
                 .inspect_err(|e| log::error!("{e}"));
@@ -1010,7 +1013,9 @@ mod main_window {
         fn resize(&mut self, size: PhysicalSize<u32>) -> LogicalSize<f32> {
             let width = NonZeroU32::new(size.width.max(1)).unwrap();
             let height = NonZeroU32::new(size.height.max(1)).unwrap();
-            self.surface.resize(&self.gl_context, width, height);
+            self.main_viewport
+                .surface
+                .resize(&self.gl_context, width, height);
             self.to_logical_size::<_, f32>(size)
         }
         fn ping_user_input(&mut self) {
@@ -1020,30 +1025,30 @@ mod main_window {
             if pinged || self.idler.has_to_render() {
                 // No need to call set_control_flow(): doing a redraw will force extra Poll.
                 // Not doing it will default to Wait.
-                self.window.request_redraw();
+                self.main_viewport.window.request_redraw();
             }
         }
         fn transform_position(&self, pos: Vector2) -> Vector2 {
             transform_position_with_optional_matrix(self, pos, &self.matrix)
         }
-        fn get_viewport(&mut self, window_id: WindowId) -> ViewportRef {
-            if self.window.id() == window_id {
-                return ViewportRef::MainWindow;
+        fn get_viewport_by_id(&mut self, window_id: WindowId) -> Option<ViewportRef> {
+            if self.main_viewport.window.id() == window_id {
+                return Some(ViewportRef::MainWindow);
             }
-
-            let io = unsafe { &*ImGui_GetPlatformIO() };
-            for vpp in &io.Viewports[1..] {
-                let vp = unsafe { &**vpp };
-                if vp.PlatformHandle.is_null() {
-                    continue;
-                }
-                let vw = (*vp).PlatformHandle as *mut viewports::ViewportWindow;
-                let vw = unsafe { &mut *vw };
-                if window_id == vw.window().id() {
-                    return ViewportRef::Viewport(vw, *vpp);
+            unsafe {
+                let pio = imgui::RawContext::current().platform_io();
+                for &vp in &pio.Viewports[1..] {
+                    if (*vp).PlatformHandle.is_null() {
+                        continue;
+                    }
+                    let mut vvp = viewports::get_real_viewport(vp);
+                    let vw = vvp.viewport_window();
+                    if vw.window.id() == window_id {
+                        return Some(ViewportRef::Viewport(vw, vp));
+                    }
                 }
             }
-            ViewportRef::Unknown
+            None
         }
         unsafe fn glutin_context(&self) -> Option<&PossiblyCurrentContext> {
             Some(&self.gl_context)

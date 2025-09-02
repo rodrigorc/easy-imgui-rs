@@ -29,12 +29,6 @@ pub struct GlObjects {
     u_tex_location: glow::UniformLocation,
 }
 
-impl GlObjects {
-    /*pub fn context(&self) -> &glr::GlContext {
-        self.atlas.gl()
-    }*/
-}
-
 impl Renderer {
     /// Creates a new renderer object.
     ///
@@ -304,6 +298,7 @@ impl Renderer {
     pub fn gl_objs(&self) -> &GlObjects {
         &self.objs
     }
+
     pub unsafe fn render(
         gl: &glow::Context,
         objs: &GlObjects,

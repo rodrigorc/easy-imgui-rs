@@ -1,13 +1,13 @@
 use std::{
     cell::Cell,
-    ffi::{CStr, c_char},
+    ffi::{CStr, c_char, c_void},
     num::NonZeroU32,
     ptr::NonNull,
 };
 
 use easy_imgui::{self as imgui, ViewportFlags};
 use easy_imgui_renderer::glow::{self, HasContext};
-use easy_imgui_sys::{ImGuiViewport, ImVec2};
+use easy_imgui_sys::{ImGui_UpdatePlatformWindows, ImGuiViewport, ImVec2};
 use glutin_winit::finalize_window;
 use raw_window_handle::HasWindowHandle;
 use winit::{
@@ -15,8 +15,6 @@ use winit::{
     event_loop::ActiveEventLoop,
     window::{WindowAttributes, WindowLevel},
 };
-
-use crate::{MainWindow, ViewportRef};
 
 use anyhow::{Result, anyhow};
 use glutin::{
@@ -28,14 +26,26 @@ use glutin::{
 };
 use winit::window::Window;
 
+// This thread_local variable is used to send the current loop to `create_window()`.
+// Unfortunately there is no easy way to pass this data down from the window loop to the ImGui callbacks.
 thread_local! {
-    pub static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<PossiblyCurrentContext>, f32)>> = Cell::new(None);
+    static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<PossiblyCurrentContext>, f32)>> = Cell::new(None);
+}
+
+pub unsafe fn update_platform_windows(
+    event_loop: &ActiveEventLoop,
+    glutin_context: &PossiblyCurrentContext,
+    scale: f32,
+) {
+    LOOPER.set(Some((event_loop.into(), glutin_context.into(), scale)));
+    unsafe { ImGui_UpdatePlatformWindows() };
+    LOOPER.set(None);
 }
 
 pub struct ViewportWindow {
     // The surface must be dropped before the window.
-    surface: Surface<WindowSurface>,
-    window: Window,
+    pub surface: Surface<WindowSurface>,
+    pub window: Window,
 }
 
 impl ViewportWindow {
@@ -146,15 +156,49 @@ pub unsafe fn setup_viewports(imgui: &mut imgui::Context) {
     }
 }
 
-pub unsafe fn get_viewport(vp: *mut ImGuiViewport) -> ViewportRef {
+// Values for PlatformUserData
+const PLATFORM_USER_DATA_MAIN_WINDOW: *mut c_void = 1 as _;
+const PLATFORM_USER_DATA_VIEWPORT: *mut c_void = 2 as _;
+
+pub unsafe fn set_viewport_as_main_window(vp: *mut ImGuiViewport, vw: *mut ViewportWindow) {
     unsafe {
-        match (*vp).PlatformUserData as usize {
-            0 => ViewportRef::MainWindow,
-            1 => {
-                let w = (*vp).PlatformHandle as *mut ViewportWindow;
-                ViewportRef::Viewport(w, vp)
-            }
-            _ => ViewportRef::Unknown,
+        (*vp).PlatformUserData = PLATFORM_USER_DATA_MAIN_WINDOW;
+        (*vp).PlatformHandle = vw as _;
+    }
+}
+
+pub unsafe fn set_viewport_as_vieport(vp: *mut ImGuiViewport, vw: *mut ViewportWindow) {
+    unsafe {
+        (*vp).PlatformUserData = PLATFORM_USER_DATA_VIEWPORT;
+        (*vp).PlatformHandle = vw as _;
+    }
+}
+
+pub enum RealViewportRef {
+    MainWindow(*mut ViewportWindow),
+    Viewport(*mut ViewportWindow),
+}
+
+impl RealViewportRef {
+    pub unsafe fn viewport_window(&mut self) -> &mut ViewportWindow {
+        let w = match *self {
+            RealViewportRef::MainWindow(w) => w,
+            RealViewportRef::Viewport(w) => w,
+        };
+        unsafe { &mut *w }
+    }
+    pub unsafe fn window(&mut self) -> &mut Window {
+        unsafe { &mut self.viewport_window().window }
+    }
+}
+
+pub unsafe fn get_real_viewport(vp: *mut ImGuiViewport) -> RealViewportRef {
+    unsafe {
+        let w = (*vp).PlatformHandle as *mut ViewportWindow;
+        match (*vp).PlatformUserData {
+            PLATFORM_USER_DATA_MAIN_WINDOW => RealViewportRef::MainWindow(w),
+            PLATFORM_USER_DATA_VIEWPORT => RealViewportRef::Viewport(w),
+            _ => unreachable!(),
         }
     }
 }
@@ -175,8 +219,7 @@ pub unsafe extern "C" fn create_window(vp: *mut ImGuiViewport) {
         log::debug!("viewport wid {:?}", w.window().id());
         let w = Box::new(w);
         let w: *mut ViewportWindow = Box::into_raw(w);
-        (*vp).PlatformHandle = w as _;
-        (*vp).PlatformUserData = 1 as _;
+        set_viewport_as_vieport(&mut *vp, w);
         (*vp).PlatformRequestResize = true;
         (*vp).PlatformRequestMove = true;
     }
@@ -186,16 +229,17 @@ pub unsafe extern "C" fn destroy_window(vp: *mut ImGuiViewport) {
     unsafe {
         let id = (*vp).ID;
         log::debug!("destroy {id}");
-        match get_viewport(vp) {
-            ViewportRef::Unknown => {}
-            ViewportRef::MainWindow => {}
-            ViewportRef::Viewport(w, _) => {
-                (*vp).PlatformHandle = std::ptr::null_mut();
-                (*vp).PlatformUserData = std::ptr::null_mut();
+        match get_real_viewport(vp) {
+            RealViewportRef::MainWindow(_) => {
+                // Do not destroy the main window here, it has its own life.
+            }
+            RealViewportRef::Viewport(w) => {
                 let w = Box::from_raw(w);
                 drop(w);
             }
         }
+        (*vp).PlatformUserData = std::ptr::null_mut();
+        (*vp).PlatformHandle = std::ptr::null_mut();
     }
 }
 
@@ -203,10 +247,11 @@ pub unsafe extern "C" fn show_window(vp: *mut ImGuiViewport) {
     unsafe {
         //let id = (*vp).ID;
         //println!("show {id}");
-        match get_viewport(vp) {
-            ViewportRef::Unknown => {}
-            ViewportRef::MainWindow => {}
-            ViewportRef::Viewport(w, _) => {
+        match get_real_viewport(vp) {
+            RealViewportRef::MainWindow(_) => {
+                // Main viewport can't be hidden
+            }
+            RealViewportRef::Viewport(w) => {
                 let w = &*w;
                 w.window.set_visible(true);
                 let flags = ViewportFlags::from_bits_truncate((*vp).Flags);
@@ -222,20 +267,9 @@ pub unsafe extern "C" fn set_window_pos(vp: *mut ImGuiViewport, pos: ImVec2) {
     unsafe {
         //let id = (*vp).ID;
         //println!("set_pos {id} {pos:?}");
-        match get_viewport(vp) {
-            ViewportRef::Unknown => {}
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *const MainWindow;
-                let w = &*w;
-                w.window()
-                    .set_outer_position(LogicalPosition::new(pos.x, pos.y));
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window()
-                    .set_outer_position(LogicalPosition::new(pos.x, pos.y));
-            }
-        }
+        get_real_viewport(vp)
+            .window()
+            .set_outer_position(LogicalPosition::new(pos.x, pos.y));
     }
 }
 
@@ -245,19 +279,17 @@ pub unsafe extern "C" fn get_window_pos(vp: *mut ImGuiViewport) -> ImVec2 {
         //println!("get_pos {id}");
 
         let scale = (*vp).FramebufferScale.x;
-        let pos = match get_viewport(vp) {
-            ViewportRef::Unknown => unreachable!(),
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *const MainWindow;
+        let pos = match get_real_viewport(vp) {
+            RealViewportRef::MainWindow(w) => {
                 let w = &*w;
-                w.window().inner_position()
+                w.window().inner_position().ok()
             }
-            ViewportRef::Viewport(w, _) => {
+            RealViewportRef::Viewport(w) => {
                 let w = &*w;
-                w.window.outer_position()
+                w.window.outer_position().ok()
             }
         };
-        let Ok(pos) = pos else {
+        let Some(pos) = pos else {
             return ImVec2 { x: 0.0, y: 0.0 };
         };
         // Use u32 instead of f32 to avoid rounding errors in the real window position
@@ -273,22 +305,9 @@ pub unsafe extern "C" fn set_window_size(vp: *mut ImGuiViewport, size: ImVec2) {
     unsafe {
         //let id = (*vp).ID;
         //println!("set_size {id} {size:?}");
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                let _ = w
-                    .window()
-                    .request_inner_size(LogicalSize::new(size.x, size.y));
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                let _ = w
-                    .window()
-                    .request_inner_size(LogicalSize::new(size.x, size.y));
-            }
-            ViewportRef::Unknown => {}
-        }
+        let _ = get_real_viewport(vp)
+            .window()
+            .request_inner_size(LogicalSize::new(size.x, size.y));
     }
 }
 
@@ -298,9 +317,8 @@ pub unsafe extern "C" fn get_window_size(vp: *mut ImGuiViewport) -> ImVec2 {
         //println!("get_size {id}");
         let scale = (*vp).FramebufferScale.x;
         // Use u32 instead of f32 to avoid rounding errors in the real window size
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
+        match get_real_viewport(vp) {
+            RealViewportRef::MainWindow(w) => {
                 let w = &*w;
                 let size: LogicalSize<u32> = w.window().outer_size().to_logical(scale as f64);
                 ImVec2 {
@@ -308,7 +326,7 @@ pub unsafe extern "C" fn get_window_size(vp: *mut ImGuiViewport) -> ImVec2 {
                     y: size.height as f32,
                 }
             }
-            ViewportRef::Viewport(w, _) => {
+            RealViewportRef::Viewport(w) => {
                 let w = &*w;
                 let size: LogicalSize<u32> = w.window.inner_size().to_logical(scale as f64);
                 ImVec2 {
@@ -316,7 +334,6 @@ pub unsafe extern "C" fn get_window_size(vp: *mut ImGuiViewport) -> ImVec2 {
                     y: size.height as f32,
                 }
             }
-            ViewportRef::Unknown => ImVec2 { x: 0.0, y: 0.0 },
         }
     }
 }
@@ -325,18 +342,7 @@ pub unsafe extern "C" fn get_window_framebuffer_scale(vp: *mut ImGuiViewport) ->
     unsafe {
         //let id = (*vp).ID;
         //println!("get_window_framebuffer_scale {id}");
-        let scale = match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                w.window().scale_factor() as f32
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window().scale_factor() as f32
-            }
-            ViewportRef::Unknown => 1.0,
-        };
+        let scale = get_real_viewport(vp).window().scale_factor() as f32;
         ImVec2 { x: scale, y: scale }
     }
 }
@@ -345,18 +351,7 @@ pub unsafe extern "C" fn set_window_focus(vp: *mut ImGuiViewport) {
     unsafe {
         //let id = (*vp).ID;
         //println!("set_focus {id}");
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                w.window().focus_window();
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window().focus_window();
-            }
-            ViewportRef::Unknown => {}
-        }
+        get_real_viewport(vp).window().focus_window();
     }
 }
 
@@ -364,18 +359,7 @@ pub unsafe extern "C" fn get_window_focus(vp: *mut ImGuiViewport) -> bool {
     unsafe {
         //let id = (*vp).ID;
         //println!("get_focus {id}");
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                w.window().has_focus()
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window().has_focus()
-            }
-            ViewportRef::Unknown => false,
-        }
+        get_real_viewport(vp).window().has_focus()
     }
 }
 
@@ -383,18 +367,10 @@ pub unsafe extern "C" fn get_window_minimized(vp: *mut ImGuiViewport) -> bool {
     unsafe {
         //let id = (*vp).ID;
         //println!("get_minimized {id}");
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                w.window().is_minimized().unwrap_or(false)
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window().is_minimized().unwrap_or(false)
-            }
-            ViewportRef::Unknown => false,
-        }
+        get_real_viewport(vp)
+            .window()
+            .is_minimized()
+            .unwrap_or(false)
     }
 }
 
@@ -404,18 +380,7 @@ pub unsafe extern "C" fn set_window_title(vp: *mut ImGuiViewport, title: *const 
         //println!("set_title {id}");
         let title = CStr::from_ptr(title);
         let title = title.to_string_lossy();
-        match get_viewport(vp) {
-            ViewportRef::MainWindow => {
-                let w = (*vp).PlatformHandle as *mut MainWindow;
-                let w = &*w;
-                w.window().set_title(&title);
-            }
-            ViewportRef::Viewport(w, _) => {
-                let w = &*w;
-                w.window().set_title(&title);
-            }
-            ViewportRef::Unknown => {}
-        }
+        get_real_viewport(vp).window().set_title(&title);
     }
 }
 

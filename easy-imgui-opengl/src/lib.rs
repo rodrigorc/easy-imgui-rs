@@ -149,6 +149,9 @@ impl Drop for Program {
 }
 
 impl Program {
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn from_source(
         gl: &GlContext,
         vertex: &str,
@@ -817,6 +820,9 @@ impl Drop for Buffer {
 }
 
 impl Buffer {
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn generate(gl: &GlContext) -> Result<Buffer> {
         unsafe {
             let id = gl.create_buffer().map_err(|_| to_gl_err(gl))?;
@@ -842,6 +848,9 @@ impl Drop for VertexArray {
 }
 
 impl VertexArray {
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn generate(gl: &GlContext) -> Result<VertexArray> {
         unsafe {
             let id = gl.create_vertex_array().map_err(|_| to_gl_err(gl))?;
@@ -867,6 +876,9 @@ impl Drop for Renderbuffer {
 }
 
 impl Renderbuffer {
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn generate(gl: &GlContext) -> Result<Renderbuffer> {
         unsafe {
             let id = gl.create_renderbuffer().map_err(|_| to_gl_err(gl))?;
@@ -921,6 +933,9 @@ impl Drop for Framebuffer {
 }
 
 impl Framebuffer {
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
     pub fn generate(gl: &GlContext) -> Result<Framebuffer> {
         unsafe {
             let id = gl.create_framebuffer().map_err(|_| to_gl_err(gl))?;

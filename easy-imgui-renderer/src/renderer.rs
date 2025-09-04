@@ -11,7 +11,6 @@ use imgui::{Color, Vector2};
 /// The main `Renderer` type.
 pub struct Renderer {
     imgui: imgui::Context,
-    gl: glr::GlContext,
     bg_color: Option<imgui::Color>,
     matrix: Option<Matrix3<f32>>,
     objs: GlObjects,
@@ -27,6 +26,12 @@ pub struct GlObjects {
     a_color_location: u32,
     u_matrix_location: glow::UniformLocation,
     u_tex_location: glow::UniformLocation,
+}
+
+impl GlObjects {
+    pub fn gl_context(&self) -> &glr::GlContext {
+        self.program.gl()
+    }
 }
 
 impl Renderer {
@@ -111,7 +116,6 @@ impl Renderer {
         }
         Ok(Renderer {
             imgui,
-            gl,
             bg_color: Some(Color::new(0.45, 0.55, 0.60, 1.0)),
             matrix: None,
             objs: GlObjects {
@@ -129,7 +133,7 @@ impl Renderer {
     }
     /// Gets a reference to the OpenGL context.
     pub fn gl_context(&self) -> &glr::GlContext {
-        &self.gl
+        self.objs.gl_context()
     }
     /// Sets the default background color.
     ///
@@ -165,6 +169,14 @@ impl Renderer {
     }
     /// Builds and renders a UI frame, using the `app` [`easy_imgui::UiBuilder`].
     pub fn do_frame<A: imgui::UiBuilder>(&mut self, app: &mut A) {
+        self.do_frame_with_post_render(app, |_| {});
+    }
+    /// Like do_frame(), but adds a callback to be called just after the render
+    pub fn do_frame_with_post_render<A: imgui::UiBuilder>(
+        &mut self,
+        app: &mut A,
+        post_render: impl FnOnce(&GlObjects),
+    ) {
         unsafe {
             let mut imgui = self.imgui.set_current();
 
@@ -174,7 +186,7 @@ impl Renderer {
                     let display_size = ctx.io().display_size();
                     let scale = ctx.io().display_scale();
                     if self.matrix.is_none() {
-                        self.gl.viewport(
+                        self.objs.gl_context().viewport(
                             0,
                             0,
                             (display_size.x * scale) as i32,
@@ -182,13 +194,14 @@ impl Renderer {
                         );
                     }
                     if let Some(bg) = self.bg_color {
-                        self.gl.clear_color(bg.r, bg.g, bg.b, bg.a);
-                        self.gl.clear(glow::COLOR_BUFFER_BIT);
+                        self.objs.gl_context().clear_color(bg.r, bg.g, bg.b, bg.a);
+                        self.objs.gl_context().clear(glow::COLOR_BUFFER_BIT);
                     }
-                    Self::update_textures(&self.gl, ctx.platform_io_mut());
+                    Self::update_textures(self.objs.gl_context(), ctx.platform_io_mut());
                 },
                 |draw_data| {
-                    Self::render(&self.gl, &self.objs, draw_data, self.matrix.as_ref());
+                    Self::render(&self.objs, draw_data, self.matrix.as_ref());
+                    post_render(&self.objs);
                 },
             );
         }
@@ -299,18 +312,14 @@ impl Renderer {
         &self.objs
     }
 
-    pub unsafe fn render(
-        gl: &glow::Context,
-        objs: &GlObjects,
-        draw_data: &ImDrawData,
-        matrix: Option<&Matrix3<f32>>,
-    ) {
+    pub unsafe fn render(objs: &GlObjects, draw_data: &ImDrawData, matrix: Option<&Matrix3<f32>>) {
         unsafe {
             enum ScissorViewportMatrix {
                 Default,
                 Custom(Matrix3<f32>),
                 None,
             }
+            let gl = objs.gl_context();
             let default_matrix;
             let (matrix, viewport_matrix) = match matrix {
                 None => {
@@ -575,7 +584,7 @@ static WASM_TEX_MAP: std::sync::Mutex<Vec<Option<glow::Texture>>> =
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            let gl = self.gl.clone();
+            let gl = self.objs.gl_context().clone();
             let imgui = self.imgui();
             imgui.io_mut().font_atlas_mut().inner().Clear();
 

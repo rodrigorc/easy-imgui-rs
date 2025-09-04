@@ -5,7 +5,7 @@ use std::{
     ptr::NonNull,
 };
 
-use easy_imgui::{self as imgui, ViewportFlags};
+use easy_imgui::{self as imgui, ConfigFlags, ViewportFlags};
 use easy_imgui_renderer::glow::{self, HasContext};
 use easy_imgui_sys::{ImGui_UpdatePlatformWindows, ImGuiViewport, ImVec2};
 use glutin_winit::finalize_window;
@@ -29,7 +29,7 @@ use winit::window::Window;
 // This thread_local variable is used to send the current loop to `create_window()`.
 // Unfortunately there is no easy way to pass this data down from the window loop to the ImGui callbacks.
 thread_local! {
-    static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<PossiblyCurrentContext>, f32)>> = Cell::new(None);
+    static LOOPER: Cell<Option<(NonNull<ActiveEventLoop>, NonNull<PossiblyCurrentContext>, f32)>> = const { Cell::new(None) };
 }
 
 pub unsafe fn update_platform_windows(
@@ -89,7 +89,7 @@ impl ViewportWindow {
         };
         // Enable v-sync to avoid consuming too much CPU
         let _ = surface.set_swap_interval(
-            &gl_ctx,
+            gl_ctx,
             glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
         );
 
@@ -123,10 +123,12 @@ impl ViewportWindow {
 
 pub unsafe fn setup_viewports(imgui: &mut imgui::Context) {
     unsafe {
-        imgui
-            .io_mut()
-            .inner()
-            .add_backend_flags(imgui::BackendFlags::PlatformHasViewports);
+        let io = imgui.io_mut().inner();
+        if !io.config_flags().contains(ConfigFlags::ViewportsEnable) {
+            return;
+        }
+
+        io.add_backend_flags(imgui::BackendFlags::PlatformHasViewports);
 
         let pio = imgui.platform_io_mut();
         pio.Platform_CreateWindow = Some(create_window);

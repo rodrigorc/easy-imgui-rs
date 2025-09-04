@@ -4,8 +4,8 @@ use crate::{
     viewports::{self, RealViewportRef},
 };
 use cgmath::Matrix3;
-use easy_imgui::{self as imgui, Vector2, cgmath, mint};
-use easy_imgui_renderer::Renderer;
+use easy_imgui::{self as imgui, ConfigFlags, Vector2, cgmath, mint};
+use easy_imgui_renderer::{GlObjects, Renderer};
 use easy_imgui_sys::*;
 use glutin::{
     context::PossiblyCurrentContext,
@@ -142,13 +142,7 @@ pub trait MainWindowRef {
     /// Changes the mouse cursor.
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
         let w = self.window();
-        match cursor {
-            None => w.set_cursor_visible(false),
-            Some(c) => {
-                w.set_cursor(c);
-                w.set_cursor_visible(true);
-            }
-        }
+        set_window_cursor(w, cursor);
     }
 
     fn get_viewport_by_id(&mut self, window_id: WindowId) -> Option<ViewportRef> {
@@ -164,7 +158,7 @@ pub trait MainWindowRef {
     }
     unsafe fn render_viewport(
         &mut self,
-        _renderer: &Renderer,
+        _gl_objs: &GlObjects,
         _w: &viewports::ViewportWindow,
         _vp: &imgui::Viewport,
     ) {
@@ -318,6 +312,17 @@ pub fn about_to_wait(main_window: &mut impl MainWindowRef, renderer: &mut Render
     main_window.about_to_wait(mouse);
 }
 
+/// Helper function to set the mouse cursor of a window.
+pub fn set_window_cursor(w: &Window, cursor: Option<CursorIcon>) {
+    match cursor {
+        None => w.set_cursor_visible(false),
+        Some(c) => {
+            w.set_cursor(c);
+            w.set_cursor_visible(true);
+        }
+    }
+}
+
 /// Corresponds to winit's `ApplicationHandler::window_event`.
 pub fn window_event(
     main_window: &mut impl MainWindowRef,
@@ -343,8 +348,11 @@ pub fn window_event(
             renderer.imgui().set_current();
 
             let io = renderer.imgui().io();
-            let config_flags = imgui::ConfigFlags::from_bits_truncate(io.ConfigFlags);
-            if !config_flags.contains(imgui::ConfigFlags::NoMouseCursorChange) {
+            let has_viewports = io.config_flags().contains(ConfigFlags::ViewportsEnable);
+            if !io
+                .config_flags()
+                .contains(imgui::ConfigFlags::NoMouseCursorChange)
+            {
                 let cursor = if io.MouseDrawCursor {
                     None
                 } else {
@@ -359,33 +367,36 @@ pub fn window_event(
             }
 
             if !flags.contains(EventFlags::DoNotRender) {
+                let scale = renderer.imgui().io().DisplayFramebufferScale.x;
                 main_window.pre_render();
-                renderer.do_frame(app);
-                main_window.post_render();
+                renderer.do_frame_with_post_render(app, |gl_objs| {
+                    main_window.post_render();
 
-                if let (Some(event_loop), Some(glutin_context)) =
-                    (event_loop, main_window.glutin_context())
-                {
-                    let scale = renderer.imgui().io().DisplayFramebufferScale.x;
+                    if !has_viewports {
+                        return;
+                    }
+                    let (Some(event_loop), Some(glutin_context)) =
+                        (event_loop, main_window.glutin_context())
+                    else {
+                        return;
+                    };
                     viewports::update_platform_windows(event_loop, glutin_context, scale);
 
                     // Doc says that ImGui_RenderPlatformWindowsDefault() isn't mandatory...
 
                     // Use a direct get to the current ImGui to avoid borrowing the renderer
                     // when iterating the viewports. It is a C++ struct, so it should be ok, I guess...
-                    let pio = imgui::RawContext::current().platform_io();
-                    // First viewport is already rendered.
-                    for &vp in &pio.Viewports[1..] {
+                    for vp in imgui::RawContext::current().platform_io().viewports() {
                         match viewports::get_real_viewport(vp) {
                             RealViewportRef::MainWindow(_) => {}
                             RealViewportRef::Viewport(w) => {
                                 let w = &*w;
                                 let v = imgui::Viewport::cast(&*vp);
-                                main_window.render_viewport(renderer, w, v);
+                                main_window.render_viewport(gl_objs, w, v);
                             }
                         }
                     }
-                }
+                });
             }
         },
         Resized(size) => {
@@ -509,28 +520,37 @@ pub fn window_event(
         CursorMoved { position, .. } => {
             main_window.ping_user_input();
             unsafe {
+                // In viewport mode the coordinates are relative to the display.
+                // In normal mode they are local to the client area of the window.
                 let io = renderer.imgui().io_mut().inner();
-                let vp = main_window.get_viewport_by_id(window_id);
-                let mut position = Vector2::new(position.x as f32, position.y as f32);
-                // MainWindow must not be scaled, but Viewport must be, not sure why
-                match vp {
-                    None => {}
-                    Some(ViewportRef::MainWindow) => {
-                        if let Ok(wpos) = main_window.window().inner_position() {
-                            position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                let has_viewports = io.config_flags().contains(ConfigFlags::ViewportsEnable);
+                if has_viewports {
+                    let vp = main_window.get_viewport_by_id(window_id);
+                    let mut position = Vector2::new(position.x as f32, position.y as f32);
+                    // MainWindow must not be scaled, but Viewport must be, not sure why
+                    match vp {
+                        None => {}
+                        Some(ViewportRef::MainWindow) => {
+                            if let Ok(wpos) = main_window.window().inner_position() {
+                                position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                            }
+                            let position = main_window.transform_position(position);
+                            io.AddMousePosEvent(position.x, position.y);
                         }
-                        let position = main_window.transform_position(position);
-                        io.AddMousePosEvent(position.x, position.y);
-                    }
-                    Some(ViewportRef::Viewport(vp, _ivp)) => {
-                        let vp = &*vp;
-                        let scale = vp.window().scale_factor() as f32;
-                        let mut position = Vector2::new(position.x as f32, position.y as f32);
-                        if let Ok(wpos) = vp.window().inner_position() {
-                            position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                        Some(ViewportRef::Viewport(vp, _ivp)) => {
+                            let vp = &*vp;
+                            let scale = vp.window().scale_factor() as f32;
+                            let mut position = Vector2::new(position.x, position.y);
+                            if let Ok(wpos) = vp.window().inner_position() {
+                                position += Vector2::new(wpos.x as f32, wpos.y as f32);
+                            }
+                            io.AddMousePosEvent(position.x / scale, position.y / scale);
                         }
-                        io.AddMousePosEvent(position.x / scale, position.y / scale);
                     }
+                } else {
+                    let position = main_window
+                        .transform_position(Vector2::new(position.x as f32, position.y as f32));
+                    io.AddMousePosEvent(position.x, position.y);
                 }
             }
         }
@@ -897,10 +917,8 @@ mod main_window {
             let size = size.to_logical::<f32>(scale);
             renderer.set_size(Vector2::from(mint::Vector2::from(size)), scale as f32);
 
-            if w.inner_position().is_ok() || true {
-                unsafe {
-                    viewports::setup_viewports(renderer.imgui());
-                }
+            unsafe {
+                viewports::setup_viewports(renderer.imgui());
             }
 
             #[cfg(feature = "clipboard")]
@@ -924,48 +942,13 @@ mod main_window {
             event_loop: &ActiveEventLoop,
             flags: EventFlags,
         ) -> EventResult {
-            unsafe {
-                let vp = self.imgui().get_main_viewport_mut();
-                if (*vp).PlatformHandle.is_null() {
-                    // first time only
-                    let scale = self.imgui().io().DisplayFramebufferScale;
-                    viewports::set_viewport_as_main_window(
-                        vp,
-                        self.main_window.main_viewport.as_mut(),
-                    );
-                    (*vp).PlatformRequestResize = false;
-                    (*vp).PlatformRequestMove = false;
-                    (*vp).FramebufferScale = scale;
-
-                    let mons: Vec<_> = self.main_window().window().available_monitors().collect();
-                    let pio = self.imgui().platform_io_mut();
-                    for m in mons {
-                        let size: LogicalSize<u32> = m.size().to_logical(scale.x as f64);
-                        let pos: LogicalPosition<u32> = m.position().to_logical(scale.x as f64);
-
-                        let mon = ImGuiPlatformMonitor {
-                            MainPos: ImVec2 {
-                                x: pos.x as f32,
-                                y: pos.y as f32,
-                            },
-                            MainSize: ImVec2 {
-                                x: size.width as f32,
-                                y: size.height as f32,
-                            },
-                            WorkPos: ImVec2 {
-                                x: pos.x as f32,
-                                y: pos.y as f32,
-                            },
-                            WorkSize: ImVec2 {
-                                x: size.width as f32,
-                                y: size.height as f32,
-                            },
-                            DpiScale: 1.0,
-                            PlatformHandle: 1 as _,
-                        };
-                        easy_imgui_sys::easy_imgui_vector_push_back_monitor(&mut pio.Monitors, mon);
-                    }
-                }
+            let has_viewports = self
+                .imgui()
+                .io()
+                .config_flags()
+                .contains(ConfigFlags::ViewportsEnable);
+            if has_viewports {
+                unsafe { self.set_up_main_viewport_and_monitors() };
             }
 
             window_event(
@@ -987,6 +970,50 @@ mod main_window {
         /// Corresponds to winit's `ApplicationHandler::about_to_wait`.
         pub fn about_to_wait(&mut self) {
             about_to_wait(&mut self.main_window, &mut self.renderer);
+        }
+
+        unsafe fn set_up_main_viewport_and_monitors(&mut self) {
+            unsafe {
+                let vp = self.imgui().get_main_viewport_mut();
+                // first time only
+                if !(*vp).PlatformHandle.is_null() {
+                    return;
+                }
+                let scale = self.imgui().io().DisplayFramebufferScale;
+                viewports::set_viewport_as_main_window(vp, self.main_window.main_viewport.as_mut());
+                (*vp).PlatformRequestResize = false;
+                (*vp).PlatformRequestMove = false;
+                (*vp).FramebufferScale = scale;
+
+                let mons: Vec<_> = self.main_window().window().available_monitors().collect();
+                let pio = self.imgui().platform_io_mut();
+                for m in mons {
+                    let size: LogicalSize<u32> = m.size().to_logical(scale.x as f64);
+                    let pos: LogicalPosition<u32> = m.position().to_logical(scale.x as f64);
+
+                    let mon = ImGuiPlatformMonitor {
+                        MainPos: ImVec2 {
+                            x: pos.x as f32,
+                            y: pos.y as f32,
+                        },
+                        MainSize: ImVec2 {
+                            x: size.width as f32,
+                            y: size.height as f32,
+                        },
+                        WorkPos: ImVec2 {
+                            x: pos.x as f32,
+                            y: pos.y as f32,
+                        },
+                        WorkSize: ImVec2 {
+                            x: size.width as f32,
+                            y: size.height as f32,
+                        },
+                        DpiScale: 1.0,
+                        PlatformHandle: 1 as _,
+                    };
+                    easy_imgui_sys::easy_imgui_vector_push_back_monitor(&mut pio.Monitors, mon);
+                }
+            }
         }
     }
 
@@ -1031,16 +1058,22 @@ mod main_window {
         fn transform_position(&self, pos: Vector2) -> Vector2 {
             transform_position_with_optional_matrix(self, pos, &self.matrix)
         }
+        fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
+            set_window_cursor(&self.main_viewport.window, cursor);
+            unsafe {
+                for vp in imgui::RawContext::current().platform_io().viewports() {
+                    let mut vvp = viewports::get_real_viewport(vp);
+                    let w = vvp.window();
+                    set_window_cursor(w, cursor);
+                }
+            }
+        }
         fn get_viewport_by_id(&mut self, window_id: WindowId) -> Option<ViewportRef> {
             if self.main_viewport.window.id() == window_id {
                 return Some(ViewportRef::MainWindow);
             }
             unsafe {
-                let pio = imgui::RawContext::current().platform_io();
-                for &vp in &pio.Viewports[1..] {
-                    if (*vp).PlatformHandle.is_null() {
-                        continue;
-                    }
+                for vp in imgui::RawContext::current().platform_io().viewports() {
                     let mut vvp = viewports::get_real_viewport(vp);
                     let vw = vvp.viewport_window();
                     if vw.window.id() == window_id {
@@ -1055,22 +1088,21 @@ mod main_window {
         }
         unsafe fn render_viewport(
             &mut self,
-            renderer: &Renderer,
+            gl_objs: &GlObjects,
             w: &viewports::ViewportWindow,
             vp: &imgui::Viewport,
         ) {
             w.pre_render(
-                &mut self.glutin_context(),
+                self.glutin_context(),
                 vp.Size,
                 vp.FramebufferScale.x,
-                renderer.gl_context(),
+                gl_objs.gl_context(),
             );
             unsafe {
-                let dd = &*(*vp).DrawData;
-                let gl_objs = renderer.gl_objs();
-                Renderer::render(&renderer.gl_context(), gl_objs, dd, None);
+                let dd = &*vp.DrawData;
+                Renderer::render(gl_objs, dd, None);
             }
-            w.post_render(&mut self.glutin_context());
+            w.post_render(self.glutin_context());
         }
     }
 

@@ -3802,6 +3802,9 @@ impl Io {
     pub fn remove_config_flags(&mut self, flags: ConfigFlags) {
         self.ConfigFlags &= !flags.bits();
     }
+    pub fn config_flags(&self) -> ConfigFlags {
+        ConfigFlags::from_bits_retain(self.ConfigFlags)
+    }
     pub fn add_backend_flags(&mut self, flags: BackendFlags) {
         self.BackendFlags |= flags.bits();
     }
@@ -3847,6 +3850,10 @@ transparent_mut! {
 impl PlatformIo {
     pub unsafe fn textures_mut(&mut self) -> impl Iterator<Item = &mut ImTextureData> {
         self.Textures.iter_mut().map(|t| unsafe { &mut **t })
+    }
+    /// Returns raw pointers to the secondary viewports (skipping the main window).
+    pub fn viewports(&self) -> impl IntoIterator<Item = *mut ImGuiViewport> {
+        self.Viewports[1..].iter().copied()
     }
 }
 

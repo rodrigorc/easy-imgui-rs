@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-sys"
-version = "0.17.1"
+version = "0.18.0"
 edition = "2024"
 build = "build.rs"
 links = "imgui"

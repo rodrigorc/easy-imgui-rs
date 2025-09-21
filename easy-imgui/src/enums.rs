@@ -236,6 +236,7 @@ imgui_enum! {
         CellPadding,
         ScrollbarSize,
         ScrollbarRounding,
+        ScrollbarPadding,
         GrabMinSize,
         GrabRounding,
         ImageBorderSize,
@@ -341,6 +342,7 @@ imgui_flags! {
         Disabled,
         AllowOverlap,
         Highlight,
+        SelectOnNav,
     }
 }
 
@@ -394,6 +396,9 @@ imgui_flags! {
         CallbackCharFilter,
         CallbackResize,
         CallbackEdit,
+
+        // Multi-line Word-Wrapping [BETA]
+        WordWrap,
     }
 }
 

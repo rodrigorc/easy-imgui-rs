@@ -401,6 +401,7 @@ pub struct CurrentContext<'a> {
 #[derive(Debug)]
 pub struct ContextBuilder {
     docking: bool,
+    viewports: bool,
     debug_highlight_id_conflicts: bool,
     ini_file_name: Option<String>,
 }
@@ -416,11 +417,13 @@ impl ContextBuilder {
     ///
     /// Defaults are:
     /// * no docking
+    /// * no viewports
     /// * hightlight ids only on debug builds
     /// * ini file name disabled
     pub fn new() -> ContextBuilder {
         ContextBuilder {
             docking: false,
+            viewports: false,
             debug_highlight_id_conflicts: cfg!(debug_assertions),
             ini_file_name: None,
         }
@@ -428,6 +431,13 @@ impl ContextBuilder {
     /// Sets the docking feature
     pub fn set_docking(&mut self, docking: bool) -> &mut Self {
         self.docking = docking;
+        self
+    }
+    /// Sets the viewports feature.
+    ///
+    /// Note that this will only work if your used backend supports viewports, which easy-imgui-window does not.
+    pub fn set_viewports(&mut self, viewports: bool) -> &mut Self {
+        self.viewports = viewports;
         self
     }
     /// Sets the debug highlight id
@@ -468,6 +478,9 @@ impl ContextBuilder {
 
         if self.docking {
             io.add_config_flags(ConfigFlags::DockingEnable);
+        }
+        if self.viewports {
+            io.add_config_flags(ConfigFlags::ViewportsEnable);
         }
         io.ConfigDpiScaleFonts = true;
         io.ConfigDebugHighlightIdConflicts = self.debug_highlight_id_conflicts;

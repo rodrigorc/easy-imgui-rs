@@ -3,9 +3,10 @@
  * See the comments on each implementation.
  */
 
+use easy_imgui::future::FutureHandleGuard;
 use easy_imgui_window::{
     AppEvent, AppHandler, Application, Args, EventLoopExt, EventResult, FutureBackCaller,
-    FutureHandleGuard, LocalProxy, easy_imgui as imgui, winit,
+    LocalProxy, easy_imgui as imgui, winit,
 };
 use imgui::{lbl, lbl_id};
 use std::num::Wrapping;

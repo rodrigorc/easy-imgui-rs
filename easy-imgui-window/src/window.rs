@@ -38,53 +38,6 @@ impl Default for MainWindowStatus {
     }
 }
 
-/// This struct handles the main loop going to idle when there is no user input for a while.
-pub struct MainWindowIdler {
-    idle_time: Duration,
-    idle_frame_count: u32,
-    last_input_time: Instant,
-    last_input_frame: u32,
-}
-
-impl Default for MainWindowIdler {
-    fn default() -> MainWindowIdler {
-        let now = Instant::now();
-        MainWindowIdler {
-            idle_time: Duration::from_secs(1),
-            idle_frame_count: 60,
-            last_input_time: now,
-            last_input_frame: 0,
-        }
-    }
-}
-
-impl MainWindowIdler {
-    /// Sets the maximum time that the window will be rendered without user input.
-    pub fn set_idle_time(&mut self, time: Duration) {
-        self.idle_time = time;
-    }
-    /// Sets the maximum number of frames time that the window will be rendered without user input.
-    pub fn set_idle_frame_count(&mut self, frame_count: u32) {
-        self.idle_frame_count = frame_count;
-    }
-    /// Call this when the window is renderer.
-    pub fn incr_frame(&mut self) {
-        // An u32 incrementing 60 values/second would overflow after about 2 years, better safe
-        // than sorry.
-        self.last_input_frame = self.last_input_frame.saturating_add(1);
-    }
-    /// Check whether the window should go to idle or keep on rendering.
-    pub fn has_to_render(&self) -> bool {
-        self.last_input_frame < self.idle_frame_count
-            || Instant::now().duration_since(self.last_input_time) < self.idle_time
-    }
-    /// Notify this struct that user input happened.
-    pub fn ping_user_input(&mut self) {
-        self.last_input_time = Instant::now();
-        self.last_input_frame = 0;
-    }
-}
-
 /// This traits grants access to a Window.
 ///
 /// Usually you will have a [`MainWindow`], but if you create the `Window` with an external
@@ -555,8 +508,9 @@ mod main_window {
     use std::future::Future;
     mod fut;
     use anyhow::{Result, anyhow};
+    use easy_imgui::Idler;
     use easy_imgui_renderer::glow;
-    pub use fut::{FutureBackCaller, FutureHandle, FutureHandleGuard};
+    pub use fut::FutureBackCaller;
     use glutin::{
         config::{Config, ConfigTemplateBuilder},
         context::{ContextApi, ContextAttributesBuilder},
@@ -575,7 +529,7 @@ mod main_window {
         surface: Surface<WindowSurface>,
         window: Window,
         matrix: Option<Matrix3<f32>>,
-        idler: MainWindowIdler,
+        idler: Idler,
     }
 
     /// This is a [`MainWindow`] plus a [`Renderer`]. It is the ultimate `easy-imgui` object.
@@ -667,7 +621,7 @@ mod main_window {
                 window,
                 surface,
                 matrix: None,
-                idler: MainWindowIdler::default(),
+                idler: Idler::default(),
             })
         }
         /// Sets a custom matrix that converts physical mouse coordinates into logical ones.
@@ -906,8 +860,9 @@ mod main_window {
             pub fn spawn_idle<T: 'static, F: Future<Output = T> + 'static>(
                 &self,
                 f: F,
-            ) -> crate::FutureHandle<T> {
-                unsafe { fut::spawn_idle(&self.event_proxy, f) }
+            ) -> easy_imgui::future::FutureHandle<T> {
+                let idle_runner = fut::MyIdleRunner(self.event_proxy.clone());
+                unsafe { easy_imgui::future::spawn_idle(idle_runner, f) }
             }
             /// Registers a callback to be called during the idle step of the main loop.
             pub fn run_idle<F: FnOnce(&mut A, Args<'_, A>) + 'static>(
@@ -924,13 +879,21 @@ mod main_window {
                     .map_err(|_| winit::event_loop::EventLoopClosed(()))
             }
             /// Creates a `FutureBackCaller` for this application.
-            pub fn future_back(&self) -> crate::FutureBackCaller<A> {
-                fut::future_back_caller_new()
+            pub fn future_back(&self) -> FutureBackCaller<A> {
+                FutureBackCaller::new()
             }
         };
     }
 
     impl<A: Application> Args<'_, A> {
+        pub fn reborrow(&mut self) -> Args<'_, A> {
+            Args {
+                window: self.window,
+                event_loop: self.event_loop,
+                event_proxy: self.event_proxy,
+                data: self.data,
+            }
+        }
         /// Creates a `LocalProxy` that is `Clone` but not `Send`.
         pub fn local_proxy(&self) -> LocalProxy<A> {
             LocalProxy {
@@ -1241,7 +1204,7 @@ mod main_window {
             match event {
                 AppEvent::PingUserInput => window.ping_user_input(),
                 AppEvent::RunIdle(f) => f(app, args),
-                AppEvent::RunIdleSimple(f) => fut::future_back_caller_prepare((app, args), f),
+                AppEvent::RunIdleSimple(f) => fut::FutureBackCaller::prepare(app, args, f),
                 AppEvent::User(uevent) => app.user_event(args, uevent),
             }
         }

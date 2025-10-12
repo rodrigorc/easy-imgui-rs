@@ -251,12 +251,16 @@ pub type Vector2 = cgmath::Vector2<f32>;
 
 mod enums;
 mod fontloader;
+#[cfg(feature = "future")]
+pub mod future;
+mod idler;
 mod multisel;
 pub mod style;
 
 pub use easy_imgui_sys::{self, ImGuiID, ImGuiSelectionUserData};
 pub use enums::*;
 pub use fontloader::{GlyphBuildFlags, GlyphLoader, GlyphLoaderArg};
+pub use idler::Idler;
 pub use image;
 pub use mint;
 pub use multisel::*;

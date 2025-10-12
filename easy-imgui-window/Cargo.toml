@@ -17,7 +17,7 @@ main-window = ["dep:glutin-winit"]
 
 [dependencies]
 easy-imgui-sys = { version = "=0.18.0", path = "../easy-imgui-sys" }
-easy-imgui = { version = "=0.18.0", path = "../easy-imgui" }
+easy-imgui = { version = "=0.18.0", path = "../easy-imgui", features = ["future"] }
 easy-imgui-renderer = { version = "=0.18.0", path = "../easy-imgui-renderer" }
 
 log ="0.4"
@@ -28,7 +28,6 @@ glutin-winit = { version = "0.5", optional = true }
 raw-window-handle = "0.6"
 arboard = { version = "3", optional = true, default-features = false }
 winit = { version = "0.30", features = ["x11", "mint"] }
-futures-util = "0.3.31"
 send_wrapper = "0.6"
 
 # For the examples

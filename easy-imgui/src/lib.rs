@@ -406,8 +406,6 @@ pub struct CurrentContext<'a> {
 /// Call `build()` to build the context.
 #[derive(Debug)]
 pub struct ContextBuilder {
-    docking: bool,
-    viewports: bool,
     clipboard: bool,
     debug_highlight_id_conflicts: bool,
     ini_file_name: Option<String>,
@@ -423,30 +421,14 @@ impl ContextBuilder {
     /// Creates a builder with default values.
     ///
     /// Defaults are:
-    /// * no docking
-    /// * no viewports
     /// * hightlight ids only on debug builds
     /// * ini file name disabled
     pub fn new() -> ContextBuilder {
         ContextBuilder {
-            docking: false,
-            viewports: false,
             clipboard: true,
             debug_highlight_id_conflicts: cfg!(debug_assertions),
             ini_file_name: None,
         }
-    }
-    /// Sets the docking feature
-    pub fn set_docking(&mut self, docking: bool) -> &mut Self {
-        self.docking = docking;
-        self
-    }
-    /// Sets the viewports feature.
-    ///
-    /// Note that this will only work if your used backend supports viewports, which easy-imgui-window does not.
-    pub fn set_viewports(&mut self, viewports: bool) -> &mut Self {
-        self.viewports = viewports;
-        self
     }
     /// Allows to disable the handling of the clipboard.
     ///
@@ -491,12 +473,6 @@ impl ContextBuilder {
 
         let io = unsafe { io.inner() };
 
-        if self.docking {
-            io.add_config_flags(ConfigFlags::DockingEnable);
-        }
-        if self.viewports {
-            io.add_config_flags(ConfigFlags::ViewportsEnable);
-        }
         io.ConfigDpiScaleFonts = true;
         io.ConfigDebugHighlightIdConflicts = self.debug_highlight_id_conflicts;
 
@@ -3852,15 +3828,48 @@ impl IoMut {
     pub fn set_allow_user_scaling(&mut self, val: bool) {
         self.0.FontAllowUserScaling = val;
     }
-    pub fn nav_enable_keyboard(&mut self) {
+    pub fn nav_enable_keyboard(&mut self, enable: bool) {
         unsafe {
-            self.inner()
-                .add_config_flags(ConfigFlags::NavEnableKeyboard);
+            if enable {
+                self.inner()
+                    .add_config_flags(ConfigFlags::NavEnableKeyboard);
+            } else {
+                self.inner()
+                    .remove_config_flags(ConfigFlags::NavEnableKeyboard);
+            }
         }
     }
-    pub fn nav_enable_gamepad(&mut self) {
+    pub fn nav_enable_gamepad(&mut self, enable: bool) {
         unsafe {
-            self.inner().add_config_flags(ConfigFlags::NavEnableGamepad);
+            if enable {
+                self.inner().add_config_flags(ConfigFlags::NavEnableGamepad);
+            } else {
+                self.inner()
+                    .remove_config_flags(ConfigFlags::NavEnableGamepad);
+            }
+        }
+    }
+    /// Enables the docking feature.
+    pub fn enable_docking(&mut self, enable: bool) {
+        unsafe {
+            if enable {
+                self.inner().add_config_flags(ConfigFlags::DockingEnable);
+            } else {
+                self.inner().remove_config_flags(ConfigFlags::DockingEnable);
+            }
+        }
+    }
+    /// Enables the viewport feature.
+    ///
+    /// Note that this will only work if your used backend supports viewports, which easy-imgui-window does not.
+    pub fn enable_viewports(&mut self, enable: bool) {
+        unsafe {
+            if enable {
+                self.inner().add_config_flags(ConfigFlags::ViewportsEnable);
+            } else {
+                self.inner()
+                    .remove_config_flags(ConfigFlags::ViewportsEnable);
+            }
         }
     }
     pub fn font_atlas_mut(&mut self) -> &mut FontAtlas {

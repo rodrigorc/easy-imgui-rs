@@ -7,4 +7,5 @@ members = [
     "easy-imgui-window",
     "easy-imgui-filechooser",
     "easy-imgui-opengl",
+    "easy-imgui-sdl3",
 ]

@@ -11,11 +11,16 @@ repository = "https://github.com/rodrigorc/easy-imgui-rs"
 categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
+[features]
+freetype = []
+backend-opengl3 = []
+backend-sdl3 = ["dep:sdl3-sys"]
+
+[dependencies]
+sdl3-sys = { version = "0.5.7", optional = true }
+
 [build-dependencies]
 bindgen = "0.72"
 cc = "1"
 pkg-config = "0.3"
 xshell = "0.2"
-
-[features]
-freetype = []

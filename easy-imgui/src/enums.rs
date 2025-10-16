@@ -207,6 +207,7 @@ imgui_enum! {
         TextSelectedBg,
         TreeLines,
         DragDropTarget,
+        UnsavedMarker,
         NavCursor,
         NavWindowingHighlight,
         NavWindowingDimBg,
@@ -808,9 +809,11 @@ imgui_flags! {
         HasSetMousePos,
         RendererHasVtxOffset,
         RendererHasTextures,
+
+        RendererHasViewports,
         PlatformHasViewports,
         HasMouseHoveredViewport,
-        RendererHasViewports,
+        HasParentViewport,
     }
 }
 

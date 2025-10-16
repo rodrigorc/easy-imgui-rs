@@ -1,0 +1,31 @@
+[package]
+name = "easy-imgui-sdl3"
+version = "0.18.0"
+edition = "2024"
+
+[features]
+default = []
+freetype = ["easy-imgui/freetype"]
+
+[dependencies]
+# Ensure that sdl3 and easy-imgui-sys depend on the same version of sdl3-sys crate
+sdl3 = "0.16.1"
+glow = "0.16.0"
+send_wrapper = "0.6.0"
+
+[dependencies.easy-imgui-sys]
+version = "=0.18.0"
+features = ["backend-opengl3", "backend-sdl3"]
+path = "../easy-imgui-sys"
+
+[dependencies.easy-imgui]
+version = "=0.18.0"
+path = "../easy-imgui"
+features = ["future"]
+
+[build-dependencies]
+bindgen = "0.72"
+cc = "1"
+
+[dev-dependencies]
+smol = "2.0.2"

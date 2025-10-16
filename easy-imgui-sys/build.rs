@@ -1,13 +1,16 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 fn main() {
+    dbg!(std::env::vars());
+
     //simple_logger::SimpleLogger::new().init().unwrap();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap();
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
 
     // imgui_ori is a sumbodule of the upstream imgui repository, and as such does not have a
     // proper imconfig.h for this projects. Changing that file in the submodule is inconvenient
@@ -21,10 +24,12 @@ fn main() {
     let imgui_ori = manifest_dir.join("imgui");
     let imgui_src = out_path.join("imgui_src");
     let imgui_misc_ft = imgui_src.join("misc/freetype");
+    let imgui_backends = imgui_src.join("backends");
 
     sh.remove_path(&imgui_src).unwrap();
     sh.create_dir(&imgui_src).unwrap();
     sh.create_dir(&imgui_misc_ft).unwrap();
+    sh.create_dir(&imgui_backends).unwrap();
 
     for ori in [
         "imgui.h",
@@ -45,6 +50,25 @@ fn main() {
     for ori in ["imgui_freetype.cpp", "imgui_freetype.h"] {
         let src = imgui_ori.join("misc/freetype").join(ori);
         sh.copy_file(&src, &imgui_misc_ft).unwrap();
+        println!("cargo:rerun-if-changed={}", src.display());
+    }
+
+    let mut backend_files = Vec::new();
+
+    if cfg!(feature = "backend-opengl3") {
+        backend_files.extend_from_slice(&[
+            "imgui_impl_opengl3.cpp",
+            "imgui_impl_opengl3.h",
+            "imgui_impl_opengl3_loader.h",
+        ]);
+    }
+    if cfg!(feature = "backend-sdl3") {
+        backend_files.extend_from_slice(&["imgui_impl_sdl3.cpp", "imgui_impl_sdl3.h"]);
+    }
+
+    for ori in backend_files {
+        let src = imgui_ori.join("backends").join(ori);
+        sh.copy_file(&src, &imgui_backends).unwrap();
         println!("cargo:rerun-if-changed={}", src.display());
     }
     sh.write_file(
@@ -86,6 +110,15 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         None
     };
 
+    let sdl3_src_dir = if cfg!(feature = "backend-sdl3") {
+        // If sdl3-sys uses a copy of the SDL3 source, we'll use the same.
+        env::var("DEP_SDL3_ROOT")
+            .ok()
+            .map(|root| Path::new(&root).join("include"))
+    } else {
+        None
+    };
+
     let mut bindings = bindgen::Builder::default();
     // Edition 2024!
     bindings = bindings
@@ -106,6 +139,25 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
         .newtype_enum(".*");
+
+    if cfg!(feature = "backend-opengl3") {
+        bindings = bindings
+            .header(
+                imgui_backends
+                    .join("imgui_impl_opengl3.h")
+                    .to_string_lossy(),
+            )
+            .allowlist_file(".*[/\\\\]imgui_impl_opengl3.h");
+    }
+    if cfg!(feature = "backend-sdl3") {
+        bindings = bindings
+            .header(imgui_backends.join("imgui_impl_sdl3.h").to_string_lossy())
+            .blocklist_type("SDL.*")
+            .allowlist_file(".*[/\\\\]imgui_impl_sdl3.h");
+        if let Some(sdl3_src_dir) = &sdl3_src_dir {
+            bindings = bindings.clang_args(["-I", &sdl3_src_dir.to_string_lossy()]);
+        }
+    }
 
     if target_env == "msvc" {
         /* MSVC compilers have a weird ABI for C++. The only difference that affects us is a
@@ -154,13 +206,33 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         build.define("IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS", "1");
     } else {
         build.cpp(true).std("c++20");
+        if target_os == "windows" {
+            // ImGui uses ShellExecute, with MSVC it uses the pragma lib trick, but with GNU it won't work.
+            // No harm in setting this twice.
+            println!("cargo:rustc-link-lib=shell32");
+        }
     }
     build.include(&imgui_src);
     build.file("wrapper.cpp");
+    build.file(imgui_src.join("imgui.cpp"));
+    build.file(imgui_src.join("imgui_widgets.cpp"));
+    build.file(imgui_src.join("imgui_draw.cpp"));
+    build.file(imgui_src.join("imgui_tables.cpp"));
+    build.file(imgui_src.join("imgui_demo.cpp"));
     if let Some(freetype) = &freetype {
+        build.file(imgui_misc_ft.join("imgui_freetype.cpp"));
         build.define("IMGUI_ENABLE_FREETYPE", "1");
         for include in &freetype.include_paths {
             build.include(include.display().to_string());
+        }
+    }
+    if cfg!(feature = "backend-opengl3") {
+        build.file(imgui_backends.join("imgui_impl_opengl3.cpp"));
+    }
+    if cfg!(feature = "backend-sdl3") {
+        build.file(imgui_backends.join("imgui_impl_sdl3.cpp"));
+        if let Some(sdl3_src_dir) = &sdl3_src_dir {
+            build.include(sdl3_src_dir);
         }
     }
     build.compile("dear_imgui");

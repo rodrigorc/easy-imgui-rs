@@ -7,6 +7,11 @@
 
 use std::ops::{Deref, DerefMut, Index};
 
+#[cfg(feature = "backend-sdl3")]
+pub use sdl3_sys;
+#[cfg(feature = "backend-sdl3")]
+use sdl3_sys::everything::*;
+
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 impl<T> Index<usize> for ImVector<T> {

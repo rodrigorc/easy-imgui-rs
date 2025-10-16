@@ -249,6 +249,8 @@ macro_rules! transparent_mut {
 /// The equivalent type in Dear ImGui would be [`ImVec2`].
 pub type Vector2 = cgmath::Vector2<f32>;
 
+#[cfg(feature = "clipboard")]
+pub mod clipboard;
 mod enums;
 mod fontloader;
 #[cfg(feature = "future")]
@@ -406,6 +408,7 @@ pub struct CurrentContext<'a> {
 pub struct ContextBuilder {
     docking: bool,
     viewports: bool,
+    clipboard: bool,
     debug_highlight_id_conflicts: bool,
     ini_file_name: Option<String>,
 }
@@ -428,6 +431,7 @@ impl ContextBuilder {
         ContextBuilder {
             docking: false,
             viewports: false,
+            clipboard: true,
             debug_highlight_id_conflicts: cfg!(debug_assertions),
             ini_file_name: None,
         }
@@ -442,6 +446,13 @@ impl ContextBuilder {
     /// Note that this will only work if your used backend supports viewports, which easy-imgui-window does not.
     pub fn set_viewports(&mut self, viewports: bool) -> &mut Self {
         self.viewports = viewports;
+        self
+    }
+    /// Allows to disable the handling of the clipboard.
+    ///
+    /// Default is enabled. Note that the clipboard from this module will only work if the feature `clipboard` is selected.
+    pub fn set_clipboard(&mut self, clipboard: bool) -> &mut Self {
+        self.clipboard = clipboard;
         self
     }
     /// Sets the debug highlight id
@@ -488,6 +499,12 @@ impl ContextBuilder {
         }
         io.ConfigDpiScaleFonts = true;
         io.ConfigDebugHighlightIdConflicts = self.debug_highlight_id_conflicts;
+
+        #[cfg(feature = "clipboard")]
+        if self.clipboard {
+            clipboard::setup(&mut ctx);
+        }
+
         ctx
     }
 }
@@ -620,6 +637,9 @@ impl CurrentContext<'_> {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
+            #[cfg(feature = "clipboard")]
+            clipboard::release(self);
+
             ImGui_DestroyContext(self.imgui.as_mut().inner());
         }
     }

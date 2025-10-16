@@ -11,7 +11,7 @@ keywords = ["imgui", "ui", "graphics"]
 
 [features]
 default = ["clipboard", "main-window"]
-clipboard = ["dep:arboard"]
+clipboard = ["easy-imgui/clipboard"]
 freetype = ["easy-imgui/freetype"]
 main-window = ["dep:glutin-winit"]
 
@@ -26,7 +26,6 @@ bitflags = "2"
 glutin = "0.32"
 glutin-winit = { version = "0.5", optional = true }
 raw-window-handle = "0.6"
-arboard = { version = "3", optional = true, default-features = false }
 winit = { version = "0.30", features = ["x11", "mint"] }
 send_wrapper = "0.6"
 

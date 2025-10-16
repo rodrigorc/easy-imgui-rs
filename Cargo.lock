@@ -795,13 +795,16 @@ dependencies = [
 name = "easy-imgui"
 version = "0.18.0"
 dependencies = [
+ "arboard",
  "bitflags 2.9.4",
  "cgmath",
  "easy-imgui-sys",
+ "futures-util",
  "image",
  "log",
  "mint",
  "paste",
+ "send_wrapper",
 ]
 
 [[package]]
@@ -859,14 +862,12 @@ name = "easy-imgui-window"
 version = "0.18.0"
 dependencies = [
  "anyhow",
- "arboard",
  "async-std",
  "bitflags 2.9.4",
  "easy-imgui",
  "easy-imgui-renderer",
  "easy-imgui-sys",
  "env_logger",
- "futures-util",
  "game-loop",
  "gilrs",
  "glutin",

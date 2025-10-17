@@ -24,9 +24,10 @@ pub fn setup(imgui: &mut super::Context) {
 pub fn release(imgui: &mut super::Context) {
     unsafe {
         let pio = imgui.platform_io_mut();
-        if let Some(p) = pio.Platform_SetClipboardTextFn
-            && !std::ptr::fn_addr_eq(p, set_clipboard_text as unsafe extern "C" fn(_, _))
-        {
+        let Some(p) = pio.Platform_SetClipboardTextFn else {
+            return;
+        };
+        if !std::ptr::fn_addr_eq(p, set_clipboard_text as unsafe extern "C" fn(_, _)) {
             return;
         }
         pio.Platform_SetClipboardTextFn = None;

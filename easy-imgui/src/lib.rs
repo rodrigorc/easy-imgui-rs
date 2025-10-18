@@ -390,6 +390,33 @@ impl From<Color> for ImVec4 {
     }
 }
 
+/// The result of processing an event in the ImGui loop.
+///
+/// This is a convenient type to be returned from the backend message processig.
+#[derive(Debug, Default, Clone)]
+pub struct EventResult {
+    /// The user requested to close the window. You can break the loop or ignore it, at will.
+    pub window_closed: bool,
+    /// ImGui requests handling the mouse, your application should ignore mouse events.
+    pub want_capture_mouse: bool,
+    /// ImGui requests handling the keyboard, your application should ignore keyboard events.
+    pub want_capture_keyboard: bool,
+    /// ImGui requests handling text input, your application should ignore text events.
+    pub want_text_input: bool,
+}
+
+impl EventResult {
+    pub fn new(imgui: &RawContext, window_closed: bool) -> Self {
+        let io = imgui.io();
+        EventResult {
+            window_closed,
+            want_capture_mouse: io.want_capture_mouse(),
+            want_capture_keyboard: io.want_capture_keyboard(),
+            want_text_input: io.want_text_input(),
+        }
+    }
+}
+
 /// The main ImGui context.
 pub struct Context {
     imgui: NonNull<RawContext>,

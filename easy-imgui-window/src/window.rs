@@ -17,6 +17,8 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
+pub use easy_imgui::EventResult;
+
 // Only used with the main-window feature
 #[allow(unused_imports)]
 use winit::dpi::{LogicalPosition, PhysicalPosition, Pixel};
@@ -200,19 +202,6 @@ impl MainWindowRef for NoScale<'_> {
     fn set_scale_factor(&self, _scale: f32) -> f32 {
         1.0
     }
-}
-
-/// The result of processing an event in the ImGui loop.
-#[derive(Debug, Default, Clone)]
-pub struct EventResult {
-    /// The user requested to close the window. You can break the loop or ignore it, at will.
-    pub window_closed: bool,
-    /// ImGui requests handling the mouse, your application should ignore mouse events.
-    pub want_capture_mouse: bool,
-    /// ImGui requests handling the keyboard, your application should ignore keyboard events.
-    pub want_capture_keyboard: bool,
-    /// ImGui requests handling text input, your application should ignore text events.
-    pub want_text_input: bool,
 }
 
 /// Corresponds to winit's `ApplicationHandler::new_events`.
@@ -429,12 +418,7 @@ pub fn window_event(
         _ => {}
     }
     let imgui = renderer.imgui();
-    EventResult {
-        window_closed,
-        want_capture_mouse: imgui.io().want_capture_mouse(),
-        want_capture_keyboard: imgui.io().want_capture_keyboard(),
-        want_text_input: imgui.io().want_text_input(),
-    }
+    EventResult::new(imgui, window_closed)
 }
 
 #[cfg(feature = "main-window")]

@@ -99,14 +99,14 @@ impl imgui::UiBuilder for App {
             .with(|| {
                 ui.text(&format!("Frame: {}", self.frame));
 
-                ui.separator_text(c"async-std idle future");
+                ui.separator_text(c"smol idle future");
                 let mut ticking = self.handle_ticking.is_some();
                 if ui.checkbox(lbl_id("Run ticks", "tick"), &mut ticking) {
                     if ticking {
                         let cb = self.proxy.future_back();
                         let handle = self.proxy.spawn_idle(async move {
                             loop {
-                                async_std::task::sleep(Duration::from_millis(250)).await;
+                                smol::Timer::after(Duration::from_millis(250)).await;
                                 cb.run(|this, mut args| {
                                     this.tick += 1;
                                     // Without this ping the UI will not be updated with the last

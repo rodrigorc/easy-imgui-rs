@@ -4933,6 +4933,9 @@ transparent! {
 }
 
 impl Viewport {
+    pub fn id(&self) -> ImGuiID {
+        self.ID
+    }
     pub fn flags(&self) -> ViewportFlags {
         ViewportFlags::from_bits_truncate(self.Flags)
     }

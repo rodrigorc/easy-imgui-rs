@@ -165,6 +165,7 @@
 
 pub use cgmath;
 use easy_imgui_sys::*;
+pub use either::Either;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, OsString, c_char, c_void};
@@ -4458,9 +4459,9 @@ pub trait Pushable {
     unsafe fn pop(&self);
 }
 
-struct PushableGuard<'a, P: Pushable>(&'a P);
+struct PushableGuard<'a, P: Pushable + ?Sized>(&'a P);
 
-impl<P: Pushable> Drop for PushableGuard<'_, P> {
+impl<P: Pushable + ?Sized> Drop for PushableGuard<'_, P> {
     fn drop(&mut self) {
         unsafe {
             self.0.pop();
@@ -4482,6 +4483,25 @@ impl Pushable for () {
     unsafe fn pop(&self) {}
 }
 
+impl<A: Pushable, B: Pushable> Pushable for Either<A, B> {
+    unsafe fn push(&self) {
+        unsafe {
+            match self {
+                Either::Left(a) => A::push(a),
+                Either::Right(b) => B::push(b),
+            }
+        }
+    }
+    unsafe fn pop(&self) {
+        unsafe {
+            match self {
+                Either::Left(a) => A::pop(a),
+                Either::Right(b) => B::pop(b),
+            }
+        }
+    }
+}
+
 impl<A: Pushable> Pushable for (A,) {
     unsafe fn push(&self) {
         unsafe {
@@ -4491,6 +4511,19 @@ impl<A: Pushable> Pushable for (A,) {
     unsafe fn pop(&self) {
         unsafe {
             self.0.pop();
+        }
+    }
+}
+
+impl<P: Pushable + ?Sized> Pushable for &P {
+    unsafe fn push(&self) {
+        unsafe {
+            P::push(self);
+        }
+    }
+    unsafe fn pop(&self) {
+        unsafe {
+            P::pop(self);
         }
     }
 }

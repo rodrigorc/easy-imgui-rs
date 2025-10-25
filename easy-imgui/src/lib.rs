@@ -318,6 +318,9 @@ pub fn im_to_v2(v: impl Into<ImVec2>) -> Vector2 {
     Vector2 { x: v.x, y: v.y }
 }
 
+/// A zero Vector2.
+pub const VEC2_ZERO: Vector2 = vec2(0.0, 0.0);
+
 /// A color is stored as a `[r, g, b, a]`, each value between 0.0 and 1.0.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(C)]

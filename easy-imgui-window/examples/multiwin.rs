@@ -85,7 +85,7 @@ struct App;
 
 impl imgui::UiBuilder for App {
     fn do_ui(&mut self, ui: &imgui::Ui<Self>) {
-        ui.dock_space_over_viewport(0, ui.get_main_viewport(), imgui::DockNodeFlags::None);
+        ui.dock_space_over_viewport(0, ui.get_main_viewport(), imgui::DockNodeFlags::None, None);
         ui.show_demo_window(None);
     }
 }

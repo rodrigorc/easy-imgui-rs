@@ -3443,22 +3443,37 @@ impl<A> Ui<A> {
         &self,
         id: ImGuiID,
         size: Vector2,
-        flags: DockNodeFlags, /*window_class: &WindowClass*/
+        flags: DockNodeFlags,
+        window_class: Option<&WindowClass>,
     ) -> ImGuiID {
-        unsafe { ImGui_DockSpace(id, &v2_to_im(size), flags.bits(), std::ptr::null()) }
+        unsafe {
+            ImGui_DockSpace(
+                id,
+                &v2_to_im(size),
+                flags.bits(),
+                window_class
+                    .as_ref()
+                    .map(|e| &raw const e.0)
+                    .unwrap_or_default(),
+            )
+        }
     }
     pub fn dock_space_over_viewport(
         &self,
         dockspace_id: ImGuiID,
         viewport: &Viewport,
-        flags: DockNodeFlags, /*window_class: &WindowClass*/
+        flags: DockNodeFlags,
+        window_class: Option<&WindowClass>,
     ) -> ImGuiID {
         unsafe {
             ImGui_DockSpaceOverViewport(
                 dockspace_id,
                 viewport.get(),
                 flags.bits(),
-                std::ptr::null(), //window_class
+                window_class
+                    .as_ref()
+                    .map(|e| &raw const e.0)
+                    .unwrap_or_default(),
             )
         }
     }
@@ -3467,12 +3482,47 @@ impl<A> Ui<A> {
             ImGui_SetNextWindowDockID(dock_id, cond.bits());
         }
     }
-    //SetNextWindowClass(const ImGuiWindowClass* window_class)
+    pub fn set_next_window_class(&self, window_class: &WindowClass) {
+        unsafe {
+            ImGui_SetNextWindowClass(&window_class.0);
+        }
+    }
     pub fn get_window_dock_id(&self) -> ImGuiID {
         unsafe { ImGui_GetWindowDockID() }
     }
     pub fn is_window_docked(&self) -> bool {
         unsafe { ImGui_IsWindowDocked() }
+    }
+
+    /// This allows to build your own docking, and dock your windows.
+    ///
+    /// WARNING: Experimental DearImGui feature and experimental binding.
+    ///
+    /// You must follow these rules:
+    /// * Call this function when you want to dock your windows, usually in the very first frame.
+    ///   or in the "reset views" menu option. Do NOT call it on every frame!
+    /// * Call after creating the dockings but before creating the windows.
+    pub fn dock_builder(
+        &self,
+        id: Option<ImGuiID>,
+        flags: DockNodeFlags,
+        fn_build: impl FnOnce(ImGuiID, &mut DockBuilder),
+    ) {
+        struct DockBuilderFinishGuard(ImGuiID);
+        impl Drop for DockBuilderFinishGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    ImGui_DockBuilderFinish(self.0);
+                }
+            }
+        }
+
+        unsafe {
+            let id = ImGui_DockBuilderAddNode(id.unwrap_or(0), flags.bits());
+            let _guard = DockBuilderFinishGuard(id);
+            let mut db = DockBuilder { _dummy: () };
+            fn_build(id, &mut db);
+        }
     }
 
     pub fn get_window_viewport(&self) -> &Viewport {
@@ -4984,6 +5034,12 @@ impl Viewport {
     pub fn work_size(&self) -> Vector2 {
         im_to_v2(self.WorkSize)
     }
+    pub fn center(&self) -> Vector2 {
+        self.pos() + self.size() / 2.0
+    }
+    pub fn work_center(&self) -> Vector2 {
+        self.work_pos() + self.work_size() / 2.0
+    }
 }
 
 decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: IntoCStr)
@@ -5310,5 +5366,129 @@ impl TableColumnSortSpec {
     }
     pub fn sort_direction(&self) -> SortDirection {
         SortDirection::from_bits(self.0.SortDirection).unwrap_or(SortDirection::None)
+    }
+}
+
+pub struct DockBuilder {
+    _dummy: (),
+}
+
+impl DockBuilder {
+    pub fn set_node_size(&self, node_id: ImGuiID, size: Vector2) {
+        unsafe {
+            ImGui_DockBuilderSetNodeSize(node_id, v2_to_im(size));
+        }
+    }
+    pub fn set_node_pos(&self, node_id: ImGuiID, pos: Vector2) {
+        unsafe {
+            ImGui_DockBuilderSetNodePos(node_id, v2_to_im(pos));
+        }
+    }
+    pub fn split_node(&self, node_id: ImGuiID, dir: Dir, size_ratio: f32) -> (ImGuiID, ImGuiID) {
+        unsafe {
+            let mut id2 = 0;
+            let id1 = ImGui_DockBuilderSplitNode(
+                node_id,
+                dir.bits(),
+                size_ratio,
+                std::ptr::null_mut(),
+                &mut id2,
+            );
+            (id1, id2)
+        }
+    }
+    pub fn dock_window(&self, window_name: Id<impl IntoCStr>, node_id: ImGuiID) {
+        unsafe {
+            ImGui_DockBuilderDockWindow(window_name.into().as_ptr(), node_id);
+        }
+    }
+    pub fn get_node(&self, node_id: ImGuiID) -> Option<&DockNode> {
+        unsafe {
+            let ptr = ImGui_DockBuilderGetNode(node_id);
+            ptr.as_ref().map(DockNode::cast)
+        }
+    }
+    pub fn get_node_mut(&mut self, node_id: ImGuiID) -> Option<&mut DockNode> {
+        unsafe {
+            let ptr = ImGui_DockBuilderGetNode(node_id);
+            ptr.as_mut().map(DockNode::cast_mut)
+        }
+    }
+}
+
+transparent! {
+    pub struct DockNode(ImGuiDockNode);
+}
+
+impl DockNode {
+    pub fn local_flags(&self) -> DockNodeFlags {
+        DockNodeFlags::from_bits_truncate(self.LocalFlags)
+    }
+
+    pub fn set_local_flags(&mut self, flags: DockNodeFlags) {
+        // inline function
+        self.0.LocalFlags = flags.bits();
+        self.0.MergedFlags = self.0.SharedFlags | self.0.LocalFlags | self.0.LocalFlagsInWindows;
+    }
+}
+
+transparent_mut! {
+    #[derive(Debug, Copy, Clone)]
+    pub struct WindowClass(ImGuiWindowClass);
+}
+
+impl Default for WindowClass {
+    fn default() -> Self {
+        // Warning: inline C++ function
+        WindowClass(ImGuiWindowClass {
+            ClassId: 0,
+            ParentViewportId: u32::MAX,
+            FocusRouteParentWindowId: 0,
+            ViewportFlagsOverrideSet: 0,
+            ViewportFlagsOverrideClear: 0,
+            TabItemFlagsOverrideSet: 0,
+            DockNodeFlagsOverrideSet: 0,
+            DockingAlwaysTabBar: false,
+            DockingAllowUnclassed: true,
+        })
+    }
+}
+
+impl WindowClass {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn class_id(mut self, id: ImGuiID) -> Self {
+        self.ClassId = id;
+        self
+    }
+    pub fn parent_viewport_id(mut self, id: Option<ImGuiID>) -> Self {
+        self.ParentViewportId = id.unwrap_or(u32::MAX);
+        self
+    }
+    pub fn focus_route_parent_window_id(mut self, id: ImGuiID) -> Self {
+        self.FocusRouteParentWindowId = id;
+        self
+    }
+    pub fn dock_node_flags(mut self, set_flags: DockNodeFlags) -> Self {
+        self.DockNodeFlagsOverrideSet = set_flags.bits();
+        self
+    }
+    pub fn tab_item_flags(mut self, set_flags: TabItemFlags) -> Self {
+        self.TabItemFlagsOverrideSet = set_flags.bits();
+        self
+    }
+    pub fn viewport_flags(mut self, set_flags: ViewportFlags, clear_flags: ViewportFlags) -> Self {
+        self.ViewportFlagsOverrideSet = set_flags.bits();
+        self.ViewportFlagsOverrideClear = clear_flags.bits();
+        self
+    }
+    pub fn docking_always_tab_bar(mut self, value: bool) -> Self {
+        self.DockingAlwaysTabBar = value;
+        self
+    }
+    pub fn docking_allow_unclassed(mut self, value: bool) -> Self {
+        self.DockingAllowUnclassed = value;
+        self
     }
 }

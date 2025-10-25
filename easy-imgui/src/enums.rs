@@ -99,17 +99,24 @@ macro_rules! imgui_scoped_enum {
 }
 
 macro_rules! imgui_flags_ex {
-    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $value:ident),* $(,)? }) => {
+    ($vis:vis $name:ident: $native_name:ident { $( $(#[$inner:ident $($args:tt)*])* $field:ident = $($value:ident)::*),* $(,)? }) => {
         bitflags::bitflags! {
             #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
             $vis struct $name : i32 {
                 $(
                     $(#[$inner $($args)*])*
-                    const $field = $native_name::$value.0 as i32;
+                    const $field = imgui_flags_ex! { @FIELD $native_name :: $($value)::* };
                 )*
             }
         }
-};
+    };
+    (@FIELD $native_name:ident :: $value:ident) => {
+        $native_name::$value.0 as i32
+    };
+    (@FIELD $native_name:ident :: $alt_native_name:ident :: $value:ident) => {
+        // ignore native_name, use alt_native_name instead
+        $alt_native_name::$value.0 as i32
+    };
 }
 
 macro_rules! imgui_flags {
@@ -915,17 +922,33 @@ imgui_enum! {
     }
 }
 
-imgui_flags! {
+imgui_flags_ex! {
     pub DockNodeFlags: ImGuiDockNodeFlags_ {
-        None,
-        KeepAliveOnly,
-        //NoCentralNode,
-        NoDockingOverCentralNode,
-        PassthruCentralNode,
-        NoDockingSplit,
-        NoResize,
-        AutoHideTabBar,
-        NoUndocking,
+        None = ImGuiDockNodeFlags_None,
+        KeepAliveOnly = ImGuiDockNodeFlags_KeepAliveOnly,
+        //NoCentralNode
+        NoDockingOverCentralNode = ImGuiDockNodeFlags_NoDockingOverCentralNode,
+        PassthruCentralNode = ImGuiDockNodeFlags_PassthruCentralNode,
+        NoDockingSplit = ImGuiDockNodeFlags_NoDockingSplit,
+        NoResize = ImGuiDockNodeFlags_NoResize,
+        AutoHideTabBar = ImGuiDockNodeFlags_AutoHideTabBar,
+        NoUndocking = ImGuiDockNodeFlags_NoUndocking,
+
+        // Internal
+        DockSpace = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_DockSpace,
+        CentralNode = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_CentralNode,
+        NoTabBar = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoTabBar,
+        HiddenTabBar = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_HiddenTabBar,
+        NoWindowMenuButton = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoWindowMenuButton,
+        NoCloseButton = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoCloseButton,
+        NoResizeX = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoResizeX,
+        NoResizeY = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoResizeY,
+        DockedWindowsInFocusRoute = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_DockedWindowsInFocusRoute,
+        NoDockingSplitOther = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoDockingSplitOther,
+        NoDockingOverMe = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoDockingOverMe,
+        NoDockingOverOther = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoDockingOverOther,
+        NoDockingOverEmpty = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoDockingOverEmpty,
+        NoDocking = ImGuiDockNodeFlagsPrivate_::ImGuiDockNodeFlags_NoDocking,
     }
 }
 

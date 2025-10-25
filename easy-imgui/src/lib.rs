@@ -2613,6 +2613,22 @@ decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: I
     }
 }
 
+/// Argument for `Ui::same_line_ex()`.
+#[derive(Copy, Clone, Default, Debug)]
+pub enum SameLine {
+    /// Default separation, that will be from Style.ItemSpacing
+    #[default]
+    Default,
+    /// Offset from the very start of the line.
+    ///
+    /// It can be positive, 0, or negative.
+    OffsetFromStart(f32),
+    /// Separation from the previous element.
+    ///
+    /// Must be >= 0.0 or will fallback to `Default`.
+    Spacing(f32),
+}
+
 impl<A> Ui<A> {
     // The callback will be callable until the next call to do_frame()
     unsafe fn push_callback<X>(&self, mut cb: impl FnMut(*mut A, X) + 'static) -> usize {
@@ -3007,12 +3023,26 @@ impl<A> Ui<A> {
             ImGui_SetWindowFocus();
         }
     }
+    /// Forces the next control to be in the same line.
     pub fn same_line(&self) {
-        unsafe {
-            ImGui_SameLine(0.0, -1.0);
-        }
+        self.same_line_ex(SameLine::Default);
     }
-    pub fn same_line_ex(&self, offset_from_start_x: f32, spacing: f32) {
+    /// Forces the next control to be in the same line, with custom spacing.
+    pub fn same_line_ex(&self, same_line: SameLine) {
+        let (offset_from_start_x, spacing) = match same_line {
+            SameLine::Default => (0.0, -1.0),
+            // The user asked for offset=0.0, but if we use (0.0, 0.0) then ImGui
+            // will do as if Spacing(0.0). Move it just a little and compensate with spc.
+            SameLine::OffsetFromStart(offs) => {
+                if offs != 0.0 {
+                    (offs, 0.0)
+                } else {
+                    (-f32::MIN_POSITIVE, f32::MIN_POSITIVE)
+                }
+            }
+            // If spc were negative it would switch to default.
+            SameLine::Spacing(spc) => (0.0, spc.max(0.0)),
+        };
         unsafe {
             ImGui_SameLine(offset_from_start_x, spacing);
         }

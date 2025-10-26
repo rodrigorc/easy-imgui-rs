@@ -2,6 +2,12 @@
 name = "easy-imgui-sdl3"
 version = "0.19.0"
 edition = "2024"
+description = "Binding of the SDL3+OpenGL3 Dear Imgui backends for the easy-imgui"
+license = "MIT"
+readme = "../README.md"
+repository = "https://github.com/rodrigorc/easy-imgui-rs"
+categories = ["gui"]
+keywords = ["imgui", "ui", "graphics", "sdl3"]
 
 [features]
 default = []

@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-sdl3"
-version = "0.18.0"
+version = "0.19.0"
 edition = "2024"
 
 [features]
@@ -14,12 +14,12 @@ glow = "0.16.0"
 send_wrapper = "0.6.0"
 
 [dependencies.easy-imgui-sys]
-version = "=0.18.0"
+version = "=0.19.0"
 features = ["backend-opengl3", "backend-sdl3"]
 path = "../easy-imgui-sys"
 
 [dependencies.easy-imgui]
-version = "=0.18.0"
+version = "=0.19.0"
 path = "../easy-imgui"
 features = ["future"]
 

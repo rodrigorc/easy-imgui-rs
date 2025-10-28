@@ -16,9 +16,9 @@ freetype = ["easy-imgui/freetype"]
 main-window = ["dep:glutin-winit"]
 
 [dependencies]
-easy-imgui-sys = { version = "=0.19.0", path = "../easy-imgui-sys" }
-easy-imgui = { version = "=0.19.0", path = "../easy-imgui", features = ["future"] }
-easy-imgui-renderer = { version = "=0.19.0", path = "../easy-imgui-renderer" }
+easy-imgui-sys = "0.19.0"
+easy-imgui = { version = "0.19.0", features = ["future"] }
+easy-imgui-renderer = "0.19.0"
 
 log ="0.4"
 anyhow = "1"

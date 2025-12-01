@@ -324,7 +324,7 @@ impl GlyphLoaderArg<'_> {
                     &mut *r
                 };
 
-                let ref_size = unsafe { (*(&(*self.baked.ContainerFont).Sources)[0]).SizePixels };
+                let ref_size = unsafe { (*(&(*self.baked.OwnerFont).Sources)[0]).SizePixels };
                 let offsets_scale = if ref_size != 0.0 {
                     self.baked.Size / ref_size
                 } else {

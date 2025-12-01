@@ -214,6 +214,7 @@ imgui_enum! {
         TextSelectedBg,
         TreeLines,
         DragDropTarget,
+        DragDropTargetBg,
         UnsavedMarker,
         NavCursor,
         NavWindowingHighlight,
@@ -972,6 +973,7 @@ imgui_flags_ex! {
         BeforeDelivery = ImGuiDragDropFlags_AcceptBeforeDelivery,
         NoDrawDefaultRect = ImGuiDragDropFlags_AcceptNoDrawDefaultRect,
         NoPreviewTooltip =  ImGuiDragDropFlags_AcceptNoPreviewTooltip,
+        AcceptDrawAsHovered = ImGuiDragDropFlags_AcceptDrawAsHovered,
         PeekOnly = ImGuiDragDropFlags_AcceptPeekOnly,
     }
 }
@@ -1031,6 +1033,7 @@ imgui_flags! {
         SelectOnClickRelease,
         //RangeSelect2d,
         NavWrapX,
+        NoSelectOnRightClick,
     }
 }
 

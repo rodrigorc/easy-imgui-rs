@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "arboard",
  "bitflags 2.10.0",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-filechooser"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "bitflags 2.10.0",
  "bytesize",
@@ -858,7 +858,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-renderer"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -871,7 +871,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sdl3"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sys"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -896,7 +896,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-window"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "bitflags 2.10.0",

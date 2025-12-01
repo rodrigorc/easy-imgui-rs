@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-renderer"
-version = "0.19.0"
+version = "0.20.0"
 edition = "2024"
 description = "Default renderer for the easy-imgui crate, using OpenGl via glow"
 license = "MIT"
@@ -12,8 +12,8 @@ keywords = ["imgui", "ui", "graphics"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-easy-imgui-sys = "0.19.0"
-easy-imgui = "0.19.0"
+easy-imgui-sys = "0.20.0"
+easy-imgui = "0.20.0"
 easy-imgui-opengl = "0.2"
 
 anyhow = "1"

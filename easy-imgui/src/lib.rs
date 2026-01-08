@@ -3794,7 +3794,7 @@ impl FontAtlas {
                 let cname = font.name.as_bytes();
                 let name_len = cname.len().min(fc.Name.len() - 1);
                 fc.Name[..name_len]
-                    .copy_from_slice(std::mem::transmute::<&[u8], &[i8]>(&cname[..name_len]));
+                    .copy_from_slice(std::mem::transmute::<&[u8], &[c_char]>(&cname[..name_len]));
                 fc.Name[name_len] = 0;
             }
             fc.Flags = font.flags.bits();
@@ -5263,12 +5263,12 @@ impl DragDropPayload<'_> {
         if self.pay.DataFrameCount == -1 {
             return false;
         }
-        let data_type = unsafe { std::mem::transmute::<&[i8], &[u8]>(&self.pay.DataType) };
+        let data_type = unsafe { std::mem::transmute::<&[c_char], &[u8]>(&self.pay.DataType) };
         let data_type = CStr::from_bytes_until_nul(data_type).unwrap();
         data_type == type_.into().as_ref()
     }
     pub fn type_(&self) -> Cow<'_, str> {
-        let data_type = unsafe { std::mem::transmute::<&[i8], &[u8]>(&self.pay.DataType) };
+        let data_type = unsafe { std::mem::transmute::<&[c_char], &[u8]>(&self.pay.DataType) };
         let data_type = CStr::from_bytes_until_nul(data_type).unwrap();
         data_type.to_string_lossy()
     }

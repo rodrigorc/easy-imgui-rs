@@ -330,14 +330,11 @@ impl GlyphLoaderArg<'_> {
                 } else {
                     1.0
                 };
-                let mut font_off_x = self.src.GlyphOffset.x * offsets_scale;
-                let mut font_off_y = self.src.GlyphOffset.y * offsets_scale;
-                if self.src.PixelSnapH {
-                    font_off_x = font_off_x.round();
-                }
-                if self.src.PixelSnapV {
-                    font_off_y = font_off_y.round();
-                }
+                let font_off_y = (self.src.GlyphOffset.y * offsets_scale).round();
+                let font_off_x = {
+                    let x = self.src.GlyphOffset.x * offsets_scale;
+                    if self.src.PixelSnapH { x.round() } else { x }
+                };
 
                 out_glyph.set_Codepoint(self.codepoint as u32);
                 out_glyph.AdvanceX = advance_x;

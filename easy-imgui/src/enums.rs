@@ -248,6 +248,7 @@ imgui_enum! {
         ScrollbarPadding,
         GrabMinSize,
         GrabRounding,
+        ImageRounding,
         ImageBorderSize,
         TabRounding,
         TabBorderSize,
@@ -364,8 +365,9 @@ imgui_flags! {
         WrapAround,
         ClampOnInput,
         ClampZeroRange,
-        AlwaysClamp,
         NoSpeedTweaks,
+        ColorMarkers,
+        AlwaysClamp,
     }
 }
 
@@ -681,8 +683,6 @@ imgui_flags! {
         MouseButtonLeft,
         MouseButtonRight,
         MouseButtonMiddle,
-        MouseButtonMask_,
-        MouseButtonDefault_,
         NoReopen,
         NoOpenOverExistingPopup,
         NoOpenOverItems,
@@ -759,6 +759,7 @@ imgui_flags! {
         NoSidePreview,
         NoDragDrop,
         NoBorder,
+        NoColorMarkers,
         AlphaOpaque,
         AlphaNoBg,
         AlphaPreviewHalf,

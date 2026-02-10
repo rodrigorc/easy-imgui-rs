@@ -38,6 +38,6 @@ image = { version = "0.25" }
 game-loop = { version = "=1.3", features = ["winit"] }
 smol = "2.0.2"
 tokio = { version = "1.43", features = ["macros", "rt-multi-thread"] }
-reqwest = "0.12"
+reqwest = "0.13"
 env_logger = "0.11"
 

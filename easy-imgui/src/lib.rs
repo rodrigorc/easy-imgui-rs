@@ -772,9 +772,19 @@ pub trait UiBuilder {
     fn do_ui(&mut self, ui: &Ui<Self>);
 }
 
+/// The type of default font selected.
+pub enum DefaultFontSelector {
+    /// Let ImGui decide the right font, based on size and scale.
+    Auto,
+    /// Select the pixel-clean classic default font.
+    Bitmap,
+    /// Select the new scalable font.
+    Vector,
+}
+
 enum TtfData {
     Bytes(Cow<'static, [u8]>),
-    DefaultFont,
+    DefaultFont(DefaultFontSelector),
     CustomLoader(fontloader::BoxGlyphLoader),
 }
 
@@ -814,8 +824,12 @@ impl FontInfo {
     }
     /// Creates a `FontInfo` using the embedded default Dear ImGui font.
     pub fn default_font() -> FontInfo {
+        Self::default_font_with(DefaultFontSelector::Auto)
+    }
+    /// Creates a `FontInfo` using the embedded default Dear ImGui font, either the bitmap or the vector one.
+    pub fn default_font_with(sel: DefaultFontSelector) -> FontInfo {
         FontInfo {
-            ttf: TtfData::DefaultFont,
+            ttf: TtfData::DefaultFont(sel),
             size: 0.0,
             name: String::new(),
             flags: FontFlags::None,
@@ -2440,9 +2454,15 @@ macro_rules! decl_builder_popup_context {
             }
             {
                 pub fn $do_function<'a>(&self) -> $struct<&'a str> {
+                    // Default flags in imgui.h used to be 1, that was `MouseButtonRight`
+                    // while 0 was `MouseButtonLeft`.
+                    // Now the default is 0, that is `PopupFlags::None`, while
+                    // 1 and 2 are reserved for legacy compatibility.
+                    // Setting the flags to `None` is semantically equivalent to `MouseButtonRight`,
+                    // and that is what imgui.h does, so we do the same.
                     $struct {
                         str_id: None,
-                        flags: PopupFlags::MouseButtonRight,
+                        flags: PopupFlags::None,
                         push: (),
                     }
                 }
@@ -2950,6 +2970,9 @@ impl<A> Ui<A> {
     }
     pub fn get_item_rect_size(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectSize()) }
+    }
+    pub fn get_item_flags(&self) -> ItemFlags {
+        unsafe { ItemFlags::from_bits_truncate(ImGui_GetItemFlags()) }
     }
     /// Available space from current position. This is your best friend!
     pub fn get_content_region_avail(&self) -> Vector2 {
@@ -3810,7 +3833,13 @@ impl FontAtlas {
                         std::ptr::null(),
                     )
                 }
-                TtfData::DefaultFont => self.0.AddFontDefault(&fc),
+                TtfData::DefaultFont(DefaultFontSelector::Auto) => self.0.AddFontDefault(&fc),
+                TtfData::DefaultFont(DefaultFontSelector::Bitmap) => {
+                    self.0.AddFontDefaultBitmap(&fc)
+                }
+                TtfData::DefaultFont(DefaultFontSelector::Vector) => {
+                    self.0.AddFontDefaultVector(&fc)
+                }
                 TtfData::CustomLoader(glyph_loader) => {
                     let ptr = Box::into_raw(Box::new(glyph_loader));
                     fc.FontLoader = &fontloader::FONT_LOADER.0;

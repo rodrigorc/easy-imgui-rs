@@ -851,7 +851,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "easy-imgui"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "arboard",
  "bitflags 2.11.0",
@@ -868,7 +868,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-filechooser"
-version = "0.3.5"
+version = "0.4.0"
 dependencies = [
  "bitflags 2.11.0",
  "bytesize",
@@ -895,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-renderer"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "cgmath",
@@ -908,7 +908,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sdl3"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -922,7 +922,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-sys"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "bindgen",
  "cc",
@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-window"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",

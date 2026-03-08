@@ -78,10 +78,10 @@ impl Renderer {
                 fonts.TexMaxHeight = max_tex_size;
             }
 
-            let glsl_version = if cfg!(not(target_arch = "wasm32")) {
-                "#version 150\n"
-            } else {
+            let glsl_version = if cfg!(target_arch = "wasm32") || cfg!(target_os = "android") {
                 "#version 300 es\n"
+            } else {
+                "#version 150\n"
             };
             program = gl_program_from_source(&gl, Some(glsl_version), include_str!("shader.glsl"))?;
             vao = glr::VertexArray::generate(&gl)?;

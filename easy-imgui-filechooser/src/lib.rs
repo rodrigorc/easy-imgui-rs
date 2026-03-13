@@ -382,8 +382,18 @@ impl FileChooser {
     /// of its own, and it doesn't exist in disk. This is useful if you want to set
     /// a default extension depending on the active filter.
     pub fn full_path(&self, default_extension: Option<&str>) -> PathBuf {
+        // Path::normalize_lexically would be handy here.
         let file_name = self.file_name();
-        let mut res = self.path.join(file_name);
+        let mut res: PathBuf = if file_name == "." {
+            self.path.to_path_buf()
+        } else if file_name == ".." {
+            self.path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(self.path.clone())
+        } else {
+            self.path.join(file_name)
+        };
         if let (None, Some(new_ext)) = (res.extension(), default_extension)
             && !res.exists()
         {
@@ -769,7 +779,9 @@ impl FileChooser {
         if ui.is_window_appearing() {
             ui.set_keyboard_focus_here(0);
         }
-        ui.input_os_string_config(lbl_id(c"", c"input"), &mut self.file_name)
+        let press_enter = ui
+            .input_os_string_config(lbl_id(c"", c"input"), &mut self.file_name)
+            .flags(imgui::InputTextFlags::EnterReturnsTrue)
             .build();
 
         if !self.filters.is_empty() {
@@ -794,8 +806,14 @@ impl FileChooser {
                 .build()
                 | ui.shortcut(imgui::Key::Enter)
                 | ui.shortcut(imgui::Key::KeypadEnter)
+                | (can_ok && press_enter)
             {
-                output = Output::Ok;
+                let maybe_next_path = self.full_path(None);
+                if maybe_next_path.is_dir() {
+                    next_path = dbg!(Some(maybe_next_path));
+                } else {
+                    output = Output::Ok;
+                }
             }
         });
         ui.same_line();

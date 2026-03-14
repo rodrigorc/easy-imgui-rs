@@ -200,35 +200,6 @@ mod os {
     }
 }
 
-struct EnumSubdirs {
-    dir: std::fs::ReadDir,
-}
-
-impl EnumSubdirs {
-    fn new(path: impl Into<PathBuf>) -> Result<EnumSubdirs> {
-        let path = path.into();
-        let dir = std::fs::read_dir(path)?;
-        Ok(EnumSubdirs { dir })
-    }
-}
-
-impl Iterator for EnumSubdirs {
-    type Item = PathBuf;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let next = self.dir.next()?.ok()?;
-            let path = next.path();
-            let meta = path.metadata().ok()?;
-            let is_dir = meta.is_dir();
-            if !is_dir {
-                continue;
-            }
-            return Some(path);
-        }
-    }
-}
-
 bitflags::bitflags! {
     pub struct Flags: u32 {
         /// Shows the "Read only" check.
@@ -526,12 +497,20 @@ impl FileChooser {
                     {
                         let mut popup_dirs = Vec::new();
                         if let Some(parent) = my_path.parent() {
-                            if let Ok(subdir) = EnumSubdirs::new(parent) {
+                            if let Ok(subdir) = parent.read_dir() {
                                 for d in subdir {
-                                    if d.file_name().is_some() {
-                                        let sel = d == my_path;
-                                        popup_dirs.push((d, sel));
+                                    let Ok(d) = d else { continue };
+                                    let d = FileEntry::new(&d);
+                                    if d.kind != FileEntryKind::Directory {
+                                        continue;
                                     }
+                                    if d.hidden && !self.show_hidden {
+                                        continue;
+                                    }
+
+                                    let full_d = parent.join(d.name);
+                                    let sel = full_d == my_path;
+                                    popup_dirs.push((full_d, sel));
                                 }
                             }
                         } else {

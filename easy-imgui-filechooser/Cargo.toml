@@ -12,6 +12,7 @@ keywords = ["imgui", "ui", "graphics"]
 [features]
 default = []
 tr = ["dep:tr", "dep:include-po"]
+zip = ["dep:zip"]
 
 [dependencies]
 easy-imgui = "0.21"
@@ -21,6 +22,7 @@ time = { version = "0.3", features = ["macros", "formatting"] }
 bitflags = "2"
 bytesize = "2"
 tr = { version = "0.1.10", default-features = false, optional = true }
+zip = { version = "8.5.0", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", features = ["Win32_Storage_FileSystem"] }
@@ -31,3 +33,7 @@ sys-locale = "0.3"
 
 [build-dependencies]
 include-po = { version = "0.2", optional = true }
+
+[[example]]
+name = "filechooser_demo"
+required-features = ["zip"]

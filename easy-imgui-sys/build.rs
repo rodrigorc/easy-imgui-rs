@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 use xshell::Shell;
 
 fn main() {
-    dbg!(std::env::vars());
-
     //simple_logger::SimpleLogger::new().init().unwrap();
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

@@ -14,7 +14,6 @@ use std::{
     ffi::{OsStr, OsString},
     fs::DirEntry,
     path::{Path, PathBuf},
-    time::SystemTime,
 };
 use time::macros::format_description;
 
@@ -39,10 +38,128 @@ macro_rules! tr {
     ($($args:tt)*) => { format!($($args)*) };
 }
 
+pub trait DirEnum {
+    fn roots(&self) -> impl Iterator<Item = FileEntry>;
+    fn read_dir<'s>(
+        &'s self,
+        path: &Path,
+    ) -> std::io::Result<impl Iterator<Item = FileEntry> + use<'s, Self>>;
+    fn absolute(&self, path: &Path) -> std::io::Result<PathBuf>;
+}
+
+/// `DirEnum` is not object safe, to be able to use a type-erased dyn object, use this instead.
+/// You can convert one into the other using `box_dir_enum`.
+pub trait DynDirEnum {
+    fn dyn_roots(&self) -> Box<dyn Iterator<Item = FileEntry> + '_>;
+    fn dyn_read_dir<'s>(
+        &'s self,
+        path: &Path,
+    ) -> std::io::Result<Box<dyn Iterator<Item = FileEntry> + 's>>;
+    fn dyn_absolute(&self, path: &Path) -> std::io::Result<PathBuf>;
+}
+
+impl<T> DirEnum for T
+where
+    T: AsRef<dyn DynDirEnum>,
+{
+    fn roots(&self) -> impl Iterator<Item = FileEntry> {
+        self.as_ref().dyn_roots()
+    }
+    fn read_dir<'s>(
+        &'s self,
+        path: &Path,
+    ) -> std::io::Result<impl Iterator<Item = FileEntry> + use<'s, T>> {
+        self.as_ref().dyn_read_dir(path)
+    }
+    fn absolute(&self, path: &Path) -> std::io::Result<PathBuf> {
+        self.as_ref().dyn_absolute(path)
+    }
+}
+
+impl<T: DirEnum> DynDirEnum for T {
+    fn dyn_roots(&self) -> Box<dyn Iterator<Item = FileEntry> + '_> {
+        Box::new(self.roots())
+    }
+    fn dyn_read_dir<'s>(
+        &'s self,
+        path: &Path,
+    ) -> std::io::Result<Box<dyn Iterator<Item = FileEntry> + 's>> {
+        Ok(Box::new(self.read_dir(path)?))
+    }
+    fn dyn_absolute(&self, path: &Path) -> std::io::Result<PathBuf> {
+        self.absolute(path)
+    }
+}
+
+pub fn box_dir_enum(t: impl DirEnum + 'static) -> Box<dyn DynDirEnum> {
+    Box::new(t)
+}
+
+#[cfg(feature = "zip")]
+mod zipdirenum;
+#[cfg(feature = "zip")]
+pub use zipdirenum::{FileSystemDirEnumWithZip, ZipDirEnum};
+
+#[derive(Default)]
+pub struct FileSystemDirEnum;
+
+impl DirEnum for FileSystemDirEnum {
+    #[cfg(not(target_os = "windows"))]
+    fn roots(&self) -> impl Iterator<Item = FileEntry> {
+        std::iter::empty()
+    }
+    #[cfg(target_os = "windows")]
+    fn roots(&self) -> impl Iterator<Item = FileEntry> {
+        struct Roots {
+            drives: u32,
+            letter: u8,
+        }
+        impl Iterator for Roots {
+            type Item = FileEntry;
+
+            fn next(&mut self) -> Option<FileEntry> {
+                while self.letter < 26 {
+                    // A .. Z
+                    let bit = 1 << self.letter;
+                    let drive = char::from(b'A' + self.letter);
+                    self.letter += 1;
+                    if (self.drives & bit) != 0 {
+                        return Some(FileEntry {
+                            name: format!("{}:\\", drive).into(),
+                            kind: FileEntryKind::Root,
+                            size: None,
+                            modified: None,
+                            hidden: false,
+                        });
+                    }
+                }
+                None
+            }
+        }
+        let drives = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };
+        Roots { drives, letter: 0 }
+    }
+
+    fn read_dir<'s>(
+        &'s self,
+        path: &Path,
+    ) -> std::io::Result<impl Iterator<Item = FileEntry> + use<'s>> {
+        let rd = path.read_dir()?;
+        Ok(rd.filter_map(|e| {
+            let e = e.ok()?;
+            Some(FileEntry::new(&e))
+        }))
+    }
+    fn absolute(&self, path: &Path) -> std::io::Result<PathBuf> {
+        std::path::absolute(path)
+    }
+}
+
 /// Main widget to create a file chooser.
 ///
 /// Create one of these when the widget is opened, and then call `do_ui` for each frame.
-pub struct FileChooser {
+pub struct FileChooser<D: DirEnum> {
+    dir_enum: D,
     path: PathBuf,
     flags: Flags,
     entries: Vec<FileEntry>,
@@ -79,7 +196,7 @@ pub enum Output {
     Ok,
 }
 
-impl std::fmt::Debug for FileChooser {
+impl<D: DirEnum> std::fmt::Debug for FileChooser<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FileChooser")
             .field("path", &self.path())
@@ -91,20 +208,21 @@ impl std::fmt::Debug for FileChooser {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum FileEntryKind {
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FileEntryKind {
     Parent,
     Directory,
     File,
     Root, // drive letter
 }
 
-struct FileEntry {
-    name: OsString,
-    kind: FileEntryKind,
-    size: Option<u64>,
-    modified: Option<SystemTime>,
-    hidden: bool,
+#[derive(Debug)]
+pub struct FileEntry {
+    pub name: OsString,
+    pub kind: FileEntryKind,
+    pub size: Option<u64>,
+    pub modified: Option<time::OffsetDateTime>,
+    pub hidden: bool,
 }
 
 /// An identifier for the filter.
@@ -145,61 +263,6 @@ impl Filter {
     }
 }
 
-#[cfg(target_os = "windows")]
-mod os {
-    use std::path::PathBuf;
-
-    pub struct Roots {
-        drives: u32,
-        letter: u8,
-    }
-
-    impl Roots {
-        pub fn new() -> Roots {
-            let drives = unsafe { windows::Win32::Storage::FileSystem::GetLogicalDrives() };
-            Roots { drives, letter: 0 }
-        }
-    }
-    impl Iterator for Roots {
-        type Item = PathBuf;
-
-        fn next(&mut self) -> Option<PathBuf> {
-            while self.letter < 26 {
-                // A .. Z
-                let bit = 1 << self.letter;
-                let drive = char::from(b'A' + self.letter);
-                self.letter += 1;
-                if (self.drives & bit) != 0 {
-                    return Some(PathBuf::from(format!("{}:\\", drive)));
-                }
-            }
-            None
-        }
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-mod os {
-    use std::path::PathBuf;
-
-    pub struct Roots(());
-
-    impl Roots {
-        pub fn new() -> Roots {
-            Roots(())
-        }
-    }
-
-    impl Iterator for Roots {
-        type Item = PathBuf;
-
-        // We could return '/' here, that is a root, but it looks quite useless as a choice.
-        fn next(&mut self) -> Option<PathBuf> {
-            None
-        }
-    }
-}
-
 bitflags::bitflags! {
     pub struct Flags: u32 {
         /// Shows the "Read only" check.
@@ -207,16 +270,23 @@ bitflags::bitflags! {
     }
 }
 
-impl Default for FileChooser {
+impl<D: DirEnum + Default> Default for FileChooser<D> {
     fn default() -> Self {
-        FileChooser::new()
+        FileChooser::with_dir_enum(D::default())
     }
 }
 
-impl FileChooser {
+impl<D: DirEnum + Default> FileChooser<D> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<D: DirEnum> FileChooser<D> {
     /// Creates a new default widget.
-    pub fn new() -> FileChooser {
+    pub fn with_dir_enum(dir_enum: D) -> FileChooser<D> {
         FileChooser {
+            dir_enum,
             path: PathBuf::default(),
             flags: Flags::empty(),
             entries: Vec::new(),
@@ -247,7 +317,7 @@ impl FileChooser {
     ///
     /// By default it will be the curent working directory (".").
     pub fn set_path(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        let path = std::path::absolute(path)?;
+        let path = self.dir_enum.absolute(path.as_ref())?;
         self.selected = None;
         // Reuse the entries memory
         let mut entries = std::mem::take(&mut self.entries);
@@ -258,12 +328,16 @@ impl FileChooser {
             }
             entries.push(entry);
         };
-        if path.parent().is_some() {
-            add_entry(FileEntry::dot_dot());
+
+        match path.parent() {
+            Some(t) if !t.as_os_str().is_empty() => {
+                add_entry(FileEntry::dot_dot());
+            }
+            _ => {}
         }
-        for rd in std::fs::read_dir(&path)? {
-            let Ok(rd) = rd else { continue };
-            add_entry(FileEntry::new(&rd));
+
+        for fe in self.dir_enum.read_dir(&path)? {
+            add_entry(fe);
         }
         self.path = path;
         self.entries = entries;
@@ -353,44 +427,11 @@ impl FileChooser {
     /// of its own, and it doesn't exist in disk. This is useful if you want to set
     /// a default extension depending on the active filter.
     pub fn full_path(&self, default_extension: Option<&str>) -> PathBuf {
-        // Path::normalize_lexically would be handy here.
-        let file_name = self.file_name();
-        let mut res: PathBuf = if file_name == "." {
-            self.path.to_path_buf()
-        } else if file_name == ".." {
-            self.path
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or(self.path.clone())
-        } else {
-            self.path.join(file_name)
-        };
-        if let (None, Some(new_ext)) = (res.extension(), default_extension)
-            && !res.exists()
-        {
+        let (mut res, exists) = self.selected_path();
+        if let (None, Some(new_ext), None) = (res.extension(), default_extension, exists) {
             res.set_extension(new_ext);
         }
         res
-    }
-
-    #[cfg(target_os = "windows")]
-    fn set_path_super_root(&mut self) {
-        self.path = PathBuf::default();
-        self.entries = os::Roots::new()
-            .map(|path| FileEntry {
-                name: path.into(),
-                kind: FileEntryKind::Root,
-                size: None,
-                modified: None,
-                hidden: false,
-            })
-            .collect();
-        self.selected = None;
-        self.sort_dirty = true;
-        self.visible_dirty = true;
-        self.scroll_dirty = true;
-        self.popup_dirs.clear();
-        self.search_term.clear();
     }
 
     /// Adds a filter to the list of filters.
@@ -443,14 +484,25 @@ impl FileChooser {
             ))
             .window_flags(imgui::WindowFlags::HorizontalScrollbar)
             .with(|| {
-                #[cfg(target_os = "windows")]
-                {
+                let mut roots = self.dir_enum.roots();
+                let r0 = roots.next();
+                if let Some(r0) = r0 {
                     let scale = ui.get_font_size() / 16.0;
                     if ui
                         .image_button_with_custom_rect_config(id("::super"), atlas.mypc_rr, scale)
                         .build()
                     {
-                        self.set_path_super_root();
+                        // TODO: partial duplicate of `set_path()`
+                        self.entries.clear();
+                        self.entries.push(r0);
+                        self.entries.extend(roots);
+                        self.path = PathBuf::default();
+                        self.selected = None;
+                        self.sort_dirty = true;
+                        self.visible_dirty = true;
+                        self.scroll_dirty = true;
+                        self.popup_dirs.clear();
+                        self.search_term.clear();
                     }
                     ui.same_line();
                 }
@@ -497,10 +549,8 @@ impl FileChooser {
                     {
                         let mut popup_dirs = Vec::new();
                         if let Some(parent) = my_path.parent() {
-                            if let Ok(subdir) = parent.read_dir() {
+                            if let Ok(subdir) = self.dir_enum.read_dir(parent) {
                                 for d in subdir {
-                                    let Ok(d) = d else { continue };
-                                    let d = FileEntry::new(&d);
                                     if d.kind != FileEntryKind::Directory {
                                         continue;
                                     }
@@ -514,7 +564,9 @@ impl FileChooser {
                                 }
                             }
                         } else {
-                            for root in os::Roots::new() {
+                            // TODO: filter out when there is only one?
+                            for root in self.dir_enum.roots() {
+                                let root = PathBuf::from(root.name);
                                 let sel = root == my_path;
                                 popup_dirs.push((root, sel));
                             }
@@ -718,8 +770,7 @@ impl FileChooser {
                     // File modification time
                     ui.table_set_column_index(3);
                     if let Some(modified) = entry.modified {
-                        let tm = time::OffsetDateTime::from(modified);
-                        let s = tm
+                        let s = modified
                             .format(format_description!(
                                 "[year]-[month]-[day] [hour]:[minute]:[second]"
                             ))
@@ -787,9 +838,12 @@ impl FileChooser {
                 | ui.shortcut(imgui::Key::KeypadEnter)
                 | (can_ok && press_enter)
             {
-                let maybe_next_path = self.full_path(None);
-                if maybe_next_path.is_dir() {
-                    next_path = dbg!(Some(maybe_next_path));
+                // Activate a directory -> navigate to that dir.
+                // Activate a file -> accept
+                // Activate a non-existing name -> accept
+                let (maybe_next_path, exists) = self.selected_path();
+                if exists == Some(true) {
+                    next_path = Some(maybe_next_path);
                 } else {
                     output = Output::Ok;
                 }
@@ -821,6 +875,31 @@ impl FileChooser {
 
         output
     }
+
+    // The bool is Some(true) if it is a dir, Some(false) if it is a file, None if it doesn't exist
+    fn selected_path(&self) -> (PathBuf, Option<bool>) {
+        // Path::normalize_lexically would be handy here.
+        let file_name = self.file_name();
+
+        if file_name == "." {
+            (self.path.to_path_buf(), Some(true))
+        } else if file_name == ".." {
+            let p = self
+                .path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(self.path.clone());
+            (p, Some(true))
+        } else {
+            let exists = self
+                .entries
+                .iter()
+                .find(|e| e.name == file_name)
+                .map(|e| e.kind == FileEntryKind::Directory);
+            (self.path.join(file_name), exists)
+        }
+    }
+
     fn resort_entries(&mut self, specs: &[easy_imgui::TableColumnSortSpec]) {
         let sel = self.selected.map(|i| self.entries[i].name.clone());
 
@@ -905,7 +984,7 @@ pub trait PreviewBuilder<A> {
     /// The width reserved for the preview. Return 0.0 for no preview.
     fn width(&self) -> f32;
     /// Builds the UI for the preview.
-    fn do_ui(&mut self, ui: &imgui::Ui<A>, chooser: &FileChooser);
+    fn do_ui<D: DirEnum>(&mut self, ui: &imgui::Ui<A>, chooser: &FileChooser<D>);
 }
 
 /// A dummy implementation for `PreviewBuilder` that does nothing.
@@ -915,7 +994,7 @@ impl<A> PreviewBuilder<A> for NoPreview {
     fn width(&self) -> f32 {
         0.0
     }
-    fn do_ui(&mut self, _ui: &easy_imgui::Ui<A>, _chooser: &FileChooser) {}
+    fn do_ui<D: DirEnum>(&mut self, _ui: &easy_imgui::Ui<A>, _chooser: &FileChooser<D>) {}
 }
 
 impl<'a> UiParameters<'a, NoPreview> {
@@ -955,7 +1034,7 @@ impl FileEntry {
                     kind = FileEntryKind::File;
                     size = Some(meta.len());
                 }
-                modified = meta.modified().ok();
+                modified = meta.modified().ok().map(time::OffsetDateTime::from);
                 #[cfg(target_os = "windows")]
                 {
                     use std::os::windows::fs::MetadataExt;
@@ -1018,7 +1097,6 @@ image! {file_img = "file.png"}
 image! {folder_img = "folder.png"}
 image! {parent_img = "parent.png"}
 image! {hidden_img = "hidden.png"}
-#[cfg(target_os = "windows")]
 image! {mypc_img = "mypc.png"}
 
 /// Custom atlas for the FileChooser widget.
@@ -1050,12 +1128,7 @@ pub fn build_custom_atlas(atlas: &mut easy_imgui::FontAtlas) -> CustomAtlas {
     let folder_rr = do_rr(folder_img());
     let parent_rr = do_rr(parent_img());
     let hidden_rr = do_rr(hidden_img());
-
-    // This icon is only used on Windows
-    #[cfg(target_os = "windows")]
     let mypc_rr = do_rr(mypc_img());
-    #[cfg(not(target_os = "windows"))]
-    let mypc_rr = Default::default();
 
     CustomAtlas {
         file_rr,

@@ -17,8 +17,8 @@ fn main() {
 
 struct App {
     of_atlas: filechooser::CustomAtlas,
-    of_wnd: Option<filechooser::FileChooser>,
-    of_popup: Option<filechooser::FileChooser>,
+    of_wnd: Option<filechooser::FileChooser<Box<dyn filechooser::DynDirEnum>>>,
+    of_popup: Option<filechooser::FileChooser<filechooser::FileSystemDirEnum>>,
 }
 
 impl Application for App {
@@ -26,10 +26,21 @@ impl Application for App {
     type Data = ();
 
     fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
+        let z = std::fs::File::open("test.zip").unwrap();
+        let z = std::io::BufReader::new(z);
+        let mut z = zip::ZipArchive::new(z).unwrap();
+        let zdir = filechooser::ZipDirEnum::new(&mut z);
+
         let imgui = args.window.renderer().imgui();
         imgui.io_mut().set_allow_user_scaling(true);
-        let mut of = filechooser::FileChooser::new();
+        let mut of =
+            filechooser::FileChooser::with_dir_enum(easy_imgui_filechooser::box_dir_enum(zdir));
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
+        of.add_filter(filechooser::Filter {
+            id: filechooser::FilterId(-1),
+            text: "Zip".to_string(),
+            globs: vec![glob::Pattern::new("*.zip").unwrap()],
+        });
         of.add_filter(filechooser::Filter {
             id: filechooser::FilterId(0),
             text: "Text".to_string(),
@@ -71,7 +82,10 @@ impl imgui::UiBuilder for App {
 
         if in_window {
             if self.of_wnd.is_none() {
-                let of = filechooser::FileChooser::new();
+                let of =
+                    filechooser::FileChooser::with_dir_enum(easy_imgui_filechooser::box_dir_enum(
+                        filechooser::FileSystemDirEnumWithZip::new(),
+                    ));
                 self.of_wnd = Some(of);
             } else {
                 self.of_wnd = None;
@@ -107,7 +121,11 @@ impl imgui::UiBuilder for App {
                             };
                             let path = of_wnd.full_path(ext);
                             closed = true;
-                            dbg!(of_wnd, path);
+
+                            let _ = dbg!(
+                                of_wnd,
+                                filechooser::FileSystemDirEnumWithZip::analyze(&path)
+                            );
                         }
                     }
                 });

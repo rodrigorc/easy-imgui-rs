@@ -2735,6 +2735,15 @@ impl<A> Ui<A> {
             ImGui_SetNextItemOpen(is_open, cond.bits());
         }
     }
+    pub fn set_next_item_storage_id(&self, id: ImGuiID) {
+        unsafe { ImGui_SetNextItemStorageID(id) }
+    }
+    pub fn tree_node_to_label_spacing(&self) -> f32 {
+        unsafe { ImGui_GetTreeNodeToLabelSpacing() }
+    }
+    pub fn tree_node_get_open(&self, id: ImGuiID) -> bool {
+        unsafe { ImGui_TreeNodeGetOpen(id) }
+    }
     pub fn set_keyboard_focus_here(&self, offset: i32) {
         unsafe { ImGui_SetKeyboardFocusHere(offset) }
     }

@@ -318,6 +318,8 @@ imgui_flags! {
         MouseButtonLeft,
         MouseButtonRight,
         MouseButtonMiddle,
+        EnableNav,
+        AllowOverlap,
     }
 }
 
@@ -1030,7 +1032,8 @@ imgui_flags! {
         ClearOnClickVoid,
         ScopeWindow,
         ScopeRect,
-        SelectOnClick,
+        SelectOnAuto,
+        SelectOnClickAlways,
         SelectOnClickRelease,
         //RangeSelect2d,
         NavWrapX,

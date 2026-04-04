@@ -267,6 +267,8 @@ bitflags::bitflags! {
     pub struct Flags: u32 {
         /// Shows the "Read only" check.
         const SHOW_READ_ONLY = 1;
+        /// Doesn't allow to select a non-existing file.
+        const MUST_EXIST = 2;
     }
 }
 
@@ -280,6 +282,14 @@ impl<D: DirEnum + Default> FileChooser<D> {
     pub fn new() -> Self {
         Self::default()
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum SelectedPathRes {
+    Directory,
+    File,
+    NewEntry,
+    Forbidden,
 }
 
 impl<D: DirEnum> FileChooser<D> {
@@ -428,7 +438,9 @@ impl<D: DirEnum> FileChooser<D> {
     /// a default extension depending on the active filter.
     pub fn full_path(&self, default_extension: Option<&str>) -> PathBuf {
         let (mut res, exists) = self.selected_path();
-        if let (None, Some(new_ext), None) = (res.extension(), default_extension, exists) {
+        if let (None, Some(new_ext), SelectedPathRes::NewEntry) =
+            (res.extension(), default_extension, exists)
+        {
             res.set_extension(new_ext);
         }
         res
@@ -734,11 +746,8 @@ impl<D: DirEnum> FileChooser<D> {
                     {
                         // Change the selected file
                         self.selected = Some(i_entry);
-                        // Copy the selected name to `file_name`. Only regular files, no
-                        // directories.
-                        if entry.kind == FileEntryKind::File {
-                            self.file_name = entry.name.clone();
-                        }
+                        // Copy the selected name to `file_name`
+                        self.file_name = entry.name.clone();
                         // If double click, confirm the widget.
                         if ui.is_mouse_double_clicked(easy_imgui::MouseButton::Left) {
                             match entry.kind {
@@ -828,7 +837,9 @@ impl<D: DirEnum> FileChooser<D> {
         }
 
         let font_sz = ui.get_font_size();
-        let can_ok = !self.file_name.is_empty() && !self.path.as_os_str().is_empty();
+
+        let (maybe_next_path, exists) = self.selected_path();
+        let can_ok = exists != SelectedPathRes::Forbidden;
         ui.with_disabled(!can_ok, || {
             if ui
                 .button_config(lbl_id(tr!("OK"), "ok"))
@@ -838,14 +849,16 @@ impl<D: DirEnum> FileChooser<D> {
                 | ui.shortcut(imgui::Key::KeypadEnter)
                 | (can_ok && press_enter)
             {
-                // Activate a directory -> navigate to that dir.
-                // Activate a file -> accept
-                // Activate a non-existing name -> accept
-                let (maybe_next_path, exists) = self.selected_path();
-                if exists == Some(true) {
-                    next_path = Some(maybe_next_path);
-                } else {
-                    output = Output::Ok;
+                // Maybe activate something...
+                match exists {
+                    // It is a dir: navigate
+                    SelectedPathRes::Directory => next_path = Some(maybe_next_path),
+                    // It is a file: accept
+                    SelectedPathRes::File => output = Output::Ok,
+                    // New file: accept
+                    SelectedPathRes::NewEntry => output = Output::Ok,
+                    // Invalid: ignore
+                    SelectedPathRes::Forbidden => (),
                 }
             }
         });
@@ -877,26 +890,39 @@ impl<D: DirEnum> FileChooser<D> {
     }
 
     // The bool is Some(true) if it is a dir, Some(false) if it is a file, None if it doesn't exist
-    fn selected_path(&self) -> (PathBuf, Option<bool>) {
+    fn selected_path(&self) -> (PathBuf, SelectedPathRes) {
         // Path::normalize_lexically would be handy here.
         let file_name = self.file_name();
 
-        if file_name == "." {
-            (self.path.to_path_buf(), Some(true))
+        if file_name == "" {
+            (PathBuf::new(), SelectedPathRes::Forbidden)
+        } else if file_name == "." {
+            (self.path.to_path_buf(), SelectedPathRes::Directory)
         } else if file_name == ".." {
             let p = self
                 .path
                 .parent()
                 .map(|p| p.to_path_buf())
                 .unwrap_or(self.path.clone());
-            (p, Some(true))
+            (p, SelectedPathRes::Directory)
         } else {
             let exists = self
                 .entries
                 .iter()
                 .find(|e| e.name == file_name)
-                .map(|e| e.kind == FileEntryKind::Directory);
-            (self.path.join(file_name), exists)
+                .map(|e| e.kind);
+            let res = match exists {
+                Some(FileEntryKind::File) => SelectedPathRes::File,
+                Some(_) => SelectedPathRes::Directory,
+                None => {
+                    if self.flags.contains(Flags::MUST_EXIST) {
+                        SelectedPathRes::Forbidden
+                    } else {
+                        SelectedPathRes::NewEntry
+                    }
+                }
+            };
+            (self.path.join(file_name), res)
         }
     }
 

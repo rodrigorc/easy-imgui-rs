@@ -82,10 +82,11 @@ impl imgui::UiBuilder for App {
 
         if in_window {
             if self.of_wnd.is_none() {
-                let of =
+                let mut of =
                     filechooser::FileChooser::with_dir_enum(easy_imgui_filechooser::box_dir_enum(
                         filechooser::FileSystemDirEnumWithZip::new(),
                     ));
+                of.add_flags(filechooser::Flags::MUST_EXIST);
                 self.of_wnd = Some(of);
             } else {
                 self.of_wnd = None;

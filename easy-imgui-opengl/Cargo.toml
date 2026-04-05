@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-opengl"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "OpenGL helper types, designed to work with easy-imgui"
 license = "MIT"
@@ -10,6 +10,6 @@ keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
 cgmath = "0.18.0"
-glow = "0.16.0"
+glow = "0.17.0"
 log = "0.4.22"
 smallvec = "1.13.2"

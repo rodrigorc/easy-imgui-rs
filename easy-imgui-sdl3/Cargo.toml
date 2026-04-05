@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-sdl3"
-version = "0.21.0"
+version = "0.22.0"
 edition = "2024"
 description = "Binding of the SDL3+OpenGL3 Dear Imgui backends for the easy-imgui"
 license = "MIT"
@@ -16,15 +16,15 @@ freetype = ["easy-imgui/freetype"]
 [dependencies]
 # Ensure that sdl3 and easy-imgui-sys depend on the same version of sdl3-sys crate
 sdl3 = "0.17.3"
-glow = "0.16.0"
+glow = "0.17.0"
 send_wrapper = "0.6.0"
 
 [dependencies.easy-imgui-sys]
-version = "0.21.0"
+version = "0.22.0"
 features = ["backend-opengl3", "backend-sdl3"]
 
 [dependencies.easy-imgui]
-version = "0.21.0"
+version = "0.22.0"
 features = ["future"]
 
 [build-dependencies]

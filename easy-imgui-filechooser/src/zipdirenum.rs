@@ -1,3 +1,7 @@
+/*!
+ * In this module there are `DirEnum` implementations to read  ZIP files.
+ */
+
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
@@ -17,11 +21,16 @@ enum ZipEntry {
     },
 }
 
+/// [`DirEnum`] impl for ZIP files.
 pub struct ZipDirEnum {
     root: ZipEntry,
 }
 
 impl ZipDirEnum {
+    /// Creates a `ZipDirEnum` based on a ZIP file.
+    ///
+    /// Afther this object is created you can drop the `ZipArchive`, because it reads all the
+    /// directory into memory.
     pub fn new<R: std::io::Read + std::io::Seek>(zip: &mut zip::ZipArchive<R>) -> ZipDirEnum {
         let mut root = ZipEntry::Directory(ZipDir::default());
         for i in 0..zip.len() {
@@ -126,13 +135,14 @@ impl DirEnum for ZipDirEnum {
     }
 }
 
+/// [`DirEnum`] impl that reads the whole filesystem, viewing ZIP files as directories.
 #[derive(Default)]
 pub struct FileSystemDirEnumWithZip {
     fs: FileSystemDirEnum,
     zip: RefCell<Option<(PathBuf, ZipDirEnum)>>,
 }
 
-/// Return type for `FileSystemDirEnumWithZip::analyze`.
+/// Return type for [`FileSystemDirEnumWithZip::analyze`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ZipAnalyzeResult<'a> {
     /// It is a normal entry in the filesystem, or maybe an unexisting or invalid entry.
@@ -142,6 +152,7 @@ pub enum ZipAnalyzeResult<'a> {
 }
 
 impl FileSystemDirEnumWithZip {
+    /// Creates a new object of this type.
     pub fn new() -> FileSystemDirEnumWithZip {
         FileSystemDirEnumWithZip::default()
     }

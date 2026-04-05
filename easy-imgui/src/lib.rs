@@ -4,8 +4,8 @@
  * Crate for easy integration of the [Dear ImGui][dearimgui] library.
  *
  * This crate is a bind to the Dear ImGui library only. There is also a matching rendering
- * library, [`easy-imgui-renderer`](https://docs.rs/easy-imgui-renderer), that renders the UI using OpenGl, and a matching
- * window-integrated library, [`easy-imgui-window`](https://docs.rs/easy-imgui-window/), that enables to build a full desktop
+ * library, [`easy-imgui-renderer`](../easy_imgui_renderer/index.html), that renders the UI using OpenGl, and a matching
+ * window-integrated library, [`easy-imgui-window`](../easy_imgui_window/index.html), that enables to build a full desktop
  * application in just a few lines.
  *
  * If you don't know where to start, then start with the latter. Take a look at the [examples].
@@ -107,13 +107,13 @@
  *    `stb_truetype` library.
  *
  * # Usage
- * It is easier to use one of the higher level crates [`easy-imgui-window`] or [`easy-imgui-renderer`].
+ * It is easier to use one of the higher level crates [`easy-imgui-window`](../easy_imgui_window/index.html) or [`easy-imgui-renderer`](../easy_imgui_renderer/index.html).
  * But if you intend to render the UI yourself, then you can use this directly.
  *
  * These are the main pieces of this crate:
  *  * [`Context`]: It represents the ImGui context. In DearImgui this is a global variable. Here it
  *    is a thread-local variable. Still, since it is implicit in most API calls, most uses of this
- *    type are unsafe. If you use [`easy-imgui-window`] or [`easy-imgui-renderer`] you will rarely
+ *    type are unsafe. If you use `easy-imgui-window` or `easy-imgui-renderer` you will rarely
  *    need to touch this type directly.
  *  * [`Ui`]: A frame that is being built. Most ImGui functions are members of `Ui`.
  *  * [`UiBuilder`]: A trait that your application implements do build your user interface.

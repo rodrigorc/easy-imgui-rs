@@ -1,9 +1,10 @@
-/**
- * A FileChooser widget for easy-imgui.
+/*!
+ * A FileChooser widget for [`easy-imgui`](../easy_imgui/index.html).
  *
  * This widget does not create a window or a popup. It is up to you to create it in a
  * proper place.
  */
+
 use bytesize::ByteSize;
 use easy_imgui::{self as imgui, CustomRectIndex, id, lbl, lbl_id};
 pub use glob::{self, Pattern};
@@ -38,16 +39,30 @@ macro_rules! tr {
     ($($args:tt)*) => { format!($($args)*) };
 }
 
+/// Trait to customize the filesystem view.
 pub trait DirEnum {
+    /// The roots of the filesystem, if more than one.
+    ///
+    /// If not empty FileChooser will show a virtual directory will all available roots.
+    /// It should return entries of type [`FileEntryKind::Root`].
+    ///
+    /// In Windows, the roots are the drive letters: C:, D:...
+    /// In normal systems, just return an empty iterator, and it will use the
+    /// regular `/` as root.
     fn roots(&self) -> impl Iterator<Item = FileEntry>;
+    /// Read the entries of a directory.
     fn read_dir<'s>(
         &'s self,
         path: &Path,
     ) -> std::io::Result<impl Iterator<Item = FileEntry> + use<'s, Self>>;
+    /// Converts the given path to an absolute one.
+    ///
+    /// This is used to enumeate the parent directories if you start with a relative path.
     fn absolute(&self, path: &Path) -> std::io::Result<PathBuf>;
 }
 
 /// `DirEnum` is not object safe, to be able to use a type-erased dyn object, use this instead.
+///
 /// You can convert one into the other using `box_dir_enum`.
 pub trait DynDirEnum {
     fn dyn_roots(&self) -> Box<dyn Iterator<Item = FileEntry> + '_>;
@@ -91,6 +106,9 @@ impl<T: DirEnum> DynDirEnum for T {
     }
 }
 
+/// Boxes a type that implements [`DirEnum`], erasing its type.
+///
+/// The returning type also implements `DirEnum`.
 pub fn box_dir_enum(t: impl DirEnum + 'static) -> Box<dyn DynDirEnum> {
     Box::new(t)
 }
@@ -100,6 +118,9 @@ mod zipdirenum;
 #[cfg(feature = "zip")]
 pub use zipdirenum::{FileSystemDirEnumWithZip, ZipAnalyzeResult, ZipDirEnum};
 
+/// The default implementation of [`DirEnum`].
+///
+/// Enumerates regular entries in the filesystem.
 #[derive(Default)]
 pub struct FileSystemDirEnum;
 
@@ -155,6 +176,7 @@ impl DirEnum for FileSystemDirEnum {
     }
 }
 
+/// The default `FileChooser` type.
 pub type FileChooser = FileChooserD<FileSystemDirEnum>;
 
 /// Main widget to create a file chooser.
@@ -209,21 +231,34 @@ impl<D: DirEnum> std::fmt::Debug for FileChooserD<D> {
     }
 }
 
+/// Kind of entry in the filesystem.
+///
+/// It affects the icon and behavior.
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FileEntryKind {
+    /// Used for the `..` present in most directories.
     Parent,
+    /// It is a directory, not a file.
     Directory,
+    /// It is a regular file.
     File,
-    Root, // drive letter
+    /// Entry from the [`DirEnum::roots`] function.
+    Root,
 }
 
+/// An entry in a directory.
 #[derive(Debug)]
 pub struct FileEntry {
+    /// The name of the entry.
     pub name: OsString,
+    /// The type of entry.
     pub kind: FileEntryKind,
+    /// The size of the entry in bytes, if known.
     pub size: Option<u64>,
+    /// The last modified time of the entry, if known.
     pub modified: Option<time::OffsetDateTime>,
+    /// Whether this entry is considered hidden.
     pub hidden: bool,
 }
 
@@ -266,6 +301,7 @@ impl Filter {
 }
 
 bitflags::bitflags! {
+    /// Flags that modify the default behavior of the `FileChooser`.
     pub struct Flags: u32 {
         /// Shows the "Read only" check.
         const SHOW_READ_ONLY = 1;
@@ -281,6 +317,7 @@ impl<D: DirEnum + Default> Default for FileChooserD<D> {
 }
 
 impl<D: DirEnum + Default> FileChooserD<D> {
+    /// Creates a `FileChooser` dialog with default options.
     pub fn new() -> Self {
         Self::default()
     }
@@ -295,7 +332,7 @@ enum ApplicablePathRes {
 }
 
 impl<D: DirEnum> FileChooserD<D> {
-    /// Creates a new default widget.
+    /// Creates a new `FileChooser` with the given `DirEnum`.
     pub fn with_dir_enum(dir_enum: D) -> FileChooserD<D> {
         FileChooserD {
             dir_enum,

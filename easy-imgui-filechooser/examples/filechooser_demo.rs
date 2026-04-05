@@ -17,8 +17,8 @@ fn main() {
 
 struct App {
     of_atlas: filechooser::CustomAtlas,
-    of_wnd: Option<filechooser::FileChooser<Box<dyn filechooser::DynDirEnum>>>,
-    of_popup: Option<filechooser::FileChooser<filechooser::FileSystemDirEnum>>,
+    of_wnd: Option<filechooser::FileChooserD<Box<dyn filechooser::DynDirEnum>>>,
+    of_popup: Option<filechooser::FileChooserD<filechooser::FileSystemDirEnum>>,
 }
 
 impl Application for App {
@@ -34,7 +34,7 @@ impl Application for App {
         let imgui = args.window.renderer().imgui();
         imgui.io_mut().set_allow_user_scaling(true);
         let mut of =
-            filechooser::FileChooser::with_dir_enum(easy_imgui_filechooser::box_dir_enum(zdir));
+            filechooser::FileChooserD::with_dir_enum(easy_imgui_filechooser::box_dir_enum(zdir));
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
         of.add_filter(filechooser::Filter {
             id: filechooser::FilterId(-1),
@@ -83,7 +83,7 @@ impl imgui::UiBuilder for App {
         if in_window {
             if self.of_wnd.is_none() {
                 let mut of =
-                    filechooser::FileChooser::with_dir_enum(easy_imgui_filechooser::box_dir_enum(
+                    filechooser::FileChooserD::with_dir_enum(easy_imgui_filechooser::box_dir_enum(
                         filechooser::FileSystemDirEnumWithZip::new(),
                     ));
                 of.add_flags(filechooser::Flags::MUST_EXIST);
@@ -94,7 +94,7 @@ impl imgui::UiBuilder for App {
         }
         if in_popup {
             if self.of_popup.is_none() {
-                let of = filechooser::FileChooser::new();
+                let of = filechooser::FileChooserD::new();
                 self.of_popup = Some(of);
                 ui.open_popup(id("popup_file"));
             } else {

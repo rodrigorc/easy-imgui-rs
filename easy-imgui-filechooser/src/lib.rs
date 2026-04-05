@@ -98,7 +98,7 @@ pub fn box_dir_enum(t: impl DirEnum + 'static) -> Box<dyn DynDirEnum> {
 #[cfg(feature = "zip")]
 mod zipdirenum;
 #[cfg(feature = "zip")]
-pub use zipdirenum::{FileSystemDirEnumWithZip, ZipDirEnum};
+pub use zipdirenum::{FileSystemDirEnumWithZip, ZipAnalyzeResult, ZipDirEnum};
 
 #[derive(Default)]
 pub struct FileSystemDirEnum;
@@ -155,10 +155,12 @@ impl DirEnum for FileSystemDirEnum {
     }
 }
 
+pub type FileChooser = FileChooserD<FileSystemDirEnum>;
+
 /// Main widget to create a file chooser.
 ///
 /// Create one of these when the widget is opened, and then call `do_ui` for each frame.
-pub struct FileChooser<D: DirEnum> {
+pub struct FileChooserD<D: DirEnum> {
     dir_enum: D,
     path: PathBuf,
     flags: Flags,
@@ -196,7 +198,7 @@ pub enum Output {
     Ok,
 }
 
-impl<D: DirEnum> std::fmt::Debug for FileChooser<D> {
+impl<D: DirEnum> std::fmt::Debug for FileChooserD<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FileChooser")
             .field("path", &self.path())
@@ -272,30 +274,30 @@ bitflags::bitflags! {
     }
 }
 
-impl<D: DirEnum + Default> Default for FileChooser<D> {
+impl<D: DirEnum + Default> Default for FileChooserD<D> {
     fn default() -> Self {
-        FileChooser::with_dir_enum(D::default())
+        FileChooserD::with_dir_enum(D::default())
     }
 }
 
-impl<D: DirEnum + Default> FileChooser<D> {
+impl<D: DirEnum + Default> FileChooserD<D> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum SelectedPathRes {
+enum ApplicablePathRes {
     Directory,
-    File,
+    ExistingFile,
     NewEntry,
     Forbidden,
 }
 
-impl<D: DirEnum> FileChooser<D> {
+impl<D: DirEnum> FileChooserD<D> {
     /// Creates a new default widget.
-    pub fn with_dir_enum(dir_enum: D) -> FileChooser<D> {
-        FileChooser {
+    pub fn with_dir_enum(dir_enum: D) -> FileChooserD<D> {
+        FileChooserD {
             dir_enum,
             path: PathBuf::default(),
             flags: Flags::empty(),
@@ -389,24 +391,30 @@ impl<D: DirEnum> FileChooser<D> {
         &self.path
     }
 
+    /// Gets the selected entry, if any.
+    pub fn selected_entry(&self) -> Option<&FileEntry> {
+        let i_sel = self.selected?;
+        Some(&self.entries[i_sel])
+    }
+
     /// Gets the current file name.
     ///
-    /// To get the final selection it is better to use the `OutputOk` struct.
+    /// To get the final selection it is usually better to use the `full_path`.
     /// This is more useful for interactive things, such as previews.
     pub fn file_name(&self) -> &OsStr {
         // If the selected item maches the typed name (not counting lossy bits), then
         // use the original entry.name, that will better represent the original OsString,
         // and likely the user intent.
         // This is important only if the file has non-UTF-8 sequences.
-        if let Some(i_sel) = self.selected {
-            let entry = &self.entries[i_sel];
-            if entry.kind == FileEntryKind::File && self.file_name == *entry.name.to_string_lossy()
-            {
-                return &entry.name;
-            }
+        if let Some(entry) = self.selected_entry()
+            && entry.kind == FileEntryKind::File
+            && self.file_name == *entry.name.to_string_lossy()
+        {
+            return &entry.name;
         }
         &self.file_name
     }
+
     /// Gets the current active filter, if any.
     ///
     /// It is None only if no filters have been added.
@@ -437,8 +445,8 @@ impl<D: DirEnum> FileChooser<D> {
     /// of its own, and it doesn't exist in disk. This is useful if you want to set
     /// a default extension depending on the active filter.
     pub fn full_path(&self, default_extension: Option<&str>) -> PathBuf {
-        let (mut res, exists) = self.selected_path();
-        if let (None, Some(new_ext), SelectedPathRes::NewEntry) =
+        let (mut res, exists) = self.applicable_path();
+        if let (None, Some(new_ext), ApplicablePathRes::NewEntry) =
             (res.extension(), default_extension, exists)
         {
             res.set_extension(new_ext);
@@ -467,7 +475,7 @@ impl<D: DirEnum> FileChooser<D> {
     pub fn do_ui<'a, A, Params, Preview>(&mut self, ui: &'a imgui::Ui<A>, params: Params) -> Output
     where
         Params: Into<UiParameters<'a, Preview>>,
-        Preview: PreviewBuilder<A>,
+        Preview: PreviewBuilder<A, D>,
     {
         if self.entries.is_empty() {
             let res = self.set_path(".");
@@ -838,8 +846,8 @@ impl<D: DirEnum> FileChooser<D> {
 
         let font_sz = ui.get_font_size();
 
-        let (maybe_next_path, exists) = self.selected_path();
-        let can_ok = exists != SelectedPathRes::Forbidden;
+        let (maybe_next_path, exists) = self.applicable_path();
+        let can_ok = exists != ApplicablePathRes::Forbidden;
         ui.with_disabled(!can_ok, || {
             if ui
                 .button_config(lbl_id(tr!("OK"), "ok"))
@@ -852,13 +860,13 @@ impl<D: DirEnum> FileChooser<D> {
                 // Maybe activate something...
                 match exists {
                     // It is a dir: navigate
-                    SelectedPathRes::Directory => next_path = Some(maybe_next_path),
+                    ApplicablePathRes::Directory => next_path = Some(maybe_next_path),
                     // It is a file: accept
-                    SelectedPathRes::File => output = Output::Ok,
+                    ApplicablePathRes::ExistingFile => output = Output::Ok,
                     // New file: accept
-                    SelectedPathRes::NewEntry => output = Output::Ok,
+                    ApplicablePathRes::NewEntry => output = Output::Ok,
                     // Invalid: ignore
-                    SelectedPathRes::Forbidden => (),
+                    ApplicablePathRes::Forbidden => (),
                 }
             }
         });
@@ -889,40 +897,69 @@ impl<D: DirEnum> FileChooser<D> {
         output
     }
 
-    // The bool is Some(true) if it is a dir, Some(false) if it is a file, None if it doesn't exist
-    fn selected_path(&self) -> (PathBuf, SelectedPathRes) {
+    fn applicable_path(&self) -> (PathBuf, ApplicablePathRes) {
         // Path::normalize_lexically would be handy here.
-        let file_name = self.file_name();
+        let mut file_name = self.file_name();
 
         if file_name == "" {
-            (PathBuf::new(), SelectedPathRes::Forbidden)
+            (PathBuf::new(), ApplicablePathRes::Forbidden)
         } else if file_name == "." {
-            (self.path.to_path_buf(), SelectedPathRes::Directory)
+            (self.path.to_path_buf(), ApplicablePathRes::Directory)
         } else if file_name == ".." {
             let p = self
                 .path
                 .parent()
                 .map(|p| p.to_path_buf())
                 .unwrap_or(self.path.clone());
-            (p, SelectedPathRes::Directory)
+            (p, ApplicablePathRes::Directory)
         } else {
             let exists = self
-                .entries
+                .visible_entries
                 .iter()
-                .find(|e| e.name == file_name)
-                .map(|e| e.kind);
-            let res = match exists {
-                Some(FileEntryKind::File) => SelectedPathRes::File,
-                Some(_) => SelectedPathRes::Directory,
-                None => {
-                    if self.flags.contains(Flags::MUST_EXIST) {
-                        SelectedPathRes::Forbidden
+                .map(|&i| &self.entries[i])
+                .find_map(|e| {
+                    if e.name == file_name {
+                        match e.kind {
+                            FileEntryKind::File => {
+                                file_name = &e.name;
+                                Some(ApplicablePathRes::ExistingFile)
+                            }
+                            _ => Some(ApplicablePathRes::Directory),
+                        }
                     } else {
-                        SelectedPathRes::NewEntry
+                        None
                     }
-                }
-            };
-            (self.path.join(file_name), res)
+                })
+                .or_else(|| {
+                    // If there is no entry with the exact name, look for one without the extension
+                    if Path::new(&file_name).extension().is_some() {
+                        return None;
+                    }
+                    let candidate = self
+                        .visible_entries
+                        .iter()
+                        .map(|&i| &self.entries[i])
+                        .find_map(|e| {
+                            if e.kind != FileEntryKind::File {
+                                return None;
+                            }
+                            let p = Path::new(&e.name);
+                            if p.file_stem() != Some(file_name) {
+                                return None;
+                            }
+                            Some(&e.name)
+                        })?;
+                    file_name = candidate;
+                    Some(ApplicablePathRes::ExistingFile)
+                })
+                .unwrap_or_else(|| {
+                    if self.flags.contains(Flags::MUST_EXIST) {
+                        ApplicablePathRes::Forbidden
+                    } else {
+                        ApplicablePathRes::NewEntry
+                    }
+                });
+            (self.path.join(file_name), exists)
         }
     }
 
@@ -1006,21 +1043,21 @@ pub struct UiParameters<'a, Preview> {
 }
 
 /// A trait to build the "preview" section of the UI.
-pub trait PreviewBuilder<A> {
+pub trait PreviewBuilder<A, D: DirEnum = FileSystemDirEnum> {
     /// The width reserved for the preview. Return 0.0 for no preview.
     fn width(&self) -> f32;
     /// Builds the UI for the preview.
-    fn do_ui<D: DirEnum>(&mut self, ui: &imgui::Ui<A>, chooser: &FileChooser<D>);
+    fn do_ui(&mut self, ui: &imgui::Ui<A>, chooser: &FileChooserD<D>);
 }
 
 /// A dummy implementation for `PreviewBuilder` that does nothing.
 pub struct NoPreview;
 
-impl<A> PreviewBuilder<A> for NoPreview {
+impl<A, D: DirEnum> PreviewBuilder<A, D> for NoPreview {
     fn width(&self) -> f32 {
         0.0
     }
-    fn do_ui<D: DirEnum>(&mut self, _ui: &easy_imgui::Ui<A>, _chooser: &FileChooser<D>) {}
+    fn do_ui(&mut self, _ui: &easy_imgui::Ui<A>, _chooser: &FileChooserD<D>) {}
 }
 
 impl<'a> UiParameters<'a, NoPreview> {
@@ -1032,7 +1069,10 @@ impl<'a> UiParameters<'a, NoPreview> {
         }
     }
     /// Adds a preview object to this `UiParameters`.
-    pub fn with_preview<A, P: PreviewBuilder<A>>(self, preview: P) -> UiParameters<'a, P> {
+    pub fn with_preview<A, D: DirEnum, P: PreviewBuilder<A, D>>(
+        self,
+        preview: P,
+    ) -> UiParameters<'a, P> {
         UiParameters {
             atlas: self.atlas,
             preview,

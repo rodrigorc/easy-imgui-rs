@@ -929,6 +929,8 @@ impl<D: DirEnum> FileChooserD<D> {
 
         if let Some(next_path) = next_path {
             let _ = self.set_path(next_path);
+            // Changing the directory deletes the typed name, because it is usually the directory itself, no longer useful.
+            self.set_file_name("");
         }
 
         output

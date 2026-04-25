@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "easy-imgui-filechooser"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bitflags 2.11.0",
  "bytesize",

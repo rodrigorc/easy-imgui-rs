@@ -25,7 +25,7 @@ jobs:
               libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
       - name: Build examples
         run: |
-          cargo build --examples --features "sdl3/build-from-source"
+          cargo build --examples --features "sdl3/build-from-source,easy-imgui-filechooser/tr,easy-imgui-filechooser/zip"
 
   Windows:
     runs-on: windows-latest
@@ -35,7 +35,7 @@ jobs:
           submodules: 'recursive'
       - name: Build examples
         run: |
-          cargo build --examples --features "sdl3/build-from-source"
+          cargo build --examples --features "sdl3/build-from-source,easy-imgui-filechooser/tr,easy-imgui-filechooser/zip"
 
   MacOS:
     runs-on: macos-latest
@@ -45,5 +45,5 @@ jobs:
           submodules: 'recursive'
       - name: Build examples
         run: |
-          cargo build --examples --features "sdl3/build-from-source"
+          cargo build --examples --features "sdl3/build-from-source,easy-imgui-filechooser/tr,easy-imgui-filechooser/zip"
 

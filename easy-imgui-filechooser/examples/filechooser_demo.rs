@@ -26,15 +26,11 @@ impl Application for App {
     type Data = ();
 
     fn new(args: easy_imgui_window::Args<'_, Self>) -> Self {
-        let z = std::fs::File::open("test.zip").unwrap();
-        let z = std::io::BufReader::new(z);
-        let mut z = zip::ZipArchive::new(z).unwrap();
-        let zdir = filechooser::ZipDirEnum::new(&mut z);
-
         let imgui = args.window.renderer().imgui();
         imgui.io_mut().set_allow_user_scaling(true);
-        let mut of =
-            filechooser::FileChooserD::with_dir_enum(easy_imgui_filechooser::box_dir_enum(zdir));
+        let mut of = filechooser::FileChooserD::with_dir_enum(
+            easy_imgui_filechooser::box_dir_enum(filechooser::FileSystemDirEnumWithZip::new()),
+        );
         of.add_flags(filechooser::Flags::SHOW_READ_ONLY);
         of.add_filter(filechooser::Filter {
             id: filechooser::FilterId(-1),

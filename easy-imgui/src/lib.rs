@@ -1275,7 +1275,7 @@ macro_rules! decl_builder_with_maybe_opt {
             /// element.
             ///
             /// This is useful for example to modify the style of a window without changing the
-            /// stily of its content.
+            /// style of its content.
             pub fn push_for_begin<P2: Pushable>(self, push: P2) -> $sname< $($life,)* $($gen_n,)* (P, P2) > {
                 $sname {
                     $(

@@ -4083,14 +4083,24 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    pub fn add_line_h(&self, min_x: f32, max_x: f32, y: f32, color: Color, thickness: f32) {
+        unsafe {
+            ImDrawList_AddLineH(self.ptr, min_x, max_x, y, color.as_u32(), thickness);
+        }
+    }
+    pub fn add_line_v(&self, x: f32, min_y: f32, max_y: f32, color: Color, thickness: f32) {
+        unsafe {
+            ImDrawList_AddLineV(self.ptr, x, min_y, max_y, color.as_u32(), thickness);
+        }
+    }
     pub fn add_rect(
         &self,
         p_min: Vector2,
         p_max: Vector2,
         color: Color,
         rounding: f32,
-        flags: DrawFlags,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddRect(
@@ -4099,8 +4109,8 @@ impl<A> WindowDrawList<'_, A> {
                 &v2_to_im(p_max),
                 color.as_u32(),
                 rounding,
-                flags.bits(),
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4348,15 +4358,15 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
-    pub fn add_polyline(&self, points: &[ImVec2], color: Color, flags: DrawFlags, thickness: f32) {
+    pub fn add_polyline(&self, points: &[ImVec2], color: Color, thickness: f32, flags: DrawFlags) {
         unsafe {
             ImDrawList_AddPolyline(
                 self.ptr,
                 points.as_ptr(),
                 points.len() as i32,
                 color.as_u32(),
-                flags.bits(),
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -5488,6 +5498,7 @@ impl Default for WindowClass {
             DockNodeFlagsOverrideSet: 0,
             DockingAlwaysTabBar: false,
             DockingAllowUnclassed: true,
+            PlatformIconData: std::ptr::null_mut(),
         })
     }
 }

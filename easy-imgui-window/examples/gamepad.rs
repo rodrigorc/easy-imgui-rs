@@ -185,8 +185,8 @@ impl UiBuilder for MyApp {
                 p1,
                 Color::new(0.5, 0.5, 0.5, 1.0),
                 0.0,
-                DrawFlags::None,
                 4.0,
+                DrawFlags::None,
             );
 
             static BUTTONS: &[[f32; 2]] = &[
@@ -211,7 +211,7 @@ impl UiBuilder for MyApp {
                     if filled {
                         dr.add_rect_filled(tl, br, color, 2.0, DrawFlags::RoundCornersAll);
                     } else {
-                        dr.add_rect(tl, br, color, 2.0, DrawFlags::RoundCornersAll, 2.0);
+                        dr.add_rect(tl, br, color, 2.0, 2.0, DrawFlags::RoundCornersAll);
                     }
                 } else if filled {
                     dr.add_circle_filled(center, 10.0, color, 0);

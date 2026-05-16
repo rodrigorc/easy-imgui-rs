@@ -4510,6 +4510,151 @@ impl<A> WindowDrawList<'_, A> {
         }
     }
 
+    // Warning! Some path function are inline, reimplemented here.
+    pub fn path_clear(&self) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            path.Size = 0;
+        }
+    }
+    pub fn path_line_to(&self, v: Vector2) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            ImGui_ImVector_vec2_push_back(path, &v2_to_im(v));
+        }
+    }
+    pub fn path_line_to_merge_duplicate(&self, v: Vector2) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            if path.last().is_none_or(|d| d.x != v.x || d.y != v.y) {
+                ImGui_ImVector_vec2_push_back(path, &v2_to_im(v));
+            }
+        }
+    }
+    pub fn path_fill_convex(&self, color: Color) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            ImDrawList_AddConvexPolyFilled(self.ptr, path.Data, path.Size, color.as_u32());
+            path.Size = 0;
+        }
+    }
+    pub fn path_fill_concave(&self, color: Color) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            ImDrawList_AddConcavePolyFilled(self.ptr, path.Data, path.Size, color.as_u32());
+            path.Size = 0;
+        }
+    }
+    pub fn path_stroke(&self, color: Color, thickness: f32, flags: DrawFlags) {
+        unsafe {
+            let path = &mut (&mut *self.ptr)._Path;
+            ImDrawList_AddPolyline(
+                self.ptr,
+                path.Data,
+                path.Size,
+                color.as_u32(),
+                thickness,
+                flags.bits(),
+            );
+            path.Size = 0;
+        }
+    }
+    pub fn path_arc_to(
+        &self,
+        center: Vector2,
+        radius: f32,
+        a_min: f32,
+        a_max: f32,
+        num_segments: i32,
+    ) {
+        unsafe {
+            ImDrawList_PathArcTo(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                a_min,
+                a_max,
+                num_segments,
+            );
+        }
+    }
+    pub fn path_arc_to_fast(
+        &self,
+        center: Vector2,
+        radius: f32,
+        a_min_of_12: i32,
+        a_max_of_12: i32,
+    ) {
+        unsafe {
+            ImDrawList_PathArcToFast(
+                self.ptr,
+                &v2_to_im(center),
+                radius,
+                a_min_of_12,
+                a_max_of_12,
+            );
+        }
+    }
+    pub fn path_elliptical_arc_to(
+        &self,
+        center: Vector2,
+        radius: Vector2,
+        rot: f32,
+        a_min: f32,
+        a_max: f32,
+        num_segments: i32,
+    ) {
+        unsafe {
+            ImDrawList_PathEllipticalArcTo(
+                self.ptr,
+                &v2_to_im(center),
+                &v2_to_im(radius),
+                rot,
+                a_min,
+                a_max,
+                num_segments,
+            );
+        }
+    }
+    pub fn path_bezier_cubic_curve_to(
+        &self,
+        p2: Vector2,
+        p3: Vector2,
+        p4: Vector2,
+        num_segments: i32,
+    ) {
+        unsafe {
+            ImDrawList_PathBezierCubicCurveTo(
+                self.ptr,
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                &v2_to_im(p4),
+                num_segments,
+            );
+        }
+    }
+    pub fn path_bezier_quadratic_curve_to(&self, p2: Vector2, p3: Vector2, num_segments: i32) {
+        unsafe {
+            ImDrawList_PathBezierQuadraticCurveTo(
+                self.ptr,
+                &v2_to_im(p2),
+                &v2_to_im(p3),
+                num_segments,
+            );
+        }
+    }
+    pub fn path_rect(&self, rect_min: Vector2, rect_max: Vector2, rounding: f32, flags: DrawFlags) {
+        unsafe {
+            ImDrawList_PathRect(
+                self.ptr,
+                &v2_to_im(rect_min),
+                &v2_to_im(rect_max),
+                rounding,
+                flags.bits(),
+            );
+        }
+    }
+
     pub fn add_callback(&self, cb: impl FnOnce(&mut A) + 'static) {
         // Callbacks are only called once, convert the FnOnce into an FnMut to register
         // They are called after `do_ui` so first argument pointer is valid.

@@ -136,7 +136,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         // many people use the internals, so better to expose those, just do not use them lightly
         .allowlist_file(".*[/\\\\]imgui_internal.h")
         .header("non-inlines.cpp")
-        .allowlist_file(".*[/\\\\]non-inlines.cpp")
+        .allowlist_file("(.*[/\\\\])?non-inlines.cpp")
         .prepend_enum_name(false)
         .bitfield_enum(".*Flags_")
         .newtype_enum(".*");
@@ -188,7 +188,7 @@ extern thread_local ImGuiContext* MyImGuiTLS;
         }
         bindings = bindings
             .header("hack_msvc.cpp")
-            .allowlist_file("hack_msvc.cpp");
+            .allowlist_file("(.*[/\\\\])?hack_msvc.cpp");
     }
     if let Some(freetype) = &freetype {
         bindings = bindings.clang_arg("-DIMGUI_ENABLE_FREETYPE=1");

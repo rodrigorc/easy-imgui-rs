@@ -940,7 +940,7 @@ impl<D: DirEnum> FileChooserD<D> {
         // Path::normalize_lexically would be handy here.
         let mut file_name = self.file_name();
 
-        if file_name == "" {
+        if file_name.is_empty() {
             (PathBuf::new(), ApplicablePathRes::Forbidden)
         } else if file_name == "." {
             (self.path.to_path_buf(), ApplicablePathRes::Directory)

@@ -282,6 +282,7 @@ pub fn window_event(
                 }
             }
         }
+        #[allow(clippy::collapsible_match)]
         ScaleFactorChanged { scale_factor, .. } => {
             if !flags.contains(EventFlags::DoNotResize) {
                 main_window.ping_user_input();

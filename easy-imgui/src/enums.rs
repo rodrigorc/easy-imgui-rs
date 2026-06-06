@@ -704,6 +704,7 @@ imgui_flags! {
         NavEnableGamepad,
         NoMouse,
         NoMouseCursorChange,
+        NoKeyboard,
         DockingEnable,
         ViewportsEnable,
         IsSRGB,
@@ -987,6 +988,7 @@ imgui_flags_ex! {
 imgui_flags! {
     pub InputFlags: ImGuiInputFlags_ {
         None,
+        Repeat,
         RouteActive,
         RouteFocused,
         RouteGlobal,

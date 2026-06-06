@@ -10,34 +10,34 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=n==1 ? 0 : (n==0 || (n%100 > 0 && n%100 < "
 "20)) ? 1 : 2;\n"
 
-#: src/lib.rs:538
+#: src/lib.rs:664
 msgid "Search"
 msgstr "Caută"
 
-#: src/lib.rs:582
+#: src/lib.rs:709
 msgid "Name"
 msgstr "Nume"
 
-#: src/lib.rs:588
+#: src/lib.rs:715
 msgid "Size"
 msgstr "Mărime"
 
-#: src/lib.rs:594
+#: src/lib.rs:721
 msgid "Modified"
 msgstr "Modificat"
 
-#: src/lib.rs:718
+#: src/lib.rs:847
 msgid "File name"
 msgstr "Nume de fișier"
 
-#: src/lib.rs:757
+#: src/lib.rs:890
 msgid "OK"
 msgstr "OK"
 
-#: src/lib.rs:768
+#: src/lib.rs:912
 msgid "Cancel"
 msgstr "Renunță"
 
-#: src/lib.rs:777
+#: src/lib.rs:921
 msgid "Read only"
 msgstr "Doar citire"

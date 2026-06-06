@@ -9,34 +9,34 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: src/lib.rs:538
+#: src/lib.rs:664
 msgid "Search"
 msgstr "Hľadať"
 
-#: src/lib.rs:582
+#: src/lib.rs:709
 msgid "Name"
 msgstr "Názov"
 
-#: src/lib.rs:588
+#: src/lib.rs:715
 msgid "Size"
 msgstr "Veľkosť"
 
-#: src/lib.rs:594
+#: src/lib.rs:721
 msgid "Modified"
 msgstr "Čas zmeny"
 
-#: src/lib.rs:718
+#: src/lib.rs:847
 msgid "File name"
 msgstr "Názov súboru"
 
-#: src/lib.rs:757
+#: src/lib.rs:890
 msgid "OK"
 msgstr "OK"
 
-#: src/lib.rs:768
+#: src/lib.rs:912
 msgid "Cancel"
 msgstr "Zrušiť"
 
-#: src/lib.rs:777
+#: src/lib.rs:921
 msgid "Read only"
 msgstr "Len na čítanie"

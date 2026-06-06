@@ -1,33 +1,30 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"PO-Revision-Date: 2026-06-06 20:40+0200\n"
 "Last-Translator: Automatically generated\n"
-"Language-Team: none\n"
-"Language: it\n"
-"MIME-Version: 1.0\n"
+"Language: ja\n"
 "Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
 #: src/lib.rs:664
 msgid "Search"
-msgstr "Cerca"
+msgstr "検索"
 
 #: src/lib.rs:709
 msgid "Name"
-msgstr "Nome"
+msgstr "名前"
 
 #: src/lib.rs:715
 msgid "Size"
-msgstr "Dimensione"
+msgstr "サイズ"
 
 #: src/lib.rs:721
 msgid "Modified"
-msgstr "Modificato"
+msgstr "更新日時"
 
 #: src/lib.rs:847
 msgid "File name"
-msgstr "Nome del file"
+msgstr "ファイル名"
 
 #: src/lib.rs:890
 msgid "OK"
@@ -35,8 +32,8 @@ msgstr "OK"
 
 #: src/lib.rs:912
 msgid "Cancel"
-msgstr "Annulla"
+msgstr "キャンセル"
 
 #: src/lib.rs:921
 msgid "Read only"
-msgstr "Sola lettura"
+msgstr "読み取り専用"

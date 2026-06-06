@@ -10,34 +10,34 @@ msgstr ""
 "Plural-Forms: nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || "
 "n%100==4 ? 2 : 3);\n"
 
-#: src/lib.rs:538
+#: src/lib.rs:664
 msgid "Search"
 msgstr "Išči"
 
-#: src/lib.rs:582
+#: src/lib.rs:709
 msgid "Name"
 msgstr "Ime"
 
-#: src/lib.rs:588
+#: src/lib.rs:715
 msgid "Size"
 msgstr "Velikost"
 
-#: src/lib.rs:594
+#: src/lib.rs:721
 msgid "Modified"
 msgstr "Spremenjeno"
 
-#: src/lib.rs:718
+#: src/lib.rs:847
 msgid "File name"
 msgstr "Ime datoteke"
 
-#: src/lib.rs:757
+#: src/lib.rs:890
 msgid "OK"
 msgstr "V redu"
 
-#: src/lib.rs:768
+#: src/lib.rs:912
 msgid "Cancel"
 msgstr "Prekliči"
 
-#: src/lib.rs:777
+#: src/lib.rs:921
 msgid "Read only"
 msgstr "Samo branje"

@@ -8,34 +8,34 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/lib.rs:538
+#: src/lib.rs:664
 msgid "Search"
 msgstr "Kërko"
 
-#: src/lib.rs:582
+#: src/lib.rs:709
 msgid "Name"
 msgstr "Emër"
 
-#: src/lib.rs:588
+#: src/lib.rs:715
 msgid "Size"
 msgstr "Madhësi"
 
-#: src/lib.rs:594
+#: src/lib.rs:721
 msgid "Modified"
 msgstr "Ndryshuar më"
 
-#: src/lib.rs:718
+#: src/lib.rs:847
 msgid "File name"
 msgstr "Emër kartele"
 
-#: src/lib.rs:757
+#: src/lib.rs:890
 msgid "OK"
 msgstr "OK"
 
-#: src/lib.rs:768
+#: src/lib.rs:912
 msgid "Cancel"
 msgstr "Anuloje"
 
-#: src/lib.rs:777
+#: src/lib.rs:921
 msgid "Read only"
 msgstr "Vetëm lexim"

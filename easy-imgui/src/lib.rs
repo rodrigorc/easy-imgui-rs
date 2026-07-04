@@ -1199,14 +1199,14 @@ macro_rules! with_begin_end_opt {
 }
 
 macro_rules! decl_builder {
-    ( $sname:ident -> $tres:ty, $func:ident ($($life:lifetime),*) ( $( $gen_n:ident : $gen_d:tt ),* )
+    ( $(#[$attr:meta])* $sname:ident -> $tres:ty, $func:ident ($($life:lifetime),*) ( $( $gen_n:ident : $gen_d:tt ),* )
         (
             $(
                 $arg:ident ($($ty:tt)*) ($pass:expr),
             )*
         )
         { $($extra:tt)* }
-        { $($constructor:tt)* }
+        { $($constructor:item)* }
     ) => {
         #[must_use]
         pub struct $sname<'s, $($life,)* $($gen_n : $gen_d, )* > {
@@ -1226,8 +1226,14 @@ macro_rules! decl_builder {
         }
 
         impl<A> Ui<A> {
-            $($constructor)*
+            decl_builder!{ @CONSTRUCTOR $(#[$attr])* ( $($constructor)* ) }
         }
+    };
+    ( @CONSTRUCTOR $(#[$attr:meta])* ( $constructor_0:item $($constructor:item)* ) ) => {
+        $(#[$attr])* $constructor_0
+        decl_builder!{ @CONSTRUCTOR $(#[$attr])* ( $($constructor)* ) }
+    };
+    ( @CONSTRUCTOR $(#[$attr:meta])* () ) => {
     };
 }
 
@@ -1254,6 +1260,7 @@ macro_rules! decl_builder_setter_vector2 {
 
 macro_rules! decl_builder_with_maybe_opt {
     ( $always_run_end:literal
+      $(#[$attr:meta])*
       $sname:ident, $func_beg:ident, $func_end:ident ($($life:lifetime),*) ( $( $gen_n:ident : $gen_d:tt ),* )
         (
             $(
@@ -1313,20 +1320,21 @@ macro_rules! decl_builder_with_maybe_opt {
         }
 
         impl<A> Ui<A> {
+            $(#[$attr])*
             $($constructor)*
         }
     };
 }
 
 macro_rules! decl_builder_with {
-    ($($args:tt)*) => {
-        decl_builder_with_maybe_opt!{ true $($args)* }
+    ( $(#[$attr:meta])* $sname:ident, $($args:tt)* ) => {
+        decl_builder_with_maybe_opt!{ true $(#[$attr])* $sname, $($args)* }
     };
 }
 
 macro_rules! decl_builder_with_opt {
-    ($($args:tt)*) => {
-        decl_builder_with_maybe_opt!{ false $($args)* }
+    ( $(#[$attr:meta])* $sname:ident, $($args:tt)* ) => {
+        decl_builder_with_maybe_opt!{ false $(#[$attr])* $sname, $($args)* }
     };
 }
 
@@ -1355,7 +1363,9 @@ decl_builder_with! {Child, ImGui_BeginChild, ImGui_EndChild () (S: IntoCStr)
     }
 }
 
-decl_builder_with! {Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
+decl_builder_with! {
+    /// Dear ImGui (`Begin`): push window to the stack and start appending to it. End() = pop window from the stack.
+    Window, ImGui_Begin, ImGui_End ('v) (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         open (Option<&'v mut bool>) (optional_mut_bool(&mut open)),
@@ -1413,7 +1423,8 @@ decl_builder! { MenuItem -> bool, ImGui_MenuItem () (S1: IntoCStr, S2: IntoCStr)
     }
 }
 
-decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
+decl_builder! {
+    Button -> bool, ImGui_Button () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         size (ImVec2) (&size),
@@ -1435,7 +1446,9 @@ decl_builder! { Button -> bool, ImGui_Button () (S: IntoCStr)
     }
 }
 
-decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
+decl_builder! {
+    /// Dear ImGui (`SmallButton`): button with (FramePadding.y == 0) to easily embed within text
+    SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
     )
@@ -1453,7 +1466,9 @@ decl_builder! { SmallButton -> bool, ImGui_SmallButton () (S: IntoCStr)
     }
 }
 
-decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
+decl_builder! {
+    /// Dear ImGui (`InvisibleButton`): flexible button behavior without the visuals, frequently useful to build custom behaviors using the public api (along with IsItemActive, IsItemHovered, etc.)
+    InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
     (
         id (S::Temp) (id.as_ptr()),
         size (ImVec2) (&size),
@@ -1475,7 +1490,9 @@ decl_builder! { InvisibleButton -> bool, ImGui_InvisibleButton () (S: IntoCStr)
     }
 }
 
-decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
+decl_builder! {
+    /// Dear ImGui (`ArrowButton`): square button with an arrow shape
+    ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
     (
         id (S::Temp) (id.as_ptr()),
         dir (Dir) (dir.bits()),
@@ -1495,7 +1512,8 @@ decl_builder! { ArrowButton -> bool, ImGui_ArrowButton () (S: IntoCStr)
     }
 }
 
-decl_builder! { Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
+decl_builder! {
+    Checkbox -> bool, ImGui_Checkbox ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         value (&'v mut bool) (value),
@@ -1561,7 +1579,8 @@ decl_builder! { ProgressBar -> (), ImGui_ProgressBar () (S: IntoCStr)
     }
 }
 
-decl_builder! { Image -> (), ImGui_Image ('t) ()
+decl_builder! {
+    Image -> (), ImGui_Image ('t) ()
     (
         texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
         size (ImVec2) (&size),
@@ -1591,7 +1610,9 @@ decl_builder! { Image -> (), ImGui_Image ('t) ()
     }
 }
 
-decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
+decl_builder! {
+    /// Dear ImGui (`ImageWithBg`): display image with background
+    ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
     (
         texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
         size (ImVec2) (&size),
@@ -1628,7 +1649,8 @@ decl_builder! { ImageWithBg -> (), ImGui_ImageWithBg ('t) ()
     }
 }
 
-decl_builder! { ImageButton -> bool, ImGui_ImageButton ('t) (S: IntoCStr)
+decl_builder! {
+    ImageButton -> bool, ImGui_ImageButton ('t) (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         texture_ref (TextureRef<'t>) (texture_ref.tex_ref()),
@@ -1666,7 +1688,8 @@ decl_builder! { ImageButton -> bool, ImGui_ImageButton ('t) (S: IntoCStr)
     }
 }
 
-decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
+decl_builder! {
+    Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         selected (bool) (selected),
@@ -1695,8 +1718,10 @@ decl_builder! { Selectable -> bool, ImGui_Selectable () (S: IntoCStr)
 }
 
 macro_rules! decl_builder_drag {
-    ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
-        decl_builder! { $name -> bool, $cfunc ($life) (S: IntoCStr)
+    ( $(#[$attr:meta])* $name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
+        decl_builder! {
+            $(#[$attr])*
+            $name -> bool, $cfunc ($life) (S: IntoCStr)
             (
                 label (S::Temp) (label.as_ptr()),
                 value ($ty) ($expr(value)),
@@ -1752,10 +1777,14 @@ macro_rules! impl_float_format {
     };
 }
 
-decl_builder_drag! { DragFloat drag_float_config ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_drag! { DragFloat2 drag_float_2_config ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag! { DragFloat3 drag_float_3_config ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_drag! { DragFloat4 drag_float_4_config ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! {
+DragFloat drag_float_config ImGui_DragFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_drag! {
+DragFloat2 drag_float_2_config ImGui_DragFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! {
+DragFloat3 drag_float_3_config ImGui_DragFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_drag! {
+DragFloat4 drag_float_4_config ImGui_DragFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
 impl_float_format! { DragFloat }
 impl_float_format! { DragFloat2 }
@@ -1768,8 +1797,10 @@ decl_builder_drag! { DragInt3 drag_int_3_config ImGui_DragInt3 'v (i32) (&'v mut
 decl_builder_drag! { DragInt4 drag_int_4_config ImGui_DragInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
 macro_rules! decl_builder_slider {
-    ($name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
-        decl_builder! { $name -> bool, $cfunc ($life) (S: IntoCStr)
+    ( $(#[$attr:meta])* $name:ident $func:ident $cfunc:ident $life:lifetime ($argty:ty) ($ty:ty) ($expr:expr)) => {
+        decl_builder! {
+            $(#[$attr])*
+            $name -> bool, $cfunc ($life) (S: IntoCStr)
             (
                 label (S::Temp) (label.as_ptr()),
                 value ($ty) ($expr(value)),
@@ -1803,22 +1834,32 @@ macro_rules! decl_builder_slider {
     };
 }
 
-decl_builder_slider! { SliderFloat slider_float_config ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
-decl_builder_slider! { SliderFloat2 slider_float_2_config ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider! { SliderFloat3 slider_float_3_config ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
-decl_builder_slider! { SliderFloat4 slider_float_4_config ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderFloat slider_float_config ImGui_SliderFloat 'v (f32) (&'v mut f32) (std::convert::identity)}
+decl_builder_slider! {
+SliderFloat2 slider_float_2_config ImGui_SliderFloat2 'v (f32) (&'v mut [f32; 2]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderFloat3 slider_float_3_config ImGui_SliderFloat3 'v (f32) (&'v mut [f32; 3]) (<[f32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderFloat4 slider_float_4_config ImGui_SliderFloat4 'v (f32) (&'v mut [f32; 4]) (<[f32]>::as_mut_ptr)}
 
 impl_float_format! { SliderFloat }
 impl_float_format! { SliderFloat2 }
 impl_float_format! { SliderFloat3 }
 impl_float_format! { SliderFloat4 }
 
-decl_builder_slider! { SliderInt slider_int_config ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
-decl_builder_slider! { SliderInt2 slider_int_2_config ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider! { SliderInt3 slider_int_3_config ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
-decl_builder_slider! { SliderInt4 slider_int_4_config ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderInt slider_int_config ImGui_SliderInt 'v (i32) (&'v mut i32) (std::convert::identity)}
+decl_builder_slider! {
+SliderInt2 slider_int_2_config ImGui_SliderInt2 'v (i32) (&'v mut [i32; 2]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderInt3 slider_int_3_config ImGui_SliderInt3 'v (i32) (&'v mut [i32; 3]) (<[i32]>::as_mut_ptr)}
+decl_builder_slider! {
+SliderInt4 slider_int_4_config ImGui_SliderInt4 'v (i32) (&'v mut [i32; 4]) (<[i32]>::as_mut_ptr)}
 
-decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
+decl_builder! {
+    /// Dear ImGui (`SliderAngle`): slider angle
+    SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         v_rad (&'v mut f32) (v_rad),
@@ -1849,7 +1890,8 @@ decl_builder! { SliderAngle -> bool, ImGui_SliderAngle ('v) (S: IntoCStr)
 
 impl_float_format! { SliderAngle c"%g deg" c"%.0f deg" c"%.3f deg" "%.{}f deg"}
 
-decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
+decl_builder! {
+    ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         color (&'v mut [f32; 3]) (color.as_mut_ptr()),
@@ -1870,7 +1912,8 @@ decl_builder! { ColorEdit3 -> bool, ImGui_ColorEdit3 ('v) (S: IntoCStr)
     }
 }
 
-decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
+decl_builder! {
+    ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         color (&'v mut [f32; 4]) (color.as_mut_ptr()),
@@ -1891,7 +1934,8 @@ decl_builder! { ColorEdit4 -> bool, ImGui_ColorEdit4 ('v) (S: IntoCStr)
     }
 }
 
-decl_builder! { ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
+decl_builder! {
+    ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         color (&'v mut [f32; 3]) (color.as_mut_ptr()),
@@ -1912,7 +1956,8 @@ decl_builder! { ColorPicker3 -> bool, ImGui_ColorPicker3 ('v) (S: IntoCStr)
     }
 }
 
-decl_builder! { ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
+decl_builder! {
+    ColorPicker4 -> bool, ImGui_ColorPicker4 ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         color (&'v mut [f32; 4]) (color.as_mut_ptr()),
@@ -1992,7 +2037,8 @@ unsafe fn input_text_wrapper(
     }
 }
 
-decl_builder! { InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
+decl_builder! {
+    InputText -> bool, input_text_wrapper ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         text (&'v mut String) (text),
@@ -2030,7 +2076,8 @@ unsafe fn input_os_string_wrapper(
     }
 }
 
-decl_builder! { InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr)
+decl_builder! {
+    InputOsString -> bool, input_os_string_wrapper ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         text (&'v mut OsString) (text),
@@ -2074,7 +2121,8 @@ unsafe fn input_text_multiline_wrapper(
     }
 }
 
-decl_builder! { InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S: IntoCStr)
+decl_builder! {
+    InputTextMultiline -> bool, input_text_multiline_wrapper ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         text (&'v mut String) (text),
@@ -2121,7 +2169,8 @@ unsafe fn input_text_hint_wrapper(
     }
 }
 
-decl_builder! { InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCStr, S2: IntoCStr)
+decl_builder! {
+    InputTextHint -> bool, input_text_hint_wrapper ('v) (S1: IntoCStr, S2: IntoCStr)
     (
         label (S1::Temp) (label.as_ptr()),
         hint (S2::Temp) (hint.as_ptr()),
@@ -2154,7 +2203,9 @@ pub enum FloatFormat {
     G,
 }
 
-decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
+decl_builder! {
+    /// Dear ImGui (`InputFloat`): input float
+    InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
     (
         label (S::Temp)  (label.as_ptr()),
         value (&'v mut f32) (value),
@@ -2183,7 +2234,8 @@ decl_builder! { InputFloat -> bool, ImGui_InputFloat ('v) (S: IntoCStr)
     }
 }
 
-decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
+decl_builder! {
+    InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         value (&'v mut i32) (value),
@@ -2197,6 +2249,7 @@ decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
         decl_builder_setter!{step_fast: i32}
     }
     {
+        /// Dear ImGui (`InputInt`): input int
         pub fn input_int_config<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut i32) -> InputInt<'_, 'v, S> {
             InputInt {
                 _pd: PhantomData,
@@ -2211,36 +2264,43 @@ decl_builder! { InputInt -> bool, ImGui_InputInt ('v) (S: IntoCStr)
 }
 
 macro_rules! decl_builder_input_f {
-    ($name:ident $func:ident $cfunc:ident $len:literal) => {
-        decl_builder! { $name -> bool, $cfunc ('v) (S: IntoCStr)
-        (
-            label (S::Temp) (label.as_ptr()),
-            value (&'v mut [f32; $len]) (value.as_mut_ptr()),
-            format (Cow<'static, CStr>) (format.as_ptr()),
-            flags (InputTextFlags) (flags.bits()),
-        )
-        {
-            decl_builder_setter!{flags: InputTextFlags}
-        }
-        {
-            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [f32; $len]) -> $name<'_, 'v, S> {
-                $name {
-                    _pd: PhantomData,
-                    label: label.into(),
-                    value,
-                    format: Cow::Borrowed(c"%.3f"),
-                    flags: InputTextFlags::None,
+    ( $(#[$attr:meta])* $name:ident $func:ident $cfunc:ident $len:literal) => {
+        decl_builder! {
+            $(#[$attr])*
+            $name -> bool, $cfunc ('v) (S: IntoCStr)
+            (
+                label (S::Temp) (label.as_ptr()),
+                value (&'v mut [f32; $len]) (value.as_mut_ptr()),
+                format (Cow<'static, CStr>) (format.as_ptr()),
+                flags (InputTextFlags) (flags.bits()),
+            )
+            {
+                decl_builder_setter!{flags: InputTextFlags}
+            }
+            {
+                pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [f32; $len]) -> $name<'_, 'v, S> {
+                    $name {
+                        _pd: PhantomData,
+                        label: label.into(),
+                        value,
+                        format: Cow::Borrowed(c"%.3f"),
+                        flags: InputTextFlags::None,
+                    }
                 }
             }
         }
-    }
-
     };
 }
 
-decl_builder_input_f! { InputFloat2 input_float_2_config ImGui_InputFloat2 2}
-decl_builder_input_f! { InputFloat3 input_float_3_config ImGui_InputFloat3 3}
-decl_builder_input_f! { InputFloat4 input_float_4_config ImGui_InputFloat4 4}
+decl_builder_input_f! {
+/// Dear ImGui (`InputFloat2`): input float 2
+InputFloat2 input_float_2_config ImGui_InputFloat2 2}
+decl_builder_input_f! {
+/// Dear ImGui (`InputFloat3`): input float 3
+InputFloat3 input_float_3_config ImGui_InputFloat3 3}
+decl_builder_input_f! {
+/// Dear ImGui (`InputFloat4`): input float 4
+InputFloat4 input_float_4_config ImGui_InputFloat4 4}
 
 impl_float_format! { InputFloat }
 impl_float_format! { InputFloat2 }
@@ -2248,36 +2308,44 @@ impl_float_format! { InputFloat3 }
 impl_float_format! { InputFloat4 }
 
 macro_rules! decl_builder_input_i {
-    ($name:ident $func:ident $cfunc:ident $len:literal) => {
-        decl_builder! { $name -> bool, $cfunc ('v) (S: IntoCStr)
-        (
-            label (S::Temp) (label.as_ptr()),
-            value (&'v mut [i32; $len]) (value.as_mut_ptr()),
-            flags (InputTextFlags) (flags.bits()),
-        )
-        {
-            decl_builder_setter!{flags: InputTextFlags}
-        }
-        {
-            pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [i32; $len]) -> $name<'_, 'v, S> {
-                $name {
-                    _pd: PhantomData,
-                    label: label.into(),
-                    value,
-                    flags: InputTextFlags::None,
+    ( $(#[$attr:meta])* $name:ident $func:ident $cfunc:ident $len:literal) => {
+        decl_builder! {
+            $(#[$attr])*
+            $name -> bool, $cfunc ('v) (S: IntoCStr)
+            (
+                label (S::Temp) (label.as_ptr()),
+                value (&'v mut [i32; $len]) (value.as_mut_ptr()),
+                flags (InputTextFlags) (flags.bits()),
+            )
+            {
+                decl_builder_setter!{flags: InputTextFlags}
+            }
+            {
+                pub fn $func<'v, S: IntoCStr>(&self, label: LblId<S>, value: &'v mut [i32; $len]) -> $name<'_, 'v, S> {
+                    $name {
+                        _pd: PhantomData,
+                        label: label.into(),
+                        value,
+                        flags: InputTextFlags::None,
+                    }
                 }
             }
         }
-    }
-
     };
 }
 
-decl_builder_input_i! { InputInt2 input_int_2_config ImGui_InputInt2 2}
-decl_builder_input_i! { InputInt3 input_int_3_config ImGui_InputInt3 3}
-decl_builder_input_i! { InputInt4 input_int_4_config ImGui_InputInt4 4}
+decl_builder_input_i! {
+/// Dear ImGui (`InputInt2`): input int 2
+InputInt2 input_int_2_config ImGui_InputInt2 2}
+decl_builder_input_i! {
+/// Dear ImGui (`InputInt3`): input int 3
+InputInt3 input_int_3_config ImGui_InputInt3 3}
+decl_builder_input_i! {
+/// Dear ImGui (`InputInt4`): input int 4
+InputInt4 input_int_4_config ImGui_InputInt4 4}
 
-decl_builder_with_opt! {Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
+decl_builder_with_opt! {
+    Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         enabled (bool) (enabled),
@@ -2296,7 +2364,8 @@ decl_builder_with_opt! {Menu, ImGui_BeginMenu, ImGui_EndMenu () (S: IntoCStr)
     }
 }
 
-decl_builder_with_opt! {CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: IntoCStr)
+decl_builder_with_opt! {
+    CollapsingHeader, ImGui_CollapsingHeader, no_op () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         flags (TreeNodeFlags) (flags.bits()),
@@ -2336,7 +2405,8 @@ unsafe fn tree_node_ex_helper<S: IntoCStr, H: Hashable>(
     }
 }
 
-decl_builder_with_opt! {TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: IntoCStr, H: Hashable)
+decl_builder_with_opt! {
+    TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: IntoCStr, H: Hashable)
     (
         label (LabelId<'a, S, H>) (label),
         flags (TreeNodeFlags) (flags),
@@ -2362,7 +2432,8 @@ decl_builder_with_opt! {TreeNode, tree_node_ex_helper, ImGui_TreePop ('a) (S: In
     }
 }
 
-decl_builder_with_opt! {Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
+decl_builder_with_opt! {
+    Popup, ImGui_BeginPopup, ImGui_EndPopup () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         flags (WindowFlags) (flags.bits()),
@@ -2397,7 +2468,9 @@ impl PopupOpened<'_> {
     }
 }
 
-decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup ('a) (S: IntoCStr)
+decl_builder_with_opt! {
+    /// Dear ImGui (`BeginPopupModal`): begin popup modal
+    PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup ('a) (S: IntoCStr)
     (
         name (S::Temp) (name.as_ptr()),
         opened (PopupOpened<'a>) (opened.pointer()),
@@ -2436,7 +2509,9 @@ decl_builder_with_opt! {PopupModal, ImGui_BeginPopupModal, ImGui_EndPopup ('a) (
 
 macro_rules! decl_builder_popup_context {
     ($struct:ident $begin:ident $do_function:ident) => {
-        decl_builder_with_opt! {$struct, $begin, ImGui_EndPopup () (S: IntoCStr)
+        decl_builder_with_opt! {
+            /// Dear ImGui (`BeginPopupContext`...): begin popup context
+            $struct, $begin, ImGui_EndPopup () (S: IntoCStr)
             (
                 str_id (Option<S::Temp>) (optional_str(&str_id)),
                 flags (PopupFlags) (flags.bits()),
@@ -2475,7 +2550,9 @@ decl_builder_popup_context! {PopupContextItem ImGui_BeginPopupContextItem popup_
 decl_builder_popup_context! {PopupContextWindow ImGui_BeginPopupContextWindow popup_context_window_config}
 decl_builder_popup_context! {PopupContextVoid ImGui_BeginPopupContextVoid popup_context_void_config}
 
-decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr, S2: IntoCStr)
+decl_builder_with_opt! {
+    /// Dear ImGui (`BeginCombo`): begin combo box
+    Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr, S2: IntoCStr)
     (
         label (S1::Temp) (label.as_ptr()),
         preview_value (Option<S2::Temp>) (optional_str(&preview_value)),
@@ -2532,7 +2609,9 @@ decl_builder_with_opt! {Combo, ImGui_BeginCombo, ImGui_EndCombo () (S1: IntoCStr
     }
 }
 
-decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: IntoCStr)
+decl_builder_with_opt! {
+    /// Dear ImGui (`BeginListBox`): begin list box
+    ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: IntoCStr)
     (
         label (S::Temp) (label.as_ptr()),
         size (ImVec2) (&size),
@@ -2585,7 +2664,9 @@ decl_builder_with_opt! {ListBox, ImGui_BeginListBox, ImGui_EndListBox () (S: Int
     }
 }
 
-decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCStr)
+decl_builder_with_opt! {
+    /// Dear ImGui (`BeginTabBar`): begin tab bar
+    TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         flags (TabBarFlags) (flags.bits()),
@@ -2604,7 +2685,9 @@ decl_builder_with_opt! {TabBar, ImGui_BeginTabBar, ImGui_EndTabBar () (S: IntoCS
     }
 }
 
-decl_builder_with_opt! {TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: IntoCStr)
+decl_builder_with_opt! {
+    /// Dear ImGui (`BeginTabItem`): begin tab item
+    TabItem, ImGui_BeginTabItem, ImGui_EndTabItem ('o) (S: IntoCStr)
     (
         str_id (S::Temp) (str_id.as_ptr()),
         opened (Option<&'o mut bool>) (optional_mut_bool(&mut opened)),
@@ -2796,40 +2879,47 @@ impl<A> Ui<A> {
             ImGui_ShowDemoWindow(optional_mut_bool(&mut show));
         }
     }
+    /// Dear ImGui (`SetNextWindowPos`): set next window position. call before `Begin()`. use pivot=(0.5f,0.5f) to center on given point, etc.
     pub fn set_next_window_pos(&self, pos: Vector2, cond: Cond, pivot: Vector2) {
         unsafe {
             ImGui_SetNextWindowPos(&v2_to_im(pos), cond.bits(), &v2_to_im(pivot));
         }
     }
+    /// Dear ImGui (`SetNextWindowSize`): set next window size. set axis to 0.0f to force an auto-fit on this axis. call before `Begin()`
     pub fn set_next_window_size(&self, size: Vector2, cond: Cond) {
         unsafe {
             ImGui_SetNextWindowSize(&v2_to_im(size), cond.bits());
         }
     }
+    /// Dear ImGui (`SetNextWindowContentSize`): set next window content size (~ scrollable client area, which enforce the range of scrollbars). Not including window decorations (title bar, menu bar, etc.) nor WindowPadding. set an axis to 0.0f to leave it automatic. call before `Begin()`
     pub fn set_next_window_content_size(&self, size: Vector2) {
         unsafe {
             ImGui_SetNextWindowContentSize(&v2_to_im(size));
         }
     }
 
+    /// Dear ImGui (`SetNextWindowCollapsed`): set next window collapsed state. call before `Begin()`
     pub fn set_next_window_collapsed(&self, collapsed: bool, cond: Cond) {
         unsafe {
             ImGui_SetNextWindowCollapsed(collapsed, cond.bits());
         }
     }
 
+    /// Dear ImGui (`SetNextWindowFocus`): set next window to be focused / top-most. call before `Begin()`
     pub fn set_next_window_focus(&self) {
         unsafe {
             ImGui_SetNextWindowFocus();
         }
     }
 
+    /// Dear ImGui (`SetNextWindowScroll`): set next window scrolling value (use < 0.0f to not affect a given axis).
     pub fn set_next_window_scroll(&self, scroll: Vector2) {
         unsafe {
             ImGui_SetNextWindowScroll(&v2_to_im(scroll));
         }
     }
 
+    /// Dear ImGui (`SetNextWindowBgAlpha`): set next window background color alpha. helper to easily override the Alpha component of `ImGuiCol_WindowBg`/`ChildBg`/`PopupBg`. you may also use `ImGuiWindowFlags_NoBackground`.
     pub fn set_next_window_bg_alpha(&self, alpha: f32) {
         unsafe {
             ImGui_SetNextWindowBgAlpha(alpha);
@@ -2856,213 +2946,270 @@ impl<A> Ui<A> {
             WindowDrawList { ui: self, ptr }
         }
     }
+    /// Dear ImGui (`TextUnformatted`): raw text display
     pub fn text(&self, text: &str) {
         unsafe {
             let (start, end) = text_ptrs(text);
             ImGui_TextUnformatted(start, end);
         }
     }
+    /// Dear ImGui (`TextColored`): colored text display
     pub fn text_colored(&self, color: Color, text: impl IntoCStr) {
         let text = text.into();
         unsafe { ImGui_TextColored(&color.into(), c"%s".as_ptr(), text.as_ptr()) }
     }
+    /// Dear ImGui (`TextDisabled`): disabled text display
     pub fn text_disabled(&self, text: impl IntoCStr) {
         let text = text.into();
         unsafe { ImGui_TextDisabled(c"%s".as_ptr(), text.as_ptr()) }
     }
+    /// Dear ImGui (`TextWrapped`): wrapped text display
     pub fn text_wrapped(&self, text: impl IntoCStr) {
         let text = text.into();
         unsafe { ImGui_TextWrapped(c"%s".as_ptr(), text.as_ptr()) }
     }
+    /// Dear ImGui (`TextLink`): hyperlink text button, return true when clicked
     pub fn text_link(&self, label: LblId<impl IntoCStr>) -> bool {
         let label = label.into();
         unsafe { ImGui_TextLink(label.as_ptr()) }
     }
+    /// Dear ImGui (`TextLinkOpenURL`): hyperlink text button, automatically open file/url when clicked
     pub fn text_link_open_url(&self, label: LblId<impl IntoCStr>, url: impl IntoCStr) -> bool {
         let label = label.into();
         let url = url.into();
         unsafe { ImGui_TextLinkOpenURL(label.as_ptr(), url.as_ptr()) }
     }
+    /// Dear ImGui (`LabelText`): display text+label aligned the same way as value+label widgets
     pub fn label_text(&self, label: impl IntoCStr, text: impl IntoCStr) {
         let label = label.into();
         let text = text.into();
         unsafe { ImGui_LabelText(label.as_ptr(), c"%s".as_ptr(), text.as_ptr()) }
     }
+    /// Dear ImGui (`BulletText`): shortcut for `Bullet()`+`Text()`
     pub fn bullet_text(&self, text: impl IntoCStr) {
         let text = text.into();
         unsafe { ImGui_BulletText(c"%s".as_ptr(), text.as_ptr()) }
     }
+    /// Dear ImGui (`Bullet`): draw a small circle + keep the cursor on the same line. advance cursor x position by GetTreeNodeToLabelSpacing(), same distance that TreeNode() uses
     pub fn bullet(&self) {
         unsafe {
             ImGui_Bullet();
         }
     }
+    /// Dear ImGui (`SeparatorText`): currently: formatted text with a horizontal line
     pub fn separator_text(&self, text: impl IntoCStr) {
         let text = text.into();
         unsafe {
             ImGui_SeparatorText(text.as_ptr());
         }
     }
+    /// Dear ImGui (`Separator`): separator
     pub fn separator(&self) {
         unsafe {
             ImGui_Separator();
         }
     }
 
+    /// Dear ImGui (`SetItemDefaultFocus`): set item default focus
     pub fn set_item_default_focus(&self) {
         unsafe {
             ImGui_SetItemDefaultFocus();
         }
     }
+    /// Dear ImGui (`IsItemHovered`): is the last item hovered?
     pub fn is_item_hovered(&self) -> bool {
         self.is_item_hovered_ex(HoveredFlags::None)
     }
+    /// Dear ImGui (`IsItemHovered`): is the last item hovered?
     pub fn is_item_hovered_ex(&self, flags: HoveredFlags) -> bool {
         unsafe { ImGui_IsItemHovered(flags.bits()) }
     }
+    /// Dear ImGui (`IsItemActive`): is the last item active?
     pub fn is_item_active(&self) -> bool {
         unsafe { ImGui_IsItemActive() }
     }
+    /// Dear ImGui (`IsItemFocused`): is the last item focused?
     pub fn is_item_focused(&self) -> bool {
         unsafe { ImGui_IsItemFocused() }
     }
+    /// Dear ImGui (`IsItemClicked`): is the last item hovered and mouse clicked on?
     pub fn is_item_clicked(&self, flags: MouseButton) -> bool {
         unsafe { ImGui_IsItemClicked(flags.bits()) }
     }
+    /// Dear ImGui (`IsItemVisible`): is the last item visible?
     pub fn is_item_visible(&self) -> bool {
         unsafe { ImGui_IsItemVisible() }
     }
+    /// Dear ImGui (`IsItemEdited`): is the last item edited?
     pub fn is_item_edited(&self) -> bool {
         unsafe { ImGui_IsItemEdited() }
     }
+    /// Dear ImGui (`IsItemActivated`): was the last item just activated?
     pub fn is_item_activated(&self) -> bool {
         unsafe { ImGui_IsItemActivated() }
     }
+    /// Dear ImGui (`IsItemDeactivated`): was the last item just deactivated?
     pub fn is_item_deactivated(&self) -> bool {
         unsafe { ImGui_IsItemDeactivated() }
     }
+    /// Dear ImGui (`IsItemDeactivatedAfterEdit`): was the last item just deactivated after edit?
     pub fn is_item_deactivated_after_edit(&self) -> bool {
         unsafe { ImGui_IsItemDeactivatedAfterEdit() }
     }
+    /// Dear ImGui (`IsItemToggledOpen`): was the last item just toggled open?
     pub fn is_item_toggled_open(&self) -> bool {
         unsafe { ImGui_IsItemToggledOpen() }
     }
+    /// Dear ImGui (`IsAnyItemHovered`): is any item hovered?
     pub fn is_any_item_hovered(&self) -> bool {
         unsafe { ImGui_IsAnyItemHovered() }
     }
+    /// Dear ImGui (`IsAnyItemActive`): is any item active?
     pub fn is_any_item_active(&self) -> bool {
         unsafe { ImGui_IsAnyItemActive() }
     }
+    /// Dear ImGui (`IsAnyItemFocused`): is any item focused?
     pub fn is_any_item_focused(&self) -> bool {
         unsafe { ImGui_IsAnyItemFocused() }
     }
+    /// Dear ImGui (`IsWindowCollapsed`): is the current window collapsed?
     pub fn is_window_collapsed(&self) -> bool {
         unsafe { ImGui_IsWindowCollapsed() }
     }
+    /// Dear ImGui (`IsWindowFocused`): is current window focused?
     pub fn is_window_focused(&self, flags: FocusedFlags) -> bool {
         unsafe { ImGui_IsWindowFocused(flags.bits()) }
     }
+    /// Dear ImGui (`IsWindowHovered`): is current window hovered?
     pub fn is_window_hovered(&self, flags: FocusedFlags) -> bool {
         unsafe { ImGui_IsWindowHovered(flags.bits()) }
     }
+    /// Dear ImGui (`GetItemID`): get ID of last item
     pub fn get_item_id(&self) -> ImGuiID {
         unsafe { ImGui_GetItemID() }
     }
+    /// Dear ImGui (`GetID`): get ID of given hashable
     pub fn get_id(&self, id: impl Hashable) -> ImGuiID {
         unsafe { id.get_id() }
     }
+    /// Dear ImGui (`GetItemRectMin`): get item rect min
     pub fn get_item_rect_min(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectMin()) }
     }
+    /// Dear ImGui (`GetItemRectMax`): get item rect max
     pub fn get_item_rect_max(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectMax()) }
     }
+    /// Dear ImGui (`GetItemRectSize`): get item rect size
     pub fn get_item_rect_size(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetItemRectSize()) }
     }
+    /// Dear ImGui (`GetItemFlags`): get item flags
     pub fn get_item_flags(&self) -> ItemFlags {
         unsafe { ItemFlags::from_bits_truncate(ImGui_GetItemFlags()) }
     }
     /// Available space from current position. This is your best friend!
+    /// Dear ImGui (`GetContentRegionAvail`): available space from current position. This is your best friend!
     pub fn get_content_region_avail(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetContentRegionAvail()) }
     }
+    /// Dear ImGui (`GetWindowPos`): get current window position in screen space
     pub fn get_window_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetWindowPos()) }
     }
+    /// Dear ImGui (`GetWindowWidth`): get current window width
     pub fn get_window_width(&self) -> f32 {
         unsafe { ImGui_GetWindowWidth() }
     }
+    /// Dear ImGui (`GetWindowHeight`): get current window height
     pub fn get_window_height(&self) -> f32 {
         unsafe { ImGui_GetWindowHeight() }
     }
+    /// Dear ImGui (`GetScrollX`): get scrolling amount
     pub fn get_scroll_x(&self) -> f32 {
         unsafe { ImGui_GetScrollX() }
     }
+    /// Dear ImGui (`GetScrollY`): get scrolling amount
     pub fn get_scroll_y(&self) -> f32 {
         unsafe { ImGui_GetScrollY() }
     }
+    /// Dear ImGui (`SetScrollX`): set scrolling amount
     pub fn set_scroll_x(&self, scroll_x: f32) {
         unsafe {
             ImGui_SetScrollX(scroll_x);
         }
     }
+    /// Dear ImGui (`SetScrollY`): set scrolling amount
     pub fn set_scroll_y(&self, scroll_y: f32) {
         unsafe {
             ImGui_SetScrollY(scroll_y);
         }
     }
+    /// Dear ImGui (`GetScrollMaxX`): get maximum scrolling amount
     pub fn get_scroll_max_x(&self) -> f32 {
         unsafe { ImGui_GetScrollMaxX() }
     }
+    /// Dear ImGui (`GetScrollMaxY`): get maximum scrolling amount
     pub fn get_scroll_max_y(&self) -> f32 {
         unsafe { ImGui_GetScrollMaxY() }
     }
+    /// Dear ImGui (`SetScrollHereX`): adjust scrolling amount to make current cursor position visible.
     pub fn set_scroll_here_x(&self, center_x_ratio: f32) {
         unsafe {
             ImGui_SetScrollHereX(center_x_ratio);
         }
     }
+    /// Dear ImGui (`SetScrollHereY`): adjust scrolling amount to make current cursor position visible.
     pub fn set_scroll_here_y(&self, center_y_ratio: f32) {
         unsafe {
             ImGui_SetScrollHereY(center_y_ratio);
         }
     }
+    /// Dear ImGui (`SetScrollFromPosX`): adjust scrolling amount to make given position visible.
     pub fn set_scroll_from_pos_x(&self, local_x: f32, center_x_ratio: f32) {
         unsafe {
             ImGui_SetScrollFromPosX(local_x, center_x_ratio);
         }
     }
+    /// Dear ImGui (`SetScrollFromPosY`): adjust scrolling amount to make given position visible.
     pub fn set_scroll_from_pos_y(&self, local_y: f32, center_y_ratio: f32) {
         unsafe {
             ImGui_SetScrollFromPosY(local_y, center_y_ratio);
         }
     }
+    /// Dear ImGui (`SetWindowPos`): (not recommended) set current window position - call within `Begin()`/`End()`. prefer using `SetNextWindowPos()`, as this may incur tearing and side-effects.
     pub fn set_window_pos(&self, pos: Vector2, cond: Cond) {
         unsafe {
             ImGui_SetWindowPos(&v2_to_im(pos), cond.bits());
         }
     }
+    /// Dear ImGui (`SetWindowSize`): (not recommended) set current window size - call within `Begin()`/`End()`. set to ImVec2(0, 0) to force an auto-fit. prefer using `SetNextWindowSize()`, as this may incur tearing and minor side-effects.
     pub fn set_window_size(&self, size: Vector2, cond: Cond) {
         unsafe {
             ImGui_SetWindowSize(&v2_to_im(size), cond.bits());
         }
     }
+    /// Dear ImGui (`SetWindowCollapsed`): (not recommended) set current window collapsed state. prefer using `SetNextWindowCollapsed()`.
     pub fn set_window_collapsed(&self, collapsed: bool, cond: Cond) {
         unsafe {
             ImGui_SetWindowCollapsed(collapsed, cond.bits());
         }
     }
+    /// Dear ImGui (`SetWindowFocus`): (not recommended) set current window to be focused / top-most. prefer using `SetNextWindowFocus()`.
     pub fn set_window_focus(&self) {
         unsafe {
             ImGui_SetWindowFocus();
         }
     }
     /// Forces the next control to be in the same line.
+    ///
+    /// Dear ImGui (`SameLine`): forces the next control to be in the same line.
     pub fn same_line(&self) {
         self.same_line_ex(SameLine::Default);
     }
     /// Forces the next control to be in the same line, with custom spacing.
+    ///
+    /// Dear ImGui (`SameLine`): forces the next control to be in the same line, with custom spacing.
     pub fn same_line_ex(&self, same_line: SameLine) {
         let (offset_from_start_x, spacing) = match same_line {
             SameLine::Default => (0.0, -1.0),
@@ -3082,26 +3229,31 @@ impl<A> Ui<A> {
             ImGui_SameLine(offset_from_start_x, spacing);
         }
     }
+    /// Dear ImGui (`NewLine`): force new line
     pub fn new_line(&self) {
         unsafe {
             ImGui_NewLine();
         }
     }
+    /// Dear ImGui (`Spacing`): add vertical spacing
     pub fn spacing(&self) {
         unsafe {
             ImGui_Spacing();
         }
     }
+    /// Dear ImGui (`Dummy`): add a dummy item of given size. unlike `InvisibleButton()`, `Dummy()` won't take the mouse click or be navigable into.
     pub fn dummy(&self, size: Vector2) {
         unsafe {
             ImGui_Dummy(&v2_to_im(size));
         }
     }
+    /// Dear ImGui (`Indent`): add indentation
     pub fn indent(&self, indent_w: f32) {
         unsafe {
             ImGui_Indent(indent_w);
         }
     }
+    /// Dear ImGui (`Unindent`): remove indentation
     pub fn unindent(&self, indent_w: f32) {
         unsafe {
             ImGui_Unindent(indent_w);

@@ -14,7 +14,7 @@ keywords = ["imgui", "ui", "graphics"]
 [dependencies]
 easy-imgui-sys = "0.23.0"
 easy-imgui = "0.23.0"
-easy-imgui-opengl = "0.2"
+easy-imgui-opengl = "0.3"
 
 anyhow = "1"
 cgmath = "0.18"

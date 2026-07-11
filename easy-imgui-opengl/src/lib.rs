@@ -234,7 +234,7 @@ impl Program {
     pub fn uniform_by_name(&self, name: &str) -> Option<&Uniform> {
         self.uniforms.iter().find(|u| u.name == name)
     }
-    pub unsafe fn draw_func<U, AS>(&self, uniforms: &U, attribs: AS, f_draw: impl FnOnce())
+    pub unsafe fn draw_func<U, AS>(&self, uniforms: U, attribs: AS, f_draw: impl FnOnce())
     where
         U: UniformProvider,
         AS: AttribProviderList,
@@ -256,7 +256,7 @@ impl Program {
             }
         }
     }
-    pub fn draw<U, AS>(&self, uniforms: &U, attribs: AS, primitive: u32)
+    pub fn draw<U, AS>(&self, uniforms: U, attribs: AS, primitive: u32)
     where
         U: UniformProvider,
         AS: AttribProviderList,
@@ -353,11 +353,13 @@ impl Attribute {
 }
 
 pub trait UniformProvider {
-    fn apply(&self, gl: &GlContext, u: &Uniform);
+    fn apply(&self, gl: &GlContext, u: &Uniform) -> bool;
 }
 
 impl UniformProvider for () {
-    fn apply(&self, _gl: &GlContext, _u: &Uniform) {}
+    fn apply(&self, _gl: &GlContext, _u: &Uniform) -> bool {
+        false
+    }
 }
 
 /// # Safety
@@ -626,14 +628,14 @@ unsafe impl<T: UniformField, const N: usize> UniformField for [T; N] {
     }
 }
 
-macro_rules! impl_attrib_provider_list {
+macro_rules! impl_attrib_and_uniform_tuple {
     ($($An:ident)*) => {
         #[allow(non_snake_case)]
         impl<$($An: AttribProviderList),*> AttribProviderList for ($($An),*) {
             type KeepType = ($($An::KeepType),*);
             fn len(&self) -> usize {
                 let ($($An),*) = self;
-                impl_attrib_provider_list!(@MINLEN $($An)*)
+                impl_attrib_and_uniform_tuple!(@MINLEN $($An)*)
             }
             fn bind(&self, target: u32, p: &Program) -> Self::KeepType {
                 let ($($An),*) = self;
@@ -643,17 +645,30 @@ macro_rules! impl_attrib_provider_list {
                 ($($An),*)
             }
         }
+
+        #[allow(non_snake_case)]
+        impl<$($An: UniformProvider),*> UniformProvider for ($($An),*) {
+            fn apply(&self, gl: &GlContext, u: &Uniform) -> bool {
+                let ($($An),*) = self;
+                $(
+                    if $An.apply(gl, u) {
+                        return true;
+                    }
+                )*
+                false
+            }
+        }
     };
 
     (@MINLEN $A0:ident) =>  { $A0.len() };
-    (@MINLEN $A0:ident $($An:ident)*) =>  { $A0.len().min(impl_attrib_provider_list!(@MINLEN $($An)*)) };
+    (@MINLEN $A0:ident $($An:ident)*) =>  { $A0.len().min(impl_attrib_and_uniform_tuple!(@MINLEN $($An)*)) };
 }
 
-impl_attrib_provider_list! {A0 A1}
-impl_attrib_provider_list! {A0 A1 A2}
-impl_attrib_provider_list! {A0 A1 A2 A3}
-impl_attrib_provider_list! {A0 A1 A2 A3 A4}
-impl_attrib_provider_list! {A0 A1 A2 A3 A4 A5}
+impl_attrib_and_uniform_tuple! {A0 A1}
+impl_attrib_and_uniform_tuple! {A0 A1 A2}
+impl_attrib_and_uniform_tuple! {A0 A1 A2 A3}
+impl_attrib_and_uniform_tuple! {A0 A1 A2 A3 A4}
+impl_attrib_and_uniform_tuple! {A0 A1 A2 A3 A4 A5}
 
 pub struct DynamicVertexArray<A> {
     data: Vec<A>,
@@ -1042,15 +1057,16 @@ macro_rules! uniform {
                     $fv $f: $ft ,
                 )*
             }
-            impl $crate::UniformProvider for $name {
-                fn apply(&self, gl: &$crate::GlContext, u: &$crate::Uniform) {
+            impl $crate::UniformProvider for &$name {
+                fn apply(&self, gl: &$crate::GlContext, u: &$crate::Uniform) -> bool {
                     let name = u.name();
                     $(
                         if name == $crate::uniform!{ @NAME $f: $ft }  {
                             self.$f.apply(gl, u.location());
-                            return;
+                            return true;
                         }
                     )*
+                    false
                 }
             }
         )*

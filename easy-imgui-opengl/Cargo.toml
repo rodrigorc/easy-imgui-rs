@@ -10,6 +10,6 @@ keywords = ["imgui", "ui", "graphics"]
 
 [dependencies]
 cgmath = "0.18.0"
-glow = "0.17.0"
+glow = "0.18.0"
 log = "0.4.22"
 smallvec = "1.13.2"

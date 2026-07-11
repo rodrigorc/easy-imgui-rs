@@ -16,7 +16,7 @@ freetype = ["easy-imgui/freetype"]
 [dependencies]
 # Ensure that sdl3 and easy-imgui-sys depend on the same version of sdl3-sys crate
 sdl3 = "0.18.2"
-glow = "0.17.0"
+glow = "0.18.0"
 send_wrapper = "0.6.0"
 
 [dependencies.easy-imgui-sys]

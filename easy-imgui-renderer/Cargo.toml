@@ -1,6 +1,6 @@
 [package]
 name = "easy-imgui-renderer"
-version = "0.23.0"
+version = "0.23.1"
 edition = "2024"
 description = "Default renderer for the easy-imgui crate, using OpenGl via glow"
 license = "MIT"

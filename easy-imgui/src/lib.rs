@@ -2798,6 +2798,8 @@ impl<A> Ui<A> {
             );
         }
     }
+    /// Dear ImGui (`SetNextWindowSizeConstraints`): set next window size limits. use 0.0f or FLT_MAX if you don't want limits.
+    /// Use -1 for both min and max of same axis to preserve current size (which itself is a constraint).
     pub fn set_next_window_size_constraints(&self, size_min: Vector2, size_max: Vector2) {
         unsafe {
             ImGui_SetNextWindowSizeConstraints(
@@ -2808,25 +2810,34 @@ impl<A> Ui<A> {
             );
         }
     }
+    /// Dear ImGui (`SetNextItemWidth`): set width of the _next_ common large "item+label" widget.
+    /// >0.0f: width in pixels, <0.0f align xx pixels to the right of window (so -FLT_MIN always align width to the right side).
     pub fn set_next_item_width(&self, item_width: f32) {
         unsafe {
             ImGui_SetNextItemWidth(item_width);
         }
     }
+    /// Dear ImGui (`SetNextItemOpen`): set next TreeNode/CollapsingHeader open state.
     pub fn set_next_item_open(&self, is_open: bool, cond: Cond) {
         unsafe {
             ImGui_SetNextItemOpen(is_open, cond.bits());
         }
     }
+    /// Dear ImGui (`SetNextItemStorageID`): set id to use for open/close storage (default to same as item id).
     pub fn set_next_item_storage_id(&self, id: ImGuiID) {
         unsafe { ImGui_SetNextItemStorageID(id) }
     }
+    /// Dear ImGui (`GetTreeNodeToLabelSpacing`): horizontal distance preceding label when using TreeNode*() or Bullet()
+    /// == (g.FontSize + style.FramePadding.x*2) for a regular unframed TreeNode.
     pub fn tree_node_to_label_spacing(&self) -> f32 {
         unsafe { ImGui_GetTreeNodeToLabelSpacing() }
     }
+    /// Dear ImGui (`TreeNodeGetOpen`): retrieve tree node open/close state.
     pub fn tree_node_get_open(&self, id: ImGuiID) -> bool {
         unsafe { ImGui_TreeNodeGetOpen(id) }
     }
+    /// Dear ImGui (`SetKeyboardFocusHere`): focus keyboard on the next widget.
+    /// Use positive `offset` to access sub components of a multiple component widget. Use -1 to access previous widget.
     pub fn set_keyboard_focus_here(&self, offset: i32) {
         unsafe { ImGui_SetKeyboardFocusHere(offset) }
     }
@@ -2874,6 +2885,8 @@ impl<A> Ui<A> {
             f()
         }
     }
+    /// Dear ImGui (`ShowDemoWindow`): create Demo window. demonstrate most ImGui features.
+    /// call this to learn about the library! try to make it always available in your application!
     pub fn show_demo_window(&self, mut show: Option<&mut bool>) {
         unsafe {
             ImGui_ShowDemoWindow(optional_mut_bool(&mut show));
@@ -2925,21 +2938,27 @@ impl<A> Ui<A> {
             ImGui_SetNextWindowBgAlpha(alpha);
         }
     }
+    /// Dear ImGui (`GetWindowDrawList`): get draw list associated to the current window, to append your own drawing primitives.
     pub fn window_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetWindowDrawList();
             WindowDrawList { ui: self, ptr }
         }
     }
+    /// Dear ImGui (`GetWindowDpiScale`): get DPI scale currently associated to the current window's viewport.
     pub fn window_dpi_scale(&self) -> f32 {
         unsafe { ImGui_GetWindowDpiScale() }
     }
+    /// Dear ImGui (`GetForegroundDrawList`): get foreground draw list for the given viewport.
+    /// this draw list will be the top-most rendered one. Useful to quickly draw shapes/text over dear imgui contents.
     pub fn foreground_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList(std::ptr::null_mut());
             WindowDrawList { ui: self, ptr }
         }
     }
+    /// Dear ImGui (`GetBackgroundDrawList`): get background draw list for the given viewport.
+    /// this draw list will be the first rendering one. Useful to quickly draw shapes/text behind dear imgui contents.
     pub fn background_draw_list(&self) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetBackgroundDrawList(std::ptr::null_mut());
@@ -3303,23 +3322,33 @@ impl<A> Ui<A> {
             ImGui_SetCursorScreenPos(&v2_to_im(pos));
         }
     }
+    /// Dear ImGui (`AlignTextToFramePadding`): vertically align upcoming text baseline to FramePadding.y
+    /// so that it will align properly to regularly framed items (call if you have text on a line before a framed item).
     pub fn align_text_to_frame_padding(&self) {
         unsafe {
             ImGui_AlignTextToFramePadding();
         }
     }
+    /// Dear ImGui (`GetTextLineHeight`): ~ FontSize.
     pub fn get_text_line_height(&self) -> f32 {
         unsafe { ImGui_GetTextLineHeight() }
     }
+    /// Dear ImGui (`GetTextLineHeightWithSpacing`): ~ FontSize + style.ItemSpacing.y
+    /// (distance in pixels between 2 consecutive lines of text).
     pub fn get_text_line_height_with_spacing(&self) -> f32 {
         unsafe { ImGui_GetTextLineHeightWithSpacing() }
     }
+    /// Dear ImGui (`GetFrameHeight`): ~ FontSize + style.FramePadding.y * 2.
     pub fn get_frame_height(&self) -> f32 {
         unsafe { ImGui_GetFrameHeight() }
     }
+    /// Dear ImGui (`GetFrameHeightWithSpacing`): ~ FontSize + style.FramePadding.y * 2 + style.ItemSpacing.y
+    /// (distance in pixels between 2 consecutive lines of framed widgets).
     pub fn get_frame_height_with_spacing(&self) -> f32 {
         unsafe { ImGui_GetFrameHeightWithSpacing() }
     }
+    /// Dear ImGui (`CalcItemWidth`): width of item given pushed settings and current cursor position.
+    /// NOT necessarily the width of last item unlike most 'Item' functions.
     pub fn calc_item_width(&self) -> f32 {
         unsafe { ImGui_CalcItemWidth() }
     }
@@ -3346,52 +3375,77 @@ impl<A> Ui<A> {
         let mods = self.io().KeyMods;
         KeyMod::from_bits_truncate(mods & ImGuiKey::ImGuiMod_Mask_.0)
     }
+    /// Dear ImGui (`IsKeyDown`): is key being held.
     pub fn is_key_down(&self, key: Key) -> bool {
         unsafe { ImGui_IsKeyDown(key.bits()) }
     }
+    /// Dear ImGui (`IsKeyPressed`): was key pressed (went from !Down to Down)?
+    /// Repeat rate uses io.KeyRepeatDelay / KeyRepeatRate.
     pub fn is_key_pressed(&self, key: Key) -> bool {
         unsafe {
             ImGui_IsKeyPressed(key.bits(), /*repeat*/ true)
         }
     }
+    /// Dear ImGui (`IsKeyPressed`): was key pressed (went from !Down to Down)?
+    /// Same as [`is_key_pressed`](Self::is_key_pressed) but with repeat disabled.
     pub fn is_key_pressed_no_repeat(&self, key: Key) -> bool {
         unsafe {
             ImGui_IsKeyPressed(key.bits(), /*repeat*/ false)
         }
     }
+    /// Dear ImGui (`IsKeyReleased`): was key released (went from Down to !Down)?
     pub fn is_key_released(&self, key: Key) -> bool {
         unsafe { ImGui_IsKeyReleased(key.bits()) }
     }
+    /// Dear ImGui (`GetKeyPressedAmount`): uses provided repeat rate/delay. return a count, most often 0 or 1
+    /// but might be >1 if RepeatRate is small enough that DeltaTime > RepeatRate.
     pub fn get_key_pressed_amount(&self, key: Key, repeat_delay: f32, rate: f32) -> i32 {
         unsafe { ImGui_GetKeyPressedAmount(key.bits(), repeat_delay, rate) }
     }
+    /// Dear ImGui (`GetFontTexUvWhitePixel`): get UV coordinate for a white pixel, useful to draw
+    /// custom shapes via the ImDrawList API.
     pub fn get_font_tex_uv_white_pixel(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetFontTexUvWhitePixel()) }
     }
     //GetKeyName
     //SetNextFrameWantCaptureKeyboard
+    /// Dear ImGui (`GetFontSize`): get current scaled font size (= height in pixels).
+    /// AFTER global scale factors applied.
+    ///
+    /// *IMPORTANT* DO NOT PASS THIS VALUE TO PushFont()! Use the style's FontSizeBase to get
+    /// the value before global scale factors.
     pub fn get_font_size(&self) -> f32 {
         unsafe { ImGui_GetFontSize() }
     }
+    /// Dear ImGui (`IsMouseDown`): is mouse button held?
     pub fn is_mouse_down(&self, button: MouseButton) -> bool {
         unsafe { ImGui_IsMouseDown(button.bits()) }
     }
+    /// Dear ImGui (`IsMouseClicked`): did mouse button clicked? (went from !Down to Down).
+    /// Same as GetMouseClickedCount() == 1.
     pub fn is_mouse_clicked(&self, button: MouseButton) -> bool {
         unsafe {
             ImGui_IsMouseClicked(button.bits(), /*repeat*/ false)
         }
     }
+    /// Dear ImGui (`IsMouseClicked`): did mouse button clicked? (went from !Down to Down).
+    /// Same as [`is_mouse_clicked`](Self::is_mouse_clicked) but with repeat enabled.
     pub fn is_mouse_clicked_repeat(&self, button: MouseButton) -> bool {
         unsafe {
             ImGui_IsMouseClicked(button.bits(), /*repeat*/ true)
         }
     }
+    /// Dear ImGui (`IsMouseReleased`): did mouse button released? (went from Down to !Down).
     pub fn is_mouse_released(&self, button: MouseButton) -> bool {
         unsafe { ImGui_IsMouseReleased(button.bits()) }
     }
+    /// Dear ImGui (`IsMouseDoubleClicked`): did mouse button double-clicked? Same as GetMouseClickedCount() == 2.
+    /// (note that a double-click will also report IsMouseClicked() == true).
     pub fn is_mouse_double_clicked(&self, button: MouseButton) -> bool {
         unsafe { ImGui_IsMouseDoubleClicked(button.bits()) }
     }
+    /// Dear ImGui (`GetMouseClickedCount`): return the number of successive mouse-clicks at the time
+    /// where a click happen (otherwise 0).
     pub fn get_mouse_clicked_count(&self, button: MouseButton) -> i32 {
         unsafe { ImGui_GetMouseClickedCount(button.bits()) }
     }
@@ -3414,9 +3468,13 @@ impl<A> Ui<A> {
     pub fn is_mouse_released_with_delay(&self, button: MouseButton, delay: f32) -> bool {
         unsafe { ImGui_IsMouseReleasedWithDelay(button.bits(), delay) }
     }
+    /// Dear ImGui (`IsRectVisible`): test if rectangle (of given size, starting from cursor position)
+    /// is visible / not clipped.
     pub fn is_rect_visible_size(&self, size: Vector2) -> bool {
         unsafe { ImGui_IsRectVisible(&v2_to_im(size)) }
     }
+    /// Dear ImGui (`IsRectVisible`): test if rectangle (in screen space) is visible / not clipped.
+    /// to perform coarse clipping on user's side.
     pub fn is_rect_visible(&self, rect_min: Vector2, rect_max: Vector2) -> bool {
         unsafe { ImGui_IsRectVisible1(&v2_to_im(rect_min), &v2_to_im(rect_max)) }
     }
@@ -3431,20 +3489,32 @@ impl<A> Ui<A> {
             ImGui_IsMousePosValid(const ImVec2* mouse_pos = NULL);
         }
     }*/
+    /// Dear ImGui (`IsAnyMouseDown`): is any mouse button held?
+    ///
+    /// **[WILL OBSOLETE]** This was designed for backends, but prefer having backend maintain a mask
+    /// of held mouse buttons, because upcoming input queue system will make this invalid.
     pub fn is_any_mouse_down(&self) -> bool {
         unsafe { ImGui_IsAnyMouseDown() }
     }
+    /// Dear ImGui (`GetMousePos`): shortcut to ImGui::GetIO().MousePos provided by user,
+    /// to be consistent with other calls.
     pub fn get_mouse_pos(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetMousePos()) }
     }
+    /// Dear ImGui (`GetMousePosOnOpeningCurrentPopup`): retrieve mouse position at the time of opening
+    /// popup we have BeginPopup() into (helper to avoid user backing that value themselves).
     pub fn get_mouse_pos_on_opening_current_popup(&self) -> Vector2 {
         unsafe { im_to_v2(ImGui_GetMousePosOnOpeningCurrentPopup()) }
     }
+    /// Dear ImGui (`IsMouseDragging`): is mouse dragging? (uses io.MouseDraggingThreshold if lock_threshold < 0.0f).
     pub fn is_mouse_dragging(&self, button: MouseButton) -> bool {
         unsafe {
             ImGui_IsMouseDragging(button.bits(), /*lock_threshold*/ -1.0)
         }
     }
+    /// Dear ImGui (`GetMouseDragDelta`): return the delta from the initial clicking position while
+    /// the mouse button is pressed or was just released. This is locked and return 0.0f until the
+    /// mouse moves past a distance threshold at least once (uses io.MouseDraggingThreshold if lock_threshold < 0.0f).
     pub fn get_mouse_drag_delta(&self, button: MouseButton) -> Vector2 {
         unsafe {
             im_to_v2(ImGui_GetMouseDragDelta(
@@ -3453,28 +3523,37 @@ impl<A> Ui<A> {
             ))
         }
     }
+    /// Dear ImGui (`ResetMouseDragDelta`): reset mouse drag delta.
     pub fn reset_mouse_drag_delta(&self, button: MouseButton) {
         unsafe {
             ImGui_ResetMouseDragDelta(button.bits());
         }
     }
+    /// Dear ImGui (`GetMouseCursor`): get desired mouse cursor shape. Important: reset in ImGui::NewFrame(),
+    /// this is updated during the frame. valid before Render(). If you use software rendering by setting
+    /// io.MouseDrawCursor ImGui will render those for you.
     pub fn get_mouse_cursor(&self) -> MouseCursor {
         unsafe { MouseCursor::from_bits(ImGui_GetMouseCursor()).unwrap_or(MouseCursor::None) }
     }
+    /// Dear ImGui (`SetMouseCursor`): set desired mouse cursor shape.
     pub fn set_mouse_cursor(&self, cursor_type: MouseCursor) {
         unsafe {
             ImGui_SetMouseCursor(cursor_type.bits());
         }
     }
+    /// Dear ImGui (`GetTime`): get global imgui time. incremented by io.DeltaTime every frame.
     pub fn get_time(&self) -> f64 {
         unsafe { ImGui_GetTime() }
     }
+    /// Dear ImGui (`GetFrameCount`): get global imgui frame count. incremented by 1 every frame.
     pub fn get_frame_count(&self) -> i32 {
         unsafe { ImGui_GetFrameCount() }
     }
+    /// Dear ImGui (`IsPopupOpen`): return true if the popup is open.
     pub fn is_popup_open(&self, str_id: Option<Id<impl IntoCStr>>) -> bool {
         self.is_popup_open_ex(str_id, PopupFlags::None)
     }
+    /// Dear ImGui (`IsPopupOpen`): return true if the popup is open.
     pub fn is_popup_open_ex(&self, str_id: Option<Id<impl IntoCStr>>, flags: PopupFlags) -> bool {
         let temp;
         let str_id = match str_id {
@@ -3508,10 +3587,14 @@ impl<A> Ui<A> {
     pub fn open_popup(&self, str_id: Id<impl IntoCStr>) -> bool {
         self.open_popup_ex(str_id, PopupFlags::None)
     }
+    /// Dear ImGui (`OpenPopup`): Call to mark popup as open (don't call every frame!).
+    ///
+    /// Returns `true` when the popup was just opened.
     pub fn open_popup_ex(&self, str_id: Id<impl IntoCStr>, flags: PopupFlags) -> bool {
         let str_id = str_id.into();
         unsafe { ImGui_OpenPopup(str_id.as_ptr(), flags.bits()) }
     }
+    /// Dear ImGui (`CloseCurrentPopup`): manually close the popup we have begin-ed into.
     pub fn close_current_popup(&self) {
         unsafe {
             ImGui_CloseCurrentPopup();
@@ -3539,6 +3622,8 @@ impl<A> Ui<A> {
     pub fn is_window_appearing(&self) -> bool {
         unsafe { ImGui_IsWindowAppearing() }
     }
+    /// Dear ImGui (`BeginDragDropSource`): call after submitting an item which may be dragged.
+    /// when this returns true, you can call SetDragDropPayload() + EndDragDropSource().
     pub fn with_always_drag_drop_source<R>(
         &self,
         flags: DragDropSourceFlags,
@@ -3554,6 +3639,8 @@ impl<A> Ui<A> {
         unsafe { ImGui_EndDragDropSource() }
         r
     }
+    /// Dear ImGui (`BeginDragDropSource`): call after submitting an item which may be dragged.
+    /// when this returns true, you can call SetDragDropPayload() + EndDragDropSource().
     pub fn with_drag_drop_source<R>(
         &self,
         flags: DragDropSourceFlags,
@@ -3561,6 +3648,8 @@ impl<A> Ui<A> {
     ) -> Option<R> {
         self.with_always_drag_drop_source(flags, move |r| r.map(f))
     }
+    /// Dear ImGui (`BeginDragDropTarget`): call after submitting an item that may receive a payload.
+    /// If this returns true, you can call AcceptDragDropPayload() + EndDragDropTarget().
     pub fn with_always_drag_drop_target<R>(
         &self,
         f: impl FnOnce(Option<DragDropPayloadGetter<'_>>) -> R,
@@ -3575,6 +3664,8 @@ impl<A> Ui<A> {
         unsafe { ImGui_EndDragDropTarget() }
         r
     }
+    /// Dear ImGui (`BeginDragDropTarget`): call after submitting an item that may receive a payload.
+    /// If this returns true, you can call AcceptDragDropPayload() + EndDragDropTarget().
     pub fn with_drag_drop_target<R>(
         &self,
         f: impl FnOnce(DragDropPayloadGetter<'_>) -> R,
@@ -3607,6 +3698,9 @@ impl<A> Ui<A> {
             ImGui_SetNextItemShortcut(key_chord.into().bits(), flags.bits());
         }
     }
+    /// Dear ImGui (`IsKeyChordPressed`): was key chord (mods + key) pressed, e.g. you can pass
+    /// 'ImGuiMod_Ctrl | ImGuiKey_S' as a key-chord. This doesn't do any routing or focus check,
+    /// please consider using Shortcut() function instead.
     pub fn is_keychord_pressed(&self, key_chord: impl Into<KeyChord>) -> bool {
         unsafe { ImGui_IsKeyChordPressed(key_chord.into().bits()) }
     }
@@ -3695,19 +3789,24 @@ impl<A> Ui<A> {
             )
         }
     }
+    /// Dear ImGui (`SetNextWindowDockID`): set next window dock id.
     pub fn set_next_window_dock_id(&self, dock_id: ImGuiID, cond: Cond) {
         unsafe {
             ImGui_SetNextWindowDockID(dock_id, cond.bits());
         }
     }
+    /// Dear ImGui (`SetNextWindowClass`): set next window class (control docking compatibility +
+    /// provide hints to platform backend via custom viewport flags and platform parent/child relationship).
     pub fn set_next_window_class(&self, window_class: &WindowClass) {
         unsafe {
             ImGui_SetNextWindowClass(&window_class.0);
         }
     }
+    /// Dear ImGui (`GetWindowDockID`): get dock id of current window, or 0 if not associated to any docking node.
     pub fn get_window_dock_id(&self) -> ImGuiID {
         unsafe { ImGui_GetWindowDockID() }
     }
+    /// Dear ImGui (`IsWindowDocked`): is current window docked into another window?
     pub fn is_window_docked(&self) -> bool {
         unsafe { ImGui_IsWindowDocked() }
     }
@@ -3743,18 +3842,24 @@ impl<A> Ui<A> {
         }
     }
 
+    /// Dear ImGui (`GetWindowViewport`): get viewport currently associated to the current window.
     pub fn get_window_viewport(&self) -> &Viewport {
         unsafe { Viewport::cast(&*ImGui_GetWindowViewport()) }
     }
+    /// Dear ImGui (`SetNextWindowViewport`): set next window viewport.
     pub fn set_next_window_viewport(&self, id: ImGuiID) {
         unsafe { ImGui_SetNextWindowViewport(id) }
     }
+    /// Dear ImGui (`GetForegroundDrawList`): get foreground draw list for the given viewport.
+    /// this draw list will be the top-most rendered one. Useful to quickly draw shapes/text over dear imgui contents.
     pub fn viewport_foreground_draw_list(&self, viewport: &Viewport) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetForegroundDrawList((&raw const *viewport.get()).cast_mut());
             WindowDrawList { ui: self, ptr }
         }
     }
+    /// Dear ImGui (`GetBackgroundDrawList`): get background draw list for the given viewport.
+    /// this draw list will be the first rendering one. Useful to quickly draw shapes/text behind dear imgui contents.
     pub fn viewport_background_draw_list(&self, viewport: &Viewport) -> WindowDrawList<'_, A> {
         unsafe {
             let ptr = ImGui_GetBackgroundDrawList((&raw const *viewport.get()).cast_mut());
@@ -4319,6 +4424,7 @@ impl<A> WindowDrawList<'_, A> {
             ImDrawList_AddLineV(self.ptr, x, min_y, max_y, color.as_u32(), thickness);
         }
     }
+    /// Dear ImGui (`AddRect`): p_min: upper-left, p_max: lower-right (== upper-left + size).
     pub fn add_rect(
         &self,
         p_min: Vector2,
@@ -4340,6 +4446,7 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`AddRectFilled`): p_min: upper-left, p_max: lower-right (== upper-left + size).
     pub fn add_rect_filled(
         &self,
         p_min: Vector2,
@@ -4616,6 +4723,7 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`AddBezierCubic`): Cubic Bezier (4 control points).
     pub fn add_bezier_cubic(
         &self,
         p1: Vector2,
@@ -4639,6 +4747,7 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`AddBezierQuadratic`): Quadratic Bezier (3 control points).
     pub fn add_bezier_quadratic(
         &self,
         p1: Vector2,
@@ -4804,6 +4913,7 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`PathArcToFast`): use precomputed angles for a 12 steps circle.
     pub fn path_arc_to_fast(
         &self,
         center: Vector2,
@@ -4821,6 +4931,7 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`PathEllipticalArcTo`): elliptical arc.
     pub fn path_elliptical_arc_to(
         &self,
         center: Vector2,
@@ -4900,6 +5011,9 @@ impl<A> WindowDrawList<'_, A> {
             );
         }
     }
+    /// Dear ImGui (`AddDrawCmd`): this is useful if you need to forcefully create a new draw call
+    /// (to allow for dependent rendering / blending). Otherwise primitives are merged into the same
+    /// draw-call as much as possible.
     pub fn add_draw_cmd(&self) {
         unsafe {
             ImDrawList_AddDrawCmd(self.ptr);
@@ -5485,16 +5599,22 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
                 push: (),
             }
         }
+        /// Dear ImGui (`TableNextRow`): append into the first cell of a new row.
+        /// `min_row_height` includes the minimum top and bottom padding aka CellPadding.y * 2.0f.
         pub fn table_next_row(&self, flags: TableRowFlags, min_row_height: f32) {
             unsafe {
                 ImGui_TableNextRow(flags.bits(), min_row_height);
             }
         }
+        /// Dear ImGui (`TableNextColumn`): append into the next column (or first column of next row
+        /// if currently in last column). Return true when column is visible.
         pub fn table_next_column(&self) -> bool {
             unsafe {
                 ImGui_TableNextColumn()
             }
         }
+        /// Dear ImGui (`TableSetColumnIndex`): append into the specified column.
+        /// Return true when column is visible.
         pub fn table_set_column_index(&self, column_n: i32) -> bool {
             unsafe {
                 ImGui_TableSetColumnIndex(column_n)
@@ -5505,26 +5625,33 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
                 ImGui_TableSetupColumn(label.into().as_ptr(), flags.bits(), init_width_or_weight, user_id);
             }
         }
+        /// Dear ImGui (`TableSetupScrollFreeze`): lock columns/rows so they stay visible when scrolled.
         pub fn table_setup_scroll_freeze(&self, cols: i32, rows: i32) {
             unsafe {
                 ImGui_TableSetupScrollFreeze(cols, rows);
             }
         }
+        /// Dear ImGui (`TableHeadersRow`): submit a row with headers cells based on data provided
+        /// to TableSetupColumn() + submit context menu.
         pub fn table_headers_row(&self) {
             unsafe {
                 ImGui_TableHeadersRow();
             }
         }
+        /// Dear ImGui (`TableAngledHeadersRow`): submit a row with angled headers for every column
+        /// with the ImGuiTableColumnFlags_AngledHeader flag. MUST BE FIRST ROW.
         pub fn table_angle_headers_row(&self) {
             unsafe {
                 ImGui_TableAngledHeadersRow();
             }
         }
+        /// Dear ImGui (`TableGetColumnCount`): return number of columns (value passed to BeginTable).
         pub fn table_get_columns_count(&self) -> i32 {
             unsafe {
                 ImGui_TableGetColumnCount()
             }
         }
+        /// Dear ImGui (`TableGetColumnIndex`): return current column index.
         pub fn table_get_column_index(&self) -> i32 {
             unsafe {
                 ImGui_TableGetColumnIndex()
@@ -5541,6 +5668,7 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
                 }
             }
         }
+        /// Dear ImGui (`TableGetRowIndex`): return current row index (header rows are accounted for).
         pub fn table_get_row_index(&self) -> i32 {
             unsafe {
                 ImGui_TableGetRowIndex()
@@ -5552,22 +5680,31 @@ decl_builder_with_opt! { TableConfig, ImGui_BeginTable, ImGui_EndTable () (S: In
             };
             TableColumnFlags::from_bits_truncate(bits)
         }
+        /// Dear ImGui (`TableGetColumnName`): return "" if column didn't have a name declared by
+        /// TableSetupColumn(). Pass None to use current column.
         pub fn table_get_column_name(&self, column_n: Option<i32>) -> String {
             unsafe {
                 let c_str = ImGui_TableGetColumnName(column_n.unwrap_or(-1));
                 CStr::from_ptr(c_str).to_string_lossy().into_owned()
             }
         }
+        /// Dear ImGui (`TableSetColumnEnabled`): change user accessible enabled/disabled state of a column.
+        /// Set to false to hide the column. User can use the context menu to change this themselves
+        /// (right-click in headers, or right-click in columns body with ImGuiTableFlags_ContextMenuInBody).
         pub fn table_set_column_enabled(&self, column_n: Option<i32>, enabled: bool) {
             unsafe {
                 ImGui_TableSetColumnEnabled(column_n.unwrap_or(-1), enabled);
             };
         }
+        /// Dear ImGui (`TableSetBgColor`): change the color of a cell, row, or column.
+        /// See ImGuiTableBgTarget_ flags for details.
         pub fn table_set_bg_color(&self, target: TableBgTarget, color: Color, column_n: Option<i32>) {
             unsafe {
                 ImGui_TableSetBgColor(target.bits(), color.as_u32(), column_n.unwrap_or(-1));
             };
         }
+        /// Dear ImGui (`TableGetSortSpecs`): get latest sort specs for the table (NULL if not sorting).
+        /// Lifetime: don't hold on this pointer over multiple frames or past any subsequent call to BeginTable().
         pub fn table_with_sort_specs(&self, sort_fn: impl FnOnce(&[TableColumnSortSpec])) {
             self.table_with_sort_specs_always(|dirty, spec| {
                 if dirty {

@@ -402,6 +402,10 @@ imgui_enum! {
         SeparatorTextPadding,
         /// Dear ImGui (`ImGuiStyleVar_DockingSeparatorSize`): Docking separator size
         DockingSeparatorSize,
+        /// Dear ImGui (`ImGuiStyleVar_MenuItemRounding`): Radius of MenuItem, BeginMenu rounding
+        MenuItemRounding,
+        /// Dear ImGui (`ImGuiStyleVar_SelectableRounding`): Radius of Selectable rounding
+        SelectableRounding,
     }
 }
 
@@ -1139,6 +1143,8 @@ imgui_flags! {
         PickerHueBar,
         /// Dear ImGui (`ImGuiColorEditFlags_PickerHueWheel`): ColorPicker: wheel for Hue, triangle for Sat/Value.
         PickerHueWheel,
+        /// Dear ImGui (`ImGuiColorEditFlags_PickerNoRotate`): ColorPicker: disable rotating Sat/Value triangle
+        PickerNoRotate,
         /// Dear ImGui (`ImGuiColorEditFlags_InputRGB`): ColorEdit, ColorPicker: input and output data in RGB format.
         InputRGB,
         /// Dear ImGui (`ImGuiColorEditFlags_InputHSV`): ColorEdit, ColorPicker: input and output data in HSV format.
@@ -1531,6 +1537,12 @@ imgui_flags! {
         AutoClosePopups,
         /// Dear ImGui (`ImGuiItemFlags_AllowDuplicateId`): Allow duplicate ID
         AllowDuplicateId,
+        /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInputText`): InputText: apply keyboard edits to backing value while typing
+        LiveEditOnInputText,
+        /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInputScalar`): DragXXX, SliderXXX, InputScalar: apply keyboard edits to backing value while typing
+        LiveEditOnInputScalar,
+        /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInput`): LiveEditOnInputText | LiveEditOnInputScalar
+        LiveEditOnInput,
     }
 }
 

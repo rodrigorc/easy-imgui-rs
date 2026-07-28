@@ -3342,11 +3342,6 @@ impl<A> Ui<A> {
             ))
         }
     }
-    pub fn set_color_edit_options(&self, flags: ColorEditFlags) {
-        unsafe {
-            ImGui_SetColorEditOptions(flags.bits());
-        }
-    }
     pub fn key_mods(&self) -> KeyMod {
         let mods = self.io().KeyMods;
         KeyMod::from_bits_truncate(mods & ImGuiKey::ImGuiMod_Mask_.0)
@@ -3399,6 +3394,25 @@ impl<A> Ui<A> {
     }
     pub fn get_mouse_clicked_count(&self, button: MouseButton) -> i32 {
         unsafe { ImGui_GetMouseClickedCount(button.bits()) }
+    }
+    /// Dear ImGui (`GetItemClickedCountWithSingleClickDelay`): [BETA] Building block for disambiguation between single-click and double-click.
+    ///
+    /// Returns 1 on single-click but delayed by `io.MouseSingleClickDelay` after mouse release.
+    /// Returns 2+ on double-click or repeated clicks.
+    pub fn get_item_clicked_count_with_single_click_delay(
+        &self,
+        button: MouseButton,
+        delay: f32,
+    ) -> i32 {
+        unsafe { ImGui_GetItemClickedCountWithSingleClickDelay(button.bits(), delay) }
+    }
+    /// Dear ImGui (`IsMouseReleasedWithDelay`): Delayed mouse release. Use sparingly. Prefer higher-level helper
+    /// `get_item_clicked_count_with_single_click_delay()`.
+    ///
+    /// Generally used with `delay >= io.MouseDoubleClickTime` combined with a
+    /// `io.MouseClickedLastCount == 1` test.
+    pub fn is_mouse_released_with_delay(&self, button: MouseButton, delay: f32) -> bool {
+        unsafe { ImGui_IsMouseReleasedWithDelay(button.bits(), delay) }
     }
     pub fn is_rect_visible_size(&self, size: Vector2) -> bool {
         unsafe { ImGui_IsRectVisible(&v2_to_im(size)) }
@@ -3488,19 +3502,39 @@ impl<A> Ui<A> {
             !modal.is_null()
         }
     }
-    pub fn open_popup(&self, str_id: Id<impl IntoCStr>) {
+    /// Dear ImGui (`OpenPopup`): Call to mark popup as open (don't call every frame!).
+    ///
+    /// Returns `true` when the popup was just opened.
+    pub fn open_popup(&self, str_id: Id<impl IntoCStr>) -> bool {
         self.open_popup_ex(str_id, PopupFlags::None)
     }
-    pub fn open_popup_ex(&self, str_id: Id<impl IntoCStr>, flags: PopupFlags) {
+    pub fn open_popup_ex(&self, str_id: Id<impl IntoCStr>, flags: PopupFlags) -> bool {
         let str_id = str_id.into();
-        unsafe {
-            ImGui_OpenPopup(str_id.as_ptr(), flags.bits());
-        }
+        unsafe { ImGui_OpenPopup(str_id.as_ptr(), flags.bits()) }
     }
     pub fn close_current_popup(&self) {
         unsafe {
             ImGui_CloseCurrentPopup();
         }
+    }
+    /// Dear ImGui (`OpenPopupOnItemClick`): Helper to open popup when clicked on last item. Default to `ImGuiPopupFlags_MouseButtonRight` == 1.
+    ///
+    /// Note: actually triggers on the mouse _released_ event to be consistent with popup behaviors.
+    /// Returns `true` when the popup was just opened.
+    pub fn open_popup_on_item_click(
+        &self,
+        str_id: Option<Id<impl IntoCStr>>,
+        flags: PopupFlags,
+    ) -> bool {
+        let temp;
+        let str_id = match str_id {
+            Some(s) => {
+                temp = IntoCStr::into(s.0);
+                temp.as_ptr()
+            }
+            None => null(),
+        };
+        unsafe { ImGui_OpenPopupOnItemClick(str_id, flags.bits()) }
     }
     pub fn is_window_appearing(&self) -> bool {
         unsafe { ImGui_IsWindowAppearing() }
@@ -4101,6 +4135,29 @@ impl Io {
         self.DisplayFramebufferScale.x
     }
 
+    /// Dear ImGui (`io.ConfigColorEditFlags`): Current settings for ColorEdit/ColorPicker widgets.
+    pub fn config_color_edit_flags(&self) -> ColorEditFlags {
+        ColorEditFlags::from_bits_truncate(self.ConfigColorEditFlags)
+    }
+    /// Dear ImGui (`io.MouseSingleClickDelay`): Time for a delayed click when using
+    /// `get_item_clicked_count_with_single_click_delay()` or `is_mouse_released_with_delay()`, in
+    /// seconds. Must be > `io.MouseDoubleClickTime`.
+    pub fn mouse_single_click_delay(&self) -> f32 {
+        self.MouseSingleClickDelay
+    }
+    /// Dear ImGui (`io.ConfigIniSettingsSaveLastUsedDate`): Enable loading/saving last used day
+    /// (YYYYMMDD) in some .ini struct, making things easier to audit and allowing custom tools to
+    /// cleanup old data.
+    pub fn config_ini_settings_save_last_used_date(&self) -> bool {
+        self.ConfigIniSettingsSaveLastUsedDate
+    }
+    /// Dear ImGui (`io.ConfigIniSettingsAutoDiscardMonths`): [BETA] Set number of months after
+    /// which unused .ini entries are discarded on load. Require
+    /// `PlatformIo::Platform_SessionDate` to be set.
+    pub fn config_ini_settings_auto_discard_months(&self) -> i32 {
+        self.ConfigIniSettingsAutoDiscardMonths
+    }
+
     // The following are not unsafe because if you have a `&mut Io` you alreay can do anything.
     pub fn add_config_flags(&mut self, flags: ConfigFlags) {
         self.ConfigFlags |= flags.bits();
@@ -4175,6 +4232,23 @@ impl IoMut {
     }
     pub fn font_atlas_mut(&mut self) -> &mut FontAtlas {
         unsafe { FontAtlas::cast_mut(&mut *self.Fonts) }
+    }
+    /// Dear ImGui (`io.ConfigColorEditFlags`): Set current options for ColorEdit/ColorPicker widgets.
+    pub fn set_config_color_edit_flags(&mut self, flags: ColorEditFlags) {
+        self.0.ConfigColorEditFlags = flags.bits();
+    }
+    /// Dear ImGui (`io.MouseSingleClickDelay`): Set the delayed single click time, in seconds.
+    /// Must be > `io.MouseDoubleClickTime`.
+    pub fn set_mouse_single_click_delay(&mut self, delay: f32) {
+        self.0.MouseSingleClickDelay = delay;
+    }
+    /// Dear ImGui (`io.ConfigIniSettingsSaveLastUsedDate`): Enable loading/saving last used day in .ini settings.
+    pub fn set_config_ini_settings_save_last_used_date(&mut self, save: bool) {
+        self.0.ConfigIniSettingsSaveLastUsedDate = save;
+    }
+    /// Dear ImGui (`io.ConfigIniSettingsAutoDiscardMonths`): [BETA] Set number of months after which unused .ini entries are discarded on load.
+    pub fn set_config_ini_settings_auto_discard_months(&mut self, months: i32) {
+        self.0.ConfigIniSettingsAutoDiscardMonths = months;
     }
 }
 

@@ -3399,8 +3399,8 @@ impl<A> Ui<A> {
     }
     /// Dear ImGui (`GetKeyPressedAmount`): uses provided repeat rate/delay. return a count, most often 0 or 1
     /// but might be >1 if RepeatRate is small enough that DeltaTime > RepeatRate.
-    pub fn get_key_pressed_amount(&self, key: Key, repeat_delay: f32, rate: f32) -> i32 {
-        unsafe { ImGui_GetKeyPressedAmount(key.bits(), repeat_delay, rate) }
+    pub fn get_key_pressed_amount(&self, key: Key, repeat_delay: Duration, rate: f32) -> i32 {
+        unsafe { ImGui_GetKeyPressedAmount(key.bits(), repeat_delay.as_secs_f32(), rate) }
     }
     /// Dear ImGui (`GetFontTexUvWhitePixel`): get UV coordinate for a white pixel, useful to draw
     /// custom shapes via the ImDrawList API.
@@ -3456,17 +3456,17 @@ impl<A> Ui<A> {
     pub fn get_item_clicked_count_with_single_click_delay(
         &self,
         button: MouseButton,
-        delay: f32,
+        delay: Duration,
     ) -> i32 {
-        unsafe { ImGui_GetItemClickedCountWithSingleClickDelay(button.bits(), delay) }
+        unsafe { ImGui_GetItemClickedCountWithSingleClickDelay(button.bits(), delay.as_secs_f32()) }
     }
     /// Dear ImGui (`IsMouseReleasedWithDelay`): Delayed mouse release. Use sparingly. Prefer higher-level helper
     /// `get_item_clicked_count_with_single_click_delay()`.
     ///
     /// Generally used with `delay >= io.MouseDoubleClickTime` combined with a
     /// `io.MouseClickedLastCount == 1` test.
-    pub fn is_mouse_released_with_delay(&self, button: MouseButton, delay: f32) -> bool {
-        unsafe { ImGui_IsMouseReleasedWithDelay(button.bits(), delay) }
+    pub fn is_mouse_released_with_delay(&self, button: MouseButton, delay: Duration) -> bool {
+        unsafe { ImGui_IsMouseReleasedWithDelay(button.bits(), delay.as_secs_f32()) }
     }
     /// Dear ImGui (`IsRectVisible`): test if rectangle (of given size, starting from cursor position)
     /// is visible / not clipped.
@@ -4247,8 +4247,8 @@ impl Io {
     /// Dear ImGui (`io.MouseSingleClickDelay`): Time for a delayed click when using
     /// `get_item_clicked_count_with_single_click_delay()` or `is_mouse_released_with_delay()`, in
     /// seconds. Must be > `io.MouseDoubleClickTime`.
-    pub fn mouse_single_click_delay(&self) -> f32 {
-        self.MouseSingleClickDelay
+    pub fn mouse_single_click_delay(&self) -> Duration {
+        Duration::from_secs_f32(self.MouseSingleClickDelay)
     }
     /// Dear ImGui (`io.ConfigIniSettingsSaveLastUsedDate`): Enable loading/saving last used day
     /// (YYYYMMDD) in some .ini struct, making things easier to audit and allowing custom tools to
@@ -4344,8 +4344,8 @@ impl IoMut {
     }
     /// Dear ImGui (`io.MouseSingleClickDelay`): Set the delayed single click time, in seconds.
     /// Must be > `io.MouseDoubleClickTime`.
-    pub fn set_mouse_single_click_delay(&mut self, delay: f32) {
-        self.0.MouseSingleClickDelay = delay;
+    pub fn set_mouse_single_click_delay(&mut self, delay: Duration) {
+        self.0.MouseSingleClickDelay = delay.as_secs_f32();
     }
     /// Dear ImGui (`io.ConfigIniSettingsSaveLastUsedDate`): Enable loading/saving last used day in .ini settings.
     pub fn set_config_ini_settings_save_last_used_date(&mut self, save: bool) {

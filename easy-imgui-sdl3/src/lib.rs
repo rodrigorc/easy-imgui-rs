@@ -354,7 +354,6 @@ impl<A: Application> LocalProxy<A> {
 
 /// The main type that handles the main loop.
 pub struct AppHandler<A: Application> {
-    imgui: easy_imgui::Context,
     clear_color: Option<easy_imgui::Color>,
     gl: Rc<glow::Context>,
     window: sdl3::video::Window,
@@ -362,15 +361,44 @@ pub struct AppHandler<A: Application> {
     user_events: Arc<Mutex<Vec<AppEvent<A>>>>,
     local_proxy: LocalProxy<A>,
     idler: easy_imgui::Idler,
+
     app_data: A::Data,
     app: A,
+
+    // Beware the order of destruction!
+    // First the Window stuff, and misc. objects.
+    // Then the app, in case they use any OpenGL stuff.
+    // Then the OpenGL backend.
+    // And lastly the backend-agnostic ImGui context.
+    _opengl_shutdown_guard: OpenGlShutdownGuard,
+    imgui: easy_imgui::Context,
+}
+
+/// Helper type that call [`shutdown_for_opengl`] on drop.
+pub struct OpenGlShutdownGuard(());
+
+impl OpenGlShutdownGuard {
+    /// Creates a guard object that calls [`shutdown_for_opengl`] on drop.
+    /// # Safety
+    /// The unsafe part is actually the `drop`, but that can't be marked.
+    pub unsafe fn new() -> OpenGlShutdownGuard {
+        OpenGlShutdownGuard(())
+    }
+}
+
+impl Drop for OpenGlShutdownGuard {
+    fn drop(&mut self) {
+        unsafe {
+            shutdown_for_opengl();
+        }
+    }
 }
 
 impl<A: Application> Drop for AppHandler<A> {
     fn drop(&mut self) {
+        // Ensure that our context is current for the other pieces of the drop
         unsafe {
             let _imgui = self.imgui.set_current();
-            shutdown_for_opengl();
         }
     }
 }
@@ -433,7 +461,6 @@ impl<A: Application> AppHandler<A> {
             let app = A::new(args);
 
             AppHandler {
-                imgui,
                 clear_color: Some(easy_imgui::Color::new(0.45, 0.55, 0.60, 1.00)),
                 gl,
                 window,
@@ -443,6 +470,8 @@ impl<A: Application> AppHandler<A> {
                 idler,
                 app_data,
                 app,
+                _opengl_shutdown_guard: OpenGlShutdownGuard::new(),
+                imgui,
             }
         }
     }

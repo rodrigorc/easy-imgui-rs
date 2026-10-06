@@ -3912,6 +3912,28 @@ transparent! {
     pub struct FontGlyph(ImFontGlyph);
 }
 
+impl Font {
+    pub fn add_remap_codepoint(&self, from: char, to: char) {
+        unsafe {
+            ImFont_AddRemapCodepoint(
+                (&raw const self.0).cast_mut(),
+                ImWchar::from(from),
+                ImWchar::from(to),
+            );
+        }
+    }
+    pub fn add_remap_codepoint_to_glyph(&self, from: char, font_src_idx: i32, glyph_idx: i32) {
+        unsafe {
+            ImFont_AddRemapCodepointToGlyphIndex(
+                (&raw const self.0).cast_mut(),
+                ImWchar::from(from),
+                font_src_idx,
+                glyph_idx,
+            );
+        }
+    }
+}
+
 impl FontGlyph {
     pub fn p0(&self) -> Vector2 {
         Vector2::new(self.0.X0, self.0.Y0)
@@ -4142,7 +4164,7 @@ impl FontAtlas {
                 }
                 TtfData::CustomLoader(glyph_loader) => {
                     let ptr = Box::into_raw(Box::new(glyph_loader));
-                    fc.FontLoader = &fontloader::FONT_LOADER.0;
+                    fc.FontLoader = &fontloader::GLYPH_FONT_LOADER.0;
                     fc.FontData = ptr as *mut c_void;
                     fc.FontDataOwnedByAtlas = true;
                     self.0.AddFont(&fc)

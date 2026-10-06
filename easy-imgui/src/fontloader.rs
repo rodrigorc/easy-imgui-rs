@@ -1,3 +1,5 @@
+use std::os::raw::{c_int, c_void};
+
 use super::{FontBaked, PixelImage, SubPixelImage, Vector2, vec2};
 use bitflags::bitflags;
 use easy_imgui_sys::*;
@@ -5,8 +7,10 @@ use image::GenericImage;
 
 /// Trait that implements a custom font loader.
 pub trait GlyphLoader {
-    /// Return true if this font loader contains this character.
-    fn contains_glyph(&mut self, codepoint: char) -> bool;
+    /// Return the glyph index for a char codepoint, 0 if not available.
+    fn get_glyph_index_from_codepoint(&mut self, codepoint: char) -> u32;
+    /// Return true if this font loader contains this glyph.
+    fn contains_glyph(&mut self, glyph_index: u32) -> bool;
     /// Try to load a glyph.
     ///
     /// Refer to [`GlyphLoaderArg`] for details.
@@ -24,18 +28,19 @@ pub trait GlyphLoader {
 pub type BoxGlyphLoader = Box<dyn GlyphLoader + 'static>;
 
 /// Newtype for the one and only FONT_LOADER.
-pub struct FontLoader(pub ImFontLoader);
-unsafe impl Sync for FontLoader {}
+pub struct GlyphFontLoader(pub ImFontLoader);
+unsafe impl Sync for GlyphFontLoader {}
 
-pub static FONT_LOADER: FontLoader = FontLoader::new();
+pub static GLYPH_FONT_LOADER: GlyphFontLoader = GlyphFontLoader::new();
 
-impl FontLoader {
+impl GlyphFontLoader {
     const fn new() -> Self {
         let inner = ImFontLoader {
             Name: c"easy_imgui::FontLoader".as_ptr(),
             LoaderInit: None,
             LoaderShutdown: None,
             FontSrcInit: Some(font_src_init),
+            FontSrcGetGlyphIndexFromCodepoint: Some(font_src_get_glyph_index_from_codepoint),
             FontSrcDestroy: Some(font_src_destroy),
             FontSrcContainsGlyph: Some(font_src_contains_glyph),
             FontBakedInit: Some(font_baked_init),
@@ -43,7 +48,7 @@ impl FontLoader {
             FontBakedLoadGlyph: Some(font_baked_load_glyph),
             FontBakedSrcLoaderDataSize: 0,
         };
-        FontLoader(inner)
+        GlyphFontLoader(inner)
     }
 }
 
@@ -55,6 +60,25 @@ unsafe extern "C" fn font_src_init(_atlas: *mut ImFontAtlas, src: *mut ImFontCon
         }
         (*src).FontLoaderData = std::mem::replace(&mut (*src).FontData, std::ptr::null_mut());
         true
+    }
+}
+
+unsafe extern "C" fn font_src_get_glyph_index_from_codepoint(
+    _atlas: *mut ImFontAtlas,
+    src: *mut ImFontConfig,
+    codepoint: ImWchar,
+) -> c_int {
+    unsafe {
+        let ptr = (*src).FontLoaderData;
+        if ptr.is_null() {
+            return 0;
+        }
+        let Some(c) = char::from_u32(codepoint) else {
+            return 0;
+        };
+        let ptr = ptr as *mut BoxGlyphLoader;
+        let ldr = &mut *ptr;
+        ldr.get_glyph_index_from_codepoint(c) as c_int
     }
 }
 
@@ -73,19 +97,16 @@ unsafe extern "C" fn font_src_destroy(_atlas: *mut ImFontAtlas, src: *mut ImFont
 unsafe extern "C" fn font_src_contains_glyph(
     _atlas: *mut ImFontAtlas,
     src: *mut ImFontConfig,
-    codepoint: ImWchar,
+    glyph_index: c_int,
 ) -> bool {
     unsafe {
         let ptr = (*src).FontLoaderData;
         if ptr.is_null() {
             return false;
         }
-        let Some(c) = char::from_u32(codepoint) else {
-            return false;
-        };
         let ptr = ptr as *mut BoxGlyphLoader;
         let ldr = &mut *ptr;
-        ldr.contains_glyph(c)
+        ldr.contains_glyph(i32::from(glyph_index).cast_unsigned())
     }
 }
 
@@ -93,8 +114,8 @@ unsafe extern "C" fn font_baked_load_glyph(
     atlas: *mut ImFontAtlas,
     src: *mut ImFontConfig,
     baked: *mut ImFontBaked,
-    _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
-    codepoint: ImWchar,
+    _loader_data_for_baked_src: *mut c_void,
+    glyph_index: c_int,
     out_glyph: *mut ImFontGlyph,
     out_advance_x: *mut f32,
 ) -> bool {
@@ -103,9 +124,6 @@ unsafe extern "C" fn font_baked_load_glyph(
         if ptr.is_null() {
             return false;
         }
-        let Some(codepoint) = char::from_u32(codepoint) else {
-            return false;
-        };
         let ptr = ptr as *mut BoxGlyphLoader;
         let ldr = &mut *ptr;
 
@@ -124,7 +142,7 @@ unsafe extern "C" fn font_baked_load_glyph(
             GlyphLoaderResult::AdvanceX(&mut *out_advance_x)
         };
         let arg = GlyphLoaderArg {
-            codepoint,
+            glyph_index: glyph_index.cast_unsigned(),
             oversample: vec2(oversample_h as f32, oversample_v as f32),
             rasterizer_density,
             result: &mut result,
@@ -142,7 +160,7 @@ unsafe extern "C" fn font_baked_init(
     _atlas: *mut ImFontAtlas,
     src: *mut ImFontConfig,
     baked: *mut ImFontBaked,
-    _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
+    _loader_data_for_baked_src: *mut c_void,
 ) -> bool {
     unsafe {
         let ptr = (*src).FontLoaderData;
@@ -161,7 +179,7 @@ unsafe extern "C" fn font_baked_destroy(
     _atlas: *mut ImFontAtlas,
     src: *mut ImFontConfig,
     baked: *mut ImFontBaked,
-    _loader_data_for_baked_src: *mut ::std::os::raw::c_void,
+    _loader_data_for_baked_src: *mut c_void,
 ) {
     unsafe {
         let ptr = (*src).FontLoaderData;
@@ -184,7 +202,7 @@ enum GlyphLoaderResult<'a> {
 ///
 /// Having a struct instead of a collection of parameters makes it easier to write and use.
 pub struct GlyphLoaderArg<'a> {
-    codepoint: char,
+    glyph_index: u32,
     // This are integer in DearImGui, but why not fractions?
     oversample: Vector2,
     rasterizer_density: f32,
@@ -214,9 +232,9 @@ bitflags! {
 }
 
 impl GlyphLoaderArg<'_> {
-    /// The character to be loaded.
-    pub fn codepoint(&self) -> char {
-        self.codepoint
+    /// The glyph to be loaded.
+    pub fn glyph_index(&self) -> u32 {
+        self.glyph_index
     }
     /// The current size of the font requested.
     pub fn font_size(&self) -> f32 {
@@ -336,7 +354,6 @@ impl GlyphLoaderArg<'_> {
                     if self.src.PixelSnapH { x.round() } else { x }
                 };
 
-                out_glyph.set_Codepoint(self.codepoint as u32);
                 out_glyph.AdvanceX = advance_x;
                 out_glyph.X0 = font_off_x + origin.x;
                 out_glyph.Y0 = font_off_y + origin.y;

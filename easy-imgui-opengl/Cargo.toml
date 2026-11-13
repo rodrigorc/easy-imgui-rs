@@ -2,9 +2,9 @@
 name = "easy-imgui-opengl"
 description = "OpenGL helper types, designed to work with easy-imgui"
 version = "0.3.1"
+readme = "README.md"
 edition.workspace = true
 license.workspace = true
-readme.workspace = true
 repository.workspace = true
 categories.workspace = true
 keywords.workspace = true

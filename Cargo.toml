@@ -20,11 +20,11 @@ categories = ["gui"]
 keywords = ["imgui", "ui", "graphics"]
 
 [workspace.dependencies]
-easy-imgui-sys = { path = "easy-imgui-sys" }
-easy-imgui = { path = "easy-imgui" }
-easy-imgui-opengl = { path = "easy-imgui-opengl" }
-easy-imgui-renderer = { path = "easy-imgui-renderer" }
-easy-imgui-window = { path = "easy-imgui-window" }
+easy-imgui-sys = { version = "0.25.0", path = "easy-imgui-sys" }
+easy-imgui = { version = "0.25.0", path = "easy-imgui" }
+easy-imgui-opengl = { version = "0.3.1", path = "easy-imgui-opengl" }
+easy-imgui-renderer = { version = "0.25.0", path = "easy-imgui-renderer" }
+easy-imgui-window = { version = "0.25.0", path = "easy-imgui-window" }
 
 anyhow = "1"
 bitflags = "2"

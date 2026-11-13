@@ -2,9 +2,9 @@
 name = "easy-imgui-filechooser"
 description = "File-chooser widget for easy-imgui"
 version = "0.6.0"
+readme = "README.md"
 edition.workspace = true
 license.workspace = true
-readme.workspace = true
 repository.workspace = true
 categories.workspace = true
 keywords.workspace = true

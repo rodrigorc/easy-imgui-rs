@@ -18,7 +18,7 @@ easy-imgui-sys = { workspace = true, features = ["backend-opengl3", "backend-sdl
 easy-imgui = { workspace = true, features = ["future"] }
 
 # Ensure that sdl3 and easy-imgui-sys depend on the same version of sdl3-sys crate
-sdl3 = "0.18.2"
+sdl3 = "0.22.1"
 glow.workspace = true
 send_wrapper.workspace = true
 

@@ -41,7 +41,9 @@ impl ZipDirEnum {
             if zentry.is_dir() {
                 continue;
             }
-            let path = PathBuf::from(zentry.name());
+            let Some(path) = zentry.enclosed_name() else {
+                continue;
+            };
             let mut cur = &mut root;
 
             for piece in &path {

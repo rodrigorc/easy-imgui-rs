@@ -15,10 +15,10 @@ backend-opengl3 = []
 backend-sdl3 = ["dep:sdl3-sys"]
 
 [dependencies]
-sdl3-sys = { version = "0.6.5", optional = true }
+sdl3-sys = { version = "0.7.3", optional = true }
 
 [build-dependencies]
-bindgen = "0.72"
+bindgen = "0.73"
 cc = "1"
 pkg-config = "0.3"
 xshell = "0.2"

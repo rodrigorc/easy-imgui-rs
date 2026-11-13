@@ -1,6 +1,6 @@
 /*!
-* Helper module to wrap calls to `glow` OpenGL functions.
-*/
+ * Helper module to wrap calls to `glow` OpenGL functions.
+ */
 // Too many unsafes ahead
 #![allow(clippy::missing_safety_doc)]
 
@@ -86,6 +86,9 @@ impl EnablerVertexAttribArray {
         }
         EnablerVertexAttribArray { gl: gl.clone(), id }
     }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
 }
 
 impl Drop for EnablerVertexAttribArray {
@@ -121,6 +124,9 @@ impl PushViewport {
         unsafe {
             self.gl.viewport(x, y, width, height);
         }
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
     }
 }
 
@@ -227,6 +233,9 @@ impl Program {
     }
     pub fn id(&self) -> glow::Program {
         self.id
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
     }
     pub fn attrib_by_name(&self, name: &str) -> Option<&Attribute> {
         self.attribs.iter().find(|a| a.name == name)
@@ -362,6 +371,24 @@ impl UniformProvider for () {
     }
 }
 
+impl<U: UniformProvider> UniformProvider for Option<U> {
+    fn apply(&self, gl: &GlContext, u: &Uniform) -> bool {
+        match self {
+            None => false,
+            Some(s) => s.apply(gl, u),
+        }
+    }
+}
+
+impl<'a, U> UniformProvider for &'a Option<U>
+where
+    &'a U: UniformProvider,
+{
+    fn apply(&self, gl: &GlContext, u: &Uniform) -> bool {
+        self.as_ref().apply(gl, u)
+    }
+}
+
 /// # Safety
 ///
 /// This trait returns offsets from Self that will be used to index the raw memory of a
@@ -376,6 +403,43 @@ pub trait AttribProviderList {
     fn bind(&self, target: u32, p: &Program) -> Self::KeepType;
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+impl AttribProviderList for () {
+    type KeepType = ();
+    fn len(&self) -> usize {
+        0
+    }
+    fn bind(&self, _target: u32, _p: &Program) {}
+}
+
+impl<A: AttribProviderList> AttribProviderList for Option<A> {
+    type KeepType = Option<A::KeepType>;
+    fn len(&self) -> usize {
+        match self {
+            None => 0,
+            Some(s) => s.len(),
+        }
+    }
+    fn bind(&self, target: u32, p: &Program) -> Self::KeepType {
+        match self {
+            None => None,
+            Some(s) => Some(s.bind(target, p)),
+        }
+    }
+}
+
+impl<'a, A> AttribProviderList for &'a Option<A>
+where
+    &'a A: AttribProviderList,
+{
+    type KeepType = Option<<&'a A as AttribProviderList>::KeepType>;
+    fn len(&self) -> usize {
+        self.as_ref().len()
+    }
+    fn bind(&self, target: u32, p: &Program) -> Self::KeepType {
+        self.as_ref().bind(target, p)
     }
 }
 
@@ -841,6 +905,9 @@ impl Buffer {
     pub fn id(&self) -> glow::Buffer {
         self.id
     }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
 }
 
 pub struct VertexArray {
@@ -865,6 +932,9 @@ impl VertexArray {
     }
     pub fn id(&self) -> glow::VertexArray {
         self.id
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
     }
 }
 
@@ -891,6 +961,9 @@ impl Renderbuffer {
     pub fn id(&self) -> glow::Renderbuffer {
         self.id
     }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
+    }
 }
 
 pub struct BinderRenderbuffer(GlContext);
@@ -912,6 +985,9 @@ impl BinderRenderbuffer {
         unsafe {
             rb.gl.bind_renderbuffer(glow::RENDERBUFFER, Some(rb.id));
         }
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.0
     }
 }
 impl Drop for BinderRenderbuffer {
@@ -944,6 +1020,9 @@ impl Framebuffer {
     }
     pub fn id(&self) -> glow::Framebuffer {
         self.id
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
     }
 }
 
@@ -997,6 +1076,9 @@ impl<TGT: BinderFBOTarget> BinderFramebufferT<TGT> {
         unsafe {
             fb.gl.bind_framebuffer(TGT::TARGET, Some(fb.id));
         }
+    }
+    pub fn gl(&self) -> &GlContext {
+        &self.gl
     }
 }
 

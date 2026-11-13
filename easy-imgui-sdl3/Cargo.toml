@@ -27,9 +27,5 @@ features = ["backend-opengl3", "backend-sdl3"]
 version = "0.24.0"
 features = ["future"]
 
-[build-dependencies]
-bindgen = "0.72"
-cc = "1"
-
 [dev-dependencies]
 smol = "2.0.2"

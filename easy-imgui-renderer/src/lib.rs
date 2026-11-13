@@ -1,7 +1,7 @@
 /*!
-* This crate contains a `Renderer` that uses OpenGL, via the [`glow`] crate, to render an
-* [`easy-imgui`](../easy_imgui/index.html) user interface.
-*/
+ * This crate contains a `Renderer` that uses OpenGL, via the [`glow`] crate, to render an
+ * [`easy-imgui`](../easy_imgui/index.html) user interface.
+ */
 
 pub use easy_imgui;
 pub use easy_imgui_sys;

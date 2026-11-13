@@ -1,6 +1,6 @@
 /*!
-* Helper module to convert between common types.
-*/
+ * Helper module to convert between common types.
+ */
 
 use easy_imgui as imgui;
 use easy_imgui_sys::*;

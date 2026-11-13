@@ -3913,15 +3913,17 @@ transparent! {
 }
 
 impl Font {
-    pub fn add_remap_codepoint(&self, from: char, to: char) {
+    /// Dear ImGui (`AddRemapCodepoint`): Makes 'from_codepoint' character points to 'to_codepoint' glyph.
+    pub fn add_remap_codepoint(&self, from_codepoint: char, to_codepoint: char) {
         unsafe {
             ImFont_AddRemapCodepoint(
                 (&raw const self.0).cast_mut(),
-                ImWchar::from(from),
-                ImWchar::from(to),
+                ImWchar::from(from_codepoint),
+                ImWchar::from(to_codepoint),
             );
         }
     }
+    /// Dear ImGui (`AddRemapCodepointToGlyphIndex`)
     pub fn add_remap_codepoint_to_glyph(&self, from: char, font_src_idx: i32, glyph_idx: i32) {
         unsafe {
             ImFont_AddRemapCodepointToGlyphIndex(
@@ -4425,7 +4427,14 @@ pub struct WindowDrawList<'ui, A> {
 }
 
 impl<A> WindowDrawList<'_, A> {
-    pub fn add_line(&self, p1: Vector2, p2: Vector2, color: Color, thickness: f32) {
+    pub fn add_line(
+        &self,
+        p1: Vector2,
+        p2: Vector2,
+        color: Color,
+        thickness: f32,
+        flags: DrawFlags,
+    ) {
         unsafe {
             ImDrawList_AddLine(
                 self.ptr,
@@ -4433,17 +4442,50 @@ impl<A> WindowDrawList<'_, A> {
                 &v2_to_im(p2),
                 color.as_u32(),
                 thickness,
+                flags.bits(),
             );
         }
     }
-    pub fn add_line_h(&self, min_x: f32, max_x: f32, y: f32, color: Color, thickness: f32) {
+    pub fn add_line_h(
+        &self,
+        min_x: f32,
+        max_x: f32,
+        y: f32,
+        color: Color,
+        thickness: f32,
+        flags: DrawFlags,
+    ) {
         unsafe {
-            ImDrawList_AddLineH(self.ptr, min_x, max_x, y, color.as_u32(), thickness);
+            ImDrawList_AddLineH(
+                self.ptr,
+                min_x,
+                max_x,
+                y,
+                color.as_u32(),
+                thickness,
+                flags.bits(),
+            );
         }
     }
-    pub fn add_line_v(&self, x: f32, min_y: f32, max_y: f32, color: Color, thickness: f32) {
+    pub fn add_line_v(
+        &self,
+        x: f32,
+        min_y: f32,
+        max_y: f32,
+        color: Color,
+        thickness: f32,
+        flags: DrawFlags,
+    ) {
         unsafe {
-            ImDrawList_AddLineV(self.ptr, x, min_y, max_y, color.as_u32(), thickness);
+            ImDrawList_AddLineV(
+                self.ptr,
+                x,
+                min_y,
+                max_y,
+                color.as_u32(),
+                thickness,
+                flags.bits(),
+            );
         }
     }
     /// Dear ImGui (`AddRect`): p_min: upper-left, p_max: lower-right (== upper-left + size).
@@ -4517,6 +4559,7 @@ impl<A> WindowDrawList<'_, A> {
         p4: Vector2,
         color: Color,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddQuad(
@@ -4527,6 +4570,7 @@ impl<A> WindowDrawList<'_, A> {
                 &v2_to_im(p4),
                 color.as_u32(),
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4556,6 +4600,7 @@ impl<A> WindowDrawList<'_, A> {
         p3: Vector2,
         color: Color,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddTriangle(
@@ -4565,6 +4610,7 @@ impl<A> WindowDrawList<'_, A> {
                 &v2_to_im(p3),
                 color.as_u32(),
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4586,6 +4632,7 @@ impl<A> WindowDrawList<'_, A> {
         color: Color,
         num_segments: i32,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddCircle(
@@ -4595,6 +4642,7 @@ impl<A> WindowDrawList<'_, A> {
                 color.as_u32(),
                 num_segments,
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4616,6 +4664,7 @@ impl<A> WindowDrawList<'_, A> {
         color: Color,
         num_segments: i32,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddNgon(
@@ -4625,6 +4674,7 @@ impl<A> WindowDrawList<'_, A> {
                 color.as_u32(),
                 num_segments,
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4647,6 +4697,7 @@ impl<A> WindowDrawList<'_, A> {
         rot: f32,
         num_segments: i32,
         thickness: f32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddEllipse(
@@ -4657,6 +4708,7 @@ impl<A> WindowDrawList<'_, A> {
                 rot,
                 num_segments,
                 thickness,
+                flags.bits(),
             );
         }
     }
@@ -4715,23 +4767,26 @@ impl<A> WindowDrawList<'_, A> {
     }
     pub fn add_polyline(&self, points: &[ImVec2], color: Color, thickness: f32, flags: DrawFlags) {
         unsafe {
-            ImDrawList_AddPolyline(
+            // Warning: inline in C++
+            ImDrawList__AddPolyline(
                 self.ptr,
                 points.as_ptr(),
                 points.len() as i32,
                 color.as_u32(),
                 thickness,
                 flags.bits(),
+                f32::MAX,
             );
         }
     }
-    pub fn add_convex_poly_filled(&self, points: &[ImVec2], color: Color) {
+    pub fn add_convex_poly_filled(&self, points: &[ImVec2], color: Color, flags: DrawFlags) {
         unsafe {
             ImDrawList_AddConvexPolyFilled(
                 self.ptr,
                 points.as_ptr(),
                 points.len() as i32,
                 color.as_u32(),
+                flags.bits(),
             );
         }
     }
@@ -4755,6 +4810,7 @@ impl<A> WindowDrawList<'_, A> {
         color: Color,
         thickness: f32,
         num_segments: i32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddBezierCubic(
@@ -4766,6 +4822,7 @@ impl<A> WindowDrawList<'_, A> {
                 color.as_u32(),
                 thickness,
                 num_segments,
+                flags.bits(),
             );
         }
     }
@@ -4778,6 +4835,7 @@ impl<A> WindowDrawList<'_, A> {
         color: Color,
         thickness: f32,
         num_segments: i32,
+        flags: DrawFlags,
     ) {
         unsafe {
             ImDrawList_AddBezierQuadratic(
@@ -4788,6 +4846,7 @@ impl<A> WindowDrawList<'_, A> {
                 color.as_u32(),
                 thickness,
                 num_segments,
+                flags.bits(),
             );
         }
     }
@@ -4888,10 +4947,16 @@ impl<A> WindowDrawList<'_, A> {
             }
         }
     }
-    pub fn path_fill_convex(&self, color: Color) {
+    pub fn path_fill_convex(&self, color: Color, flags: DrawFlags) {
         unsafe {
             let path = &mut (&mut *self.ptr)._Path;
-            ImDrawList_AddConvexPolyFilled(self.ptr, path.Data, path.Size, color.as_u32());
+            ImDrawList_AddConvexPolyFilled(
+                self.ptr,
+                path.Data,
+                path.Size,
+                color.as_u32(),
+                flags.bits(),
+            );
             path.Size = 0;
         }
     }
@@ -4904,14 +4969,16 @@ impl<A> WindowDrawList<'_, A> {
     }
     pub fn path_stroke(&self, color: Color, thickness: f32, flags: DrawFlags) {
         unsafe {
+            // warning: inline in C++
             let path = &mut (&mut *self.ptr)._Path;
-            ImDrawList_AddPolyline(
+            ImDrawList__AddPolyline(
                 self.ptr,
                 path.Data,
                 path.Size,
                 color.as_u32(),
                 thickness,
                 flags.bits(),
+                f32::MAX,
             );
             path.Size = 0;
         }

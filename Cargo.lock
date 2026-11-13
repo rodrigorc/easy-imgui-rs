@@ -1045,8 +1045,6 @@ dependencies = [
 name = "easy-imgui-sdl3"
 version = "0.24.0"
 dependencies = [
- "bindgen",
- "cc",
  "easy-imgui",
  "easy-imgui-sys",
  "glow",

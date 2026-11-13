@@ -142,28 +142,58 @@ imgui_flags! {
     pub DrawFlags: ImDrawFlags_ {
         /// Dear ImGui (`ImDrawFlags_None`): No flags
         None,
-        /// Dear ImGui (`ImDrawFlags_Closed`): `PathStroke()`, `AddPolyline()`: specify that shape should be closed
+        /// Dear ImGui (`ImDrawFlags_RoundTopLeft`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding top-left corner only
+        RoundTopLeft,
+        /// Dear ImGui (`ImDrawFlags_RoundTopRight`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding top-right corner only
+        RoundTopRight,
+        /// Dear ImGui (`ImDrawFlags_RoundBottomLeft`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding bottom-left corner only
+        RoundBottomLeft,
+        /// Dear ImGui (`ImDrawFlags_RoundBottomRight`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding bottom-right corner only
+        RoundBottomRight,
+        /// Dear ImGui (`ImDrawFlags_RoundNone`): `AddRect()`, `AddRectFilled()`, `PathRect()`: disable rounding on all corners
+        RoundNone,
+        /// Dear ImGui (`ImDrawFlags_RoundTop`): `ImDrawFlags_RoundTopLeft` | `ImDrawFlags_RoundTopRight`
+        RoundTop,
+        /// Dear ImGui (`ImDrawFlags_RoundBottom`): `ImDrawFlags_RoundBottomLeft` | `ImDrawFlags_RoundBottomRight`
+        RoundBottom,
+        /// Dear ImGui (`ImDrawFlags_RoundLeft`): `ImDrawFlags_RoundBottomLeft` | `ImDrawFlags_RoundTopLeft`
+        RoundLeft,
+        /// Dear ImGui (`ImDrawFlags_RoundRight`): `ImDrawFlags_RoundBottomRight` | `ImDrawFlags_RoundTopRight`
+        RoundRight,
+        /// Dear ImGui (`ImDrawFlags_RoundAll`): All corners
+        RoundAll,
+
+        /// Dear ImGui (`ImDrawFlags_Closed`): PathStroke(), AddPolyline(): specify that shape should be closed.
         Closed,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersTopLeft`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding top-left corner only
-        RoundCornersTopLeft,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersTopRight`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding top-right corner only
-        RoundCornersTopRight,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersBottomLeft`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding bottom-left corner only
-        RoundCornersBottomLeft,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersBottomRight`): `AddRect()`, `AddRectFilled()`, `PathRect()`: enable rounding bottom-right corner only
-        RoundCornersBottomRight,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersNone`): `AddRect()`, `AddRectFilled()`, `PathRect()`: disable rounding on all corners
-        RoundCornersNone,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersTop`): `ImDrawFlags_RoundCornersTopLeft` | `ImDrawFlags_RoundCornersTopRight`
-        RoundCornersTop,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersBottom`): `ImDrawFlags_RoundCornersBottomLeft` | `ImDrawFlags_RoundCornersBottomRight`
-        RoundCornersBottom,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersLeft`): `ImDrawFlags_RoundCornersBottomLeft` | `ImDrawFlags_RoundCornersTopLeft`
-        RoundCornersLeft,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersRight`): `ImDrawFlags_RoundCornersBottomRight` | `ImDrawFlags_RoundCornersTopRight`
-        RoundCornersRight,
-        /// Dear ImGui (`ImDrawFlags_RoundCornersAll`): All corners
-        RoundCornersAll,
+        /// Dear ImGui (`ImDrawFlags_JoinMiter`): PathStroke(), AddPolyline(): use miter joins/corners only. This assumes that the input polyline does not have corners sharper than 90 degrees. Slightly faster.
+        JoinMiter,
+        /// Dear ImGui (`ImDrawFlags_CapSquare`): PathStroke(), AddPolyline(): use square cap line ends.
+        CapSquare,
+
+        /// Dear ImGui (`ImDrawFlags_AAFill`): Enable anti-aliasing for Filled shapes.
+        AAFill,
+        /// Dear ImGui (`ImDrawFlags_AALines`): Enable anti-aliasing for Strokes (lines, borders).
+        AALines,
+        /// Dear ImGui (`ImDrawFlags_AALineEnds`): Enable anti-aliasing for Strokes Ends. Requires AALines to also be enabled. Useful on thick strokes or for precise continuity of multiple lines. A little more costly.
+        AALineEnds,
+
+        /// Dear ImGui (`ImDrawFlags_StrokeInside`): Draw stroke inside of the shape outline (default for closed shapes and AddLineH, AddLineV functions)
+        StrokeInside,
+        /// Dear ImGui (`ImDrawFlags_StrokeCenter`): Draw stroke at the center of the shape outline (default for paths, bezier, and AddLine functions)
+        StrokeCenter,
+        /// Dear ImGui (`ImDrawFlags_StrokeCenterBiased`): Draw stroke at the center of the shape outline, so that half thickness rounded down will be outside, and the rest inside the shape outline. Useful for axis-aligned shapes: AddLineH, AddLineV, AddRect. Does not animate well!
+        StrokeCenterBiased,
+        /// Dear ImGui (`ImDrawFlags_StrokeOutside`): Draw stroke outside of the shape outline
+        StrokeOutside,
+        /// Dear ImGui (`ImDrawFlags_StrokeLegacy`): Use legacy positioning + enable JoinMiter + disable AALineEnds. Must be all bits set.
+        StrokeLegacy,
+
+        /// Dear ImGui (`ImDrawFlags_TextNoPixelSnap`): Disable automatically snapping AddText() calls to pixel boundaries.
+        TextNoPixelSnap,
+        /// Dear ImGui (`ImDrawFlags_UseTexForRoundCorners`): Enable using textures instead of strokes to draw rounded corners/circles where possible (faster). Used by default unless 'ImFontAtlasFlags_NoBakedRoundCorners' is enabled in the font atlas.
+        UseTexForRoundCorners,
+        /// Dear ImGui (`ImDrawFlags_UseVtxOffset`): Can emit 'VtxOffset > 0' to allow large meshes with 16-bit ImDrawIdx. Used by default when 'ImGuiBackendFlags_RendererHasVtxOffset' is enabled by the backend.
+        UseVtxOffset,
     }
 }
 
@@ -1537,12 +1567,16 @@ imgui_flags! {
         AutoClosePopups,
         /// Dear ImGui (`ImGuiItemFlags_AllowDuplicateId`): Allow duplicate ID
         AllowDuplicateId,
+
         /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInputText`): InputText: apply keyboard edits to backing value while typing
         LiveEditOnInputText,
         /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInputScalar`): DragXXX, SliderXXX, InputScalar: apply keyboard edits to backing value while typing
         LiveEditOnInputScalar,
         /// Dear ImGui (`ImGuiItemFlags_LiveEditOnInput`): LiveEditOnInputText | LiveEditOnInputScalar
         LiveEditOnInput,
+
+        /// Dear ImGui (`ImGuiItemFlags_MixedValue`): [BETA] Represent a mixed/indeterminate value. Replace value label with "-" and apply edits on validation.
+        MixedValue,
     }
 }
 

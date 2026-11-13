@@ -209,14 +209,14 @@ impl UiBuilder for MyApp {
                     let tl = vec2(center.x - 10.0, center.y - 10.0);
                     let br = vec2(center.x + 10.0, center.y + 10.0);
                     if filled {
-                        dr.add_rect_filled(tl, br, color, 2.0, DrawFlags::RoundCornersAll);
+                        dr.add_rect_filled(tl, br, color, 2.0, DrawFlags::RoundAll);
                     } else {
-                        dr.add_rect(tl, br, color, 2.0, 2.0, DrawFlags::RoundCornersAll);
+                        dr.add_rect(tl, br, color, 2.0, 2.0, DrawFlags::RoundAll);
                     }
                 } else if filled {
                     dr.add_circle_filled(center, 10.0, color, 0);
                 } else {
-                    dr.add_circle(center, 10.0, color, 0, 2.0);
+                    dr.add_circle(center, 10.0, color, 0, 2.0, DrawFlags::RoundAll);
                 }
             };
             for (idx, pos) in BUTTONS.iter().enumerate() {

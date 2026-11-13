@@ -1,15 +1,16 @@
 [package]
 name = "easy-imgui-opengl"
-version = "0.3.0"
-edition = "2024"
 description = "OpenGL helper types, designed to work with easy-imgui"
-license = "MIT"
-readme = "README.md"
-categories = ["graphics"]
-keywords = ["imgui", "ui", "graphics"]
+version = "0.3.0"
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [dependencies]
-cgmath = "0.18.0"
-glow = "0.18.0"
-log = "0.4.22"
-smallvec = "1.13.2"
+cgmath.workspace = true
+glow.workspace = true
+log.workspace = true
+smallvec.workspace = true

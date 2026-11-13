@@ -1,25 +1,25 @@
 [package]
 name = "easy-imgui"
-version = "0.24.0"
-edition = "2024"
 description = "Rust wrapper for the Dear ImGui library"
-license = "MIT"
-readme = "../README.md"
-repository = "https://github.com/rodrigorc/easy-imgui-rs"
-categories = ["gui"]
-keywords = ["imgui", "ui", "graphics"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [dependencies]
-easy-imgui-sys = "0.24.0"
+easy-imgui-sys.workspace = true
 paste = "1"
-bitflags = "2"
+bitflags.workspace = true
 mint = "0.5"
-cgmath = { version = "0.18", features = ["mint"] }
-image = { version = "0.25", default-features = false }
-log = "0.4"
+cgmath = { workspace = true, features = ["mint"] }
+image = { workspace = true, default-features = false }
+log.workspace = true
 either = "1.15.0"
 
-send_wrapper = { version = "0.6", optional = true }
+send_wrapper = { workspace = true, optional = true }
 futures-util = { version = "0.3.31", optional = true }
 arboard = { version = "3.6.1", optional = true, default-features = false, features = ["wayland-data-control"] }
 

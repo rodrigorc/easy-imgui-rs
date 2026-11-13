@@ -1,31 +1,26 @@
 [package]
 name = "easy-imgui-sdl3"
-version = "0.24.0"
-edition = "2024"
 description = "Binding of the SDL3+OpenGL3 Dear Imgui backends for the easy-imgui"
-license = "MIT"
-readme = "../README.md"
-repository = "https://github.com/rodrigorc/easy-imgui-rs"
-categories = ["gui"]
-keywords = ["imgui", "ui", "graphics", "sdl3"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [features]
 default = []
 freetype = ["easy-imgui/freetype"]
 
 [dependencies]
+easy-imgui-sys = { workspace = true, features = ["backend-opengl3", "backend-sdl3"] }
+easy-imgui = { workspace = true, features = ["future"] }
+
 # Ensure that sdl3 and easy-imgui-sys depend on the same version of sdl3-sys crate
 sdl3 = "0.18.2"
-glow = "0.18.0"
-send_wrapper = "0.6.0"
-
-[dependencies.easy-imgui-sys]
-version = "0.24.0"
-features = ["backend-opengl3", "backend-sdl3"]
-
-[dependencies.easy-imgui]
-version = "0.24.0"
-features = ["future"]
+glow.workspace = true
+send_wrapper.workspace = true
 
 [dev-dependencies]
 smol = "2.0.2"
